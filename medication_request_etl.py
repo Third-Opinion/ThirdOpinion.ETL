@@ -106,6 +106,9 @@ def transform_main_medication_request_data(df):
         F.when(F.col("subject").isNotNull(), 
                F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
               ).otherwise(None).alias("patient_id"),
+        F.when(F.col("encounter").isNotNull(),
+               F.regexp_extract(F.col("encounter").getField("reference"), r"Encounter/(.+)", 1)
+              ).otherwise(None).alias("encounter_id"),
         F.when(F.col("medicationReference").isNotNull(),
                F.regexp_extract(F.col("medicationReference").getField("reference"), r"Medication/(.+)", 1)
               ).otherwise(None).alias("medication_id"),
@@ -186,12 +189,12 @@ def transform_medication_request_notes(df):
         F.col("note_item").isNotNull()
     )
     
-    # Extract note details - MedicationRequest notes only have text field
+    # Extract note details - Based on actual schema: note only has text field
     notes_final = notes_df.select(
         F.col("medication_request_id"),
         F.col("note_item.text").alias("note_text"),
-        F.lit(None).alias("note_author_reference"),  # Not present in MedicationRequest notes
-        F.lit(None).alias("note_time")  # Not present in MedicationRequest notes
+        F.lit(None).alias("note_author_reference"),  # Not present in actual schema
+        F.lit(None).alias("note_time")  # Not present in actual schema
     ).filter(
         F.col("note_text").isNotNull()
     )
@@ -247,7 +250,10 @@ def transform_medication_request_dosage_instructions(df):
                F.col("dosage_item.route.coding")[0].getField("display")
               ).otherwise(None).alias("dosage_route_display"),
         F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
-               F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value")
+               F.coalesce(
+                   F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value").getField("double"),
+                   F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value").getField("int")
+               )
               ).otherwise(None).alias("dosage_dose_value"),
         F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
                F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("unit")
@@ -265,6 +271,47 @@ def transform_medication_request_dosage_instructions(df):
     
     return dosage_final
 
+def transform_medication_request_categories(df):
+    """Transform medication request categories"""
+    logger.info("Transforming medication request categories...")
+    
+    # Check if category column exists
+    if "category" not in df.columns:
+        logger.warning("category column not found in data, returning empty DataFrame")
+        # Return empty DataFrame with expected schema
+        return df.select(
+            F.col("id").alias("medication_request_id"),
+            F.lit("").alias("category_code"),
+            F.lit("").alias("category_system"),
+            F.lit("").alias("category_display"),
+            F.lit("").alias("category_text")
+        ).filter(F.lit(False))
+    
+    # First explode the category array
+    categories_df = df.select(
+        F.col("id").alias("medication_request_id"),
+        F.explode(F.col("category")).alias("category_item")
+    ).filter(
+        F.col("category_item").isNotNull()
+    )
+    
+    # Extract category details and explode the coding array
+    categories_final = categories_df.select(
+        F.col("medication_request_id"),
+        F.explode(F.col("category_item.coding")).alias("coding_item"),
+        F.col("category_item.text").alias("category_text")
+    ).select(
+        F.col("medication_request_id"),
+        F.col("coding_item.code").alias("category_code"),
+        F.col("coding_item.system").alias("category_system"),
+        F.col("coding_item.display").alias("category_display"),
+        F.col("category_text")
+    ).filter(
+        F.col("category_code").isNotNull()
+    )
+    
+    return categories_final
+
 def create_redshift_tables_sql():
     """Generate SQL for creating main medication requests table in Redshift"""
     return """
@@ -275,6 +322,7 @@ def create_redshift_tables_sql():
     CREATE TABLE public.medication_requests (
         medication_request_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
+        encounter_id VARCHAR(255),
         medication_id VARCHAR(255),
         medication_display VARCHAR(500),
         status VARCHAR(50),
@@ -338,6 +386,21 @@ def create_medication_request_dosage_instructions_table_sql():
     ) SORTKEY (medication_request_id, dosage_timing_frequency)
     """
 
+def create_medication_request_categories_table_sql():
+    """Generate SQL for creating medication_request_categories table"""
+    return """
+    -- Drop existing table if it exists
+    DROP TABLE IF EXISTS public.medication_request_categories CASCADE;
+    
+    CREATE TABLE public.medication_request_categories (
+        medication_request_id VARCHAR(255),
+        category_code VARCHAR(50),
+        category_system VARCHAR(255),
+        category_display VARCHAR(255),
+        category_text VARCHAR(500)
+    ) SORTKEY (medication_request_id, category_code)
+    """
+
 def write_to_redshift(dynamic_frame, table_name, preactions=""):
     """Write DynamicFrame to Redshift using JDBC connection"""
     logger.info(f"Writing {table_name} to Redshift...")
@@ -374,7 +437,7 @@ def main():
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
-        logger.info(f"🎯 Target: Redshift (4 tables)")
+        logger.info(f"🎯 Target: Redshift (5 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
         logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
         
@@ -470,6 +533,10 @@ def main():
         dosage_count = medication_request_dosage_df.count()
         logger.info(f"✅ Transformed {dosage_count:,} medication request dosage instruction records")
         
+        medication_request_categories_df = transform_medication_request_categories(medication_request_df)
+        categories_count = medication_request_categories_df.count()
+        logger.info(f"✅ Transformed {categories_count:,} medication request category records")
+        
         # Debug: Show samples of multi-valued data if available
         if identifiers_count > 0:
             logger.info("Sample of medication request identifiers data:")
@@ -493,6 +560,7 @@ def main():
         main_flat_df = main_medication_request_df.select(
             F.col("medication_request_id").cast(StringType()).alias("medication_request_id"),
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("encounter_id").cast(StringType()).alias("encounter_id"),
             F.col("medication_id").cast(StringType()).alias("medication_id"),
             F.col("medication_display").cast(StringType()).alias("medication_display"),
             F.col("status").cast(StringType()).alias("status"),
@@ -540,6 +608,15 @@ def main():
         )
         dosage_dynamic_frame = DynamicFrame.fromDF(dosage_flat_df, glueContext, "dosage_dynamic_frame")
         
+        categories_flat_df = medication_request_categories_df.select(
+            F.col("medication_request_id").cast(StringType()).alias("medication_request_id"),
+            F.col("category_code").cast(StringType()).alias("category_code"),
+            F.col("category_system").cast(StringType()).alias("category_system"),
+            F.col("category_display").cast(StringType()).alias("category_display"),
+            F.col("category_text").cast(StringType()).alias("category_text")
+        )
+        categories_dynamic_frame = DynamicFrame.fromDF(categories_flat_df, glueContext, "categories_dynamic_frame")
+        
         # Step 5: Resolve any remaining choice types to ensure Redshift compatibility
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 5: RESOLVING CHOICE TYPES")
@@ -550,6 +627,7 @@ def main():
             specs=[
                 ("medication_request_id", "cast:string"),
                 ("patient_id", "cast:string"),
+                ("encounter_id", "cast:string"),
                 ("medication_id", "cast:string"),
                 ("medication_display", "cast:string"),
                 ("status", "cast:string"),
@@ -598,6 +676,16 @@ def main():
             ]
         )
         
+        categories_resolved_frame = categories_dynamic_frame.resolveChoice(
+            specs=[
+                ("medication_request_id", "cast:string"),
+                ("category_code", "cast:string"),
+                ("category_system", "cast:string"),
+                ("category_display", "cast:string"),
+                ("category_text", "cast:string")
+            ]
+        )
+        
         # Step 6: Final validation before writing
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 6: FINAL VALIDATION")
@@ -617,8 +705,9 @@ def main():
         identifiers_final_count = identifiers_resolved_frame.toDF().count()
         notes_final_count = notes_resolved_frame.toDF().count()
         dosage_final_count = dosage_resolved_frame.toDF().count()
+        categories_final_count = categories_resolved_frame.toDF().count()
         
-        logger.info(f"Final counts - Identifiers: {identifiers_final_count}, Notes: {notes_final_count}, Dosage Instructions: {dosage_final_count}")
+        logger.info(f"Final counts - Identifiers: {identifiers_final_count}, Notes: {notes_final_count}, Dosage Instructions: {dosage_final_count}, Categories: {categories_final_count}")
         
         # Debug: Show final sample data being written
         logger.info("Final sample data being written to Redshift (main medication requests):")
@@ -674,6 +763,11 @@ def main():
         write_to_redshift(dosage_resolved_frame, "medication_request_dosage_instructions", dosage_table_sql)
         logger.info("✅ Medication request dosage instructions table dropped, recreated and written successfully")
         
+        logger.info("📝 Dropping and recreating medication request categories table...")
+        categories_table_sql = create_medication_request_categories_table_sql()
+        write_to_redshift(categories_resolved_frame, "medication_request_categories", categories_table_sql)
+        logger.info("✅ Medication request categories table dropped, recreated and written successfully")
+        
         # Calculate processing time
         end_time = datetime.now()
         processing_time = end_time - start_time
@@ -690,6 +784,7 @@ def main():
         logger.info("  ✅ public.medication_request_identifiers (identifier system/value pairs)")
         logger.info("  ✅ public.medication_request_notes (notes and annotations)")
         logger.info("  ✅ public.medication_request_dosage_instructions (dosage instructions with timing and route)")
+        logger.info("  ✅ public.medication_request_categories (medication request categories)")
         
         logger.info("\n📊 FINAL ETL STATISTICS:")
         logger.info(f"  📥 Total raw records processed: {total_records:,}")
@@ -697,9 +792,10 @@ def main():
         logger.info(f"  🏷️  Identifier records: {identifiers_count:,}")
         logger.info(f"  📝 Note records: {notes_count:,}")
         logger.info(f"  💉 Dosage instruction records: {dosage_count:,}")
+        logger.info(f"  🏷️  Category records: {categories_count:,}")
         
         # Calculate data expansion ratio
-        total_output_records = main_count + identifiers_count + notes_count + dosage_count
+        total_output_records = main_count + identifiers_count + notes_count + dosage_count + categories_count
         expansion_ratio = total_output_records / total_records if total_records > 0 else 0
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
