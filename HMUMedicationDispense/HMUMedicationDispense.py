@@ -56,9 +56,23 @@ def transform_main_medication_dispense_data(df):
                F.col("medicationReference").getField("display")
               ).otherwise(None).alias("medication_display"),
         
-        # Extract quantity value
+        # Extract from the 'type' field
+        F.when(F.col("type.coding").isNotNull() & (F.size(F.col("type.coding")) > 0),
+               F.col("type.coding")[0].getField("system")
+              ).otherwise(None).alias("type_system"),
+        F.when(F.col("type.coding").isNotNull() & (F.size(F.col("type.coding")) > 0),
+               F.col("type.coding")[0].getField("code")
+              ).otherwise(None).alias("type_code"),
+        F.when(F.col("type.coding").isNotNull() & (F.size(F.col("type.coding")) > 0),
+               F.col("type.coding")[0].getField("display")
+              ).otherwise(None).alias("type_display"),
+
+        # Extract quantity value, handling nested struct
         F.when(F.col("quantity").isNotNull(),
-               F.col("quantity").getField("value")
+               F.coalesce(
+                   F.col("quantity").getField("value").getField("double"),
+                   F.col("quantity").getField("value").getField("int")
+               )
               ).otherwise(None).alias("quantity_value"),
         F.when(F.col("quantity").isNotNull(),
                F.col("quantity").getField("unit")
@@ -163,6 +177,100 @@ def transform_medication_dispense_performers(df):
     
     return performers_final
 
+def transform_medication_dispense_auth_prescriptions(df):
+    """Transform medication dispense authorizing prescriptions"""
+    logger.info("Transforming medication dispense authorizing prescriptions...")
+    
+    # Check if authorizingPrescription column exists
+    if "authorizingPrescription" not in df.columns:
+        logger.warning("authorizingPrescription column not found, returning empty DataFrame")
+        return df.select(
+            F.col("id").alias("medication_dispense_id"),
+            F.lit(None).cast(StringType()).alias("authorizing_prescription_id")
+        ).filter(F.lit(False))
+        
+    # Explode the array and extract the reference ID
+    auth_prescriptions_df = df.select(
+        F.col("id").alias("medication_dispense_id"),
+        F.explode_outer(F.col("authorizingPrescription")).alias("prescription_item")
+    ).select(
+        F.col("medication_dispense_id"),
+        F.when(F.col("prescription_item").isNotNull(),
+               F.regexp_extract(F.col("prescription_item.reference"), r"MedicationRequest/(.+)", 1)
+              ).otherwise(None).alias("authorizing_prescription_id")
+    ).filter(
+        F.col("authorizing_prescription_id").isNotNull()
+    )
+
+    return auth_prescriptions_df
+
+def transform_medication_dispense_dosage_instructions(df):
+    """Transform medication dispense dosage instructions"""
+    logger.info("Transforming medication dispense dosage instructions...")
+    
+    # Check if dosageInstruction column exists
+    if "dosageInstruction" not in df.columns:
+        logger.warning("dosageInstruction column not found, returning empty DataFrame")
+        return df.select(
+            F.col("id").alias("medication_dispense_id"),
+            F.lit("").alias("dosage_text"),
+            F.lit(None).alias("dosage_timing_frequency"),
+            F.lit(None).alias("dosage_timing_period"),
+            F.lit(None).alias("dosage_timing_period_unit"),
+            F.lit(None).alias("dosage_route_code"),
+            F.lit(None).alias("dosage_route_system"),
+            F.lit(None).alias("dosage_route_display"),
+            F.lit(None).alias("dosage_dose_value"),
+            F.lit(None).alias("dosage_dose_unit"),
+            F.lit(None).alias("dosage_dose_system"),
+            F.lit(None).alias("dosage_dose_code")
+        ).filter(F.lit(False))
+    
+    # First explode the dosageInstruction array
+    dosage_df = df.select(
+        F.col("id").alias("medication_dispense_id"),
+        F.explode(F.col("dosageInstruction")).alias("dosage_item")
+    ).filter(
+        F.col("dosage_item").isNotNull()
+    )
+    
+    # Extract dosage instruction details
+    dosage_final = dosage_df.select(
+        F.col("medication_dispense_id"),
+        F.col("dosage_item.text").alias("dosage_text"),
+        F.col("dosage_item.timing.repeat.frequency").alias("dosage_timing_frequency"),
+        F.col("dosage_item.timing.repeat.period").alias("dosage_timing_period"),
+        F.col("dosage_item.timing.repeat.periodUnit").alias("dosage_timing_period_unit"),
+        F.when(F.col("dosage_item.route").isNotNull() & (F.size(F.col("dosage_item.route.coding")) > 0),
+               F.col("dosage_item.route.coding")[0].getField("code")
+              ).otherwise(None).alias("dosage_route_code"),
+        F.when(F.col("dosage_item.route").isNotNull() & (F.size(F.col("dosage_item.route.coding")) > 0),
+               F.col("dosage_item.route.coding")[0].getField("system")
+              ).otherwise(None).alias("dosage_route_system"),
+        F.when(F.col("dosage_item.route").isNotNull() & (F.size(F.col("dosage_item.route.coding")) > 0),
+               F.col("dosage_item.route.coding")[0].getField("display")
+              ).otherwise(None).alias("dosage_route_display"),
+        F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
+               F.coalesce(
+                   F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value").getField("double"),
+                   F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value").getField("int")
+               )
+              ).otherwise(None).alias("dosage_dose_value"),
+        F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
+               F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("unit")
+              ).otherwise(None).alias("dosage_dose_unit"),
+        F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
+               F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("system")
+              ).otherwise(None).alias("dosage_dose_system"),
+        F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
+               F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("code")
+              ).otherwise(None).alias("dosage_dose_code")
+    ).filter(
+        F.col("dosage_text").isNotNull() | F.col("dosage_dose_value").isNotNull()
+    )
+    
+    return dosage_final
+
 def create_redshift_tables_sql():
     """Generate SQL for creating main medication_dispenses table in Redshift"""
     return """
@@ -177,6 +285,9 @@ def create_redshift_tables_sql():
         patient_id VARCHAR(255) NOT NULL,
         medication_id VARCHAR(255),
         medication_display VARCHAR(500),
+        type_system VARCHAR(255),
+        type_code VARCHAR(50),
+        type_display VARCHAR(255),
         quantity_value DECIMAL(10,2),
         quantity_unit VARCHAR(50),
         when_handed_over TIMESTAMP,
@@ -212,6 +323,40 @@ def create_medication_dispense_performers_table_sql():
         performer_function_code VARCHAR(50),
         performer_function_display VARCHAR(255)
     ) SORTKEY (medication_dispense_id, performer_actor_reference)
+    """
+
+def create_medication_dispense_auth_prescriptions_table_sql():
+    """Generate SQL for creating medication_dispense_auth_prescriptions table"""
+    return """
+    -- Drop existing table if it exists
+    DROP TABLE IF EXISTS public.medication_dispense_auth_prescriptions CASCADE;
+    
+    CREATE TABLE public.medication_dispense_auth_prescriptions (
+        medication_dispense_id VARCHAR(255),
+        authorizing_prescription_id VARCHAR(255)
+    ) SORTKEY (medication_dispense_id)
+    """
+
+def create_medication_dispense_dosage_instructions_table_sql():
+    """Generate SQL for creating medication_dispense_dosage_instructions table"""
+    return """
+    -- Drop existing table if it exists
+    DROP TABLE IF EXISTS public.medication_dispense_dosage_instructions CASCADE;
+    
+    CREATE TABLE public.medication_dispense_dosage_instructions (
+        medication_dispense_id VARCHAR(255),
+        dosage_text VARCHAR(MAX),
+        dosage_timing_frequency INTEGER,
+        dosage_timing_period INTEGER,
+        dosage_timing_period_unit VARCHAR(20),
+        dosage_route_code VARCHAR(50),
+        dosage_route_system VARCHAR(255),
+        dosage_route_display VARCHAR(255),
+        dosage_dose_value DECIMAL(10,2),
+        dosage_dose_unit VARCHAR(100),
+        dosage_dose_system VARCHAR(255),
+        dosage_dose_code VARCHAR(50)
+    ) SORTKEY (medication_dispense_id)
     """
 
 def write_to_redshift(dynamic_frame, table_name, preactions=""):
@@ -250,7 +395,7 @@ def main():
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
-        logger.info(f"🎯 Target: Redshift (3 tables)")
+        logger.info(f"🎯 Target: Redshift (5 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
         logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
         
@@ -342,6 +487,14 @@ def main():
         performers_count = medication_dispense_performers_df.count()
         logger.info(f"✅ Transformed {performers_count:,} medication dispense performer records")
         
+        medication_dispense_auth_prescriptions_df = transform_medication_dispense_auth_prescriptions(medication_dispense_df)
+        auth_prescriptions_count = medication_dispense_auth_prescriptions_df.count()
+        logger.info(f"✅ Transformed {auth_prescriptions_count:,} medication dispense authorizing prescription records")
+        
+        medication_dispense_dosage_df = transform_medication_dispense_dosage_instructions(medication_dispense_df)
+        dosage_count = medication_dispense_dosage_df.count()
+        logger.info(f"✅ Transformed {dosage_count:,} medication dispense dosage instruction records")
+        
         # Debug: Show samples of multi-valued data if available
         if identifiers_count > 0:
             logger.info("Sample of medication dispense identifiers data:")
@@ -350,6 +503,14 @@ def main():
         if performers_count > 0:
             logger.info("Sample of medication dispense performers data:")
             medication_dispense_performers_df.show(3, truncate=False)
+
+        if auth_prescriptions_count > 0:
+            logger.info("Sample of medication dispense authorizing prescriptions data:")
+            medication_dispense_auth_prescriptions_df.show(3, truncate=False)
+
+        if dosage_count > 0:
+            logger.info("Sample of medication dispense dosage instructions data:")
+            medication_dispense_dosage_df.show(3, truncate=False)
         
         # Step 4: Convert to DynamicFrames and ensure data is flat for Redshift compatibility
         logger.info("\n" + "=" * 50)
@@ -365,6 +526,9 @@ def main():
             F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("medication_id").cast(StringType()).alias("medication_id"),
             F.col("medication_display").cast(StringType()).alias("medication_display"),
+            F.col("type_system").cast(StringType()).alias("type_system"),
+            F.col("type_code").cast(StringType()).alias("type_code"),
+            F.col("type_display").cast(StringType()).alias("type_display"),
             F.col("quantity_value").cast(DecimalType(10,2)).alias("quantity_value"),
             F.col("quantity_unit").cast(StringType()).alias("quantity_unit"),
             F.col("when_handed_over").cast(TimestampType()).alias("when_handed_over"),
@@ -392,6 +556,28 @@ def main():
         )
         performers_dynamic_frame = DynamicFrame.fromDF(performers_flat_df, glueContext, "performers_dynamic_frame")
         
+        auth_prescriptions_flat_df = medication_dispense_auth_prescriptions_df.select(
+            F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
+            F.col("authorizing_prescription_id").cast(StringType()).alias("authorizing_prescription_id")
+        )
+        auth_prescriptions_dynamic_frame = DynamicFrame.fromDF(auth_prescriptions_flat_df, glueContext, "auth_prescriptions_dynamic_frame")
+        
+        dosage_flat_df = medication_dispense_dosage_df.select(
+            F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
+            F.col("dosage_text").cast(StringType()).alias("dosage_text"),
+            F.col("dosage_timing_frequency").cast(IntegerType()).alias("dosage_timing_frequency"),
+            F.col("dosage_timing_period").cast(IntegerType()).alias("dosage_timing_period"),
+            F.col("dosage_timing_period_unit").cast(StringType()).alias("dosage_timing_period_unit"),
+            F.col("dosage_route_code").cast(StringType()).alias("dosage_route_code"),
+            F.col("dosage_route_system").cast(StringType()).alias("dosage_route_system"),
+            F.col("dosage_route_display").cast(StringType()).alias("dosage_route_display"),
+            F.col("dosage_dose_value").cast(DecimalType(10,2)).alias("dosage_dose_value"),
+            F.col("dosage_dose_unit").cast(StringType()).alias("dosage_dose_unit"),
+            F.col("dosage_dose_system").cast(StringType()).alias("dosage_dose_system"),
+            F.col("dosage_dose_code").cast(StringType()).alias("dosage_dose_code")
+        )
+        dosage_dynamic_frame = DynamicFrame.fromDF(dosage_flat_df, glueContext, "dosage_dynamic_frame")
+        
         # Step 5: Resolve any remaining choice types to ensure Redshift compatibility
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 5: RESOLVING CHOICE TYPES")
@@ -406,6 +592,9 @@ def main():
                 ("patient_id", "cast:string"),
                 ("medication_id", "cast:string"),
                 ("medication_display", "cast:string"),
+                ("type_system", "cast:string"),
+                ("type_code", "cast:string"),
+                ("type_display", "cast:string"),
                 ("quantity_value", "cast:decimal"),
                 ("quantity_unit", "cast:string"),
                 ("when_handed_over", "cast:timestamp"),
@@ -433,6 +622,30 @@ def main():
             ]
         )
         
+        auth_prescriptions_resolved_frame = auth_prescriptions_dynamic_frame.resolveChoice(
+            specs=[
+                ("medication_dispense_id", "cast:string"),
+                ("authorizing_prescription_id", "cast:string")
+            ]
+        )
+        
+        dosage_resolved_frame = dosage_dynamic_frame.resolveChoice(
+            specs=[
+                ("medication_dispense_id", "cast:string"),
+                ("dosage_text", "cast:string"),
+                ("dosage_timing_frequency", "cast:int"),
+                ("dosage_timing_period", "cast:int"),
+                ("dosage_timing_period_unit", "cast:string"),
+                ("dosage_route_code", "cast:string"),
+                ("dosage_route_system", "cast:string"),
+                ("dosage_route_display", "cast:string"),
+                ("dosage_dose_value", "cast:decimal"),
+                ("dosage_dose_unit", "cast:string"),
+                ("dosage_dose_system", "cast:string"),
+                ("dosage_dose_code", "cast:string")
+            ]
+        )
+        
         # Step 6: Final validation before writing
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 6: FINAL VALIDATION")
@@ -451,8 +664,10 @@ def main():
         # Validate other tables
         identifiers_final_count = identifiers_resolved_frame.toDF().count()
         performers_final_count = performers_resolved_frame.toDF().count()
+        auth_prescriptions_final_count = auth_prescriptions_resolved_frame.toDF().count()
+        dosage_final_count = dosage_resolved_frame.toDF().count()
         
-        logger.info(f"Final counts - Identifiers: {identifiers_final_count}, Performers: {performers_final_count}")
+        logger.info(f"Final counts - Identifiers: {identifiers_final_count}, Performers: {performers_final_count}, Auth Prescriptions: {auth_prescriptions_final_count}, Dosage: {dosage_final_count}")
         
         # Debug: Show final sample data being written
         logger.info("Final sample data being written to Redshift (main medication dispenses):")
@@ -503,6 +718,16 @@ def main():
         write_to_redshift(performers_resolved_frame, "medication_dispense_performers", performers_table_sql)
         logger.info("✅ Medication dispense performers table dropped, recreated and written successfully")
         
+        logger.info("📝 Dropping and recreating medication dispense authorizing prescriptions table...")
+        auth_prescriptions_table_sql = create_medication_dispense_auth_prescriptions_table_sql()
+        write_to_redshift(auth_prescriptions_resolved_frame, "medication_dispense_auth_prescriptions", auth_prescriptions_table_sql)
+        logger.info("✅ Medication dispense authorizing prescriptions table dropped, recreated and written successfully")
+        
+        logger.info("📝 Dropping and recreating medication dispense dosage instructions table...")
+        dosage_table_sql = create_medication_dispense_dosage_instructions_table_sql()
+        write_to_redshift(dosage_resolved_frame, "medication_dispense_dosage_instructions", dosage_table_sql)
+        logger.info("✅ Medication dispense dosage instructions table dropped, recreated and written successfully")
+        
         # Calculate processing time
         end_time = datetime.now()
         processing_time = end_time - start_time
@@ -518,15 +743,19 @@ def main():
         logger.info("  ✅ public.medication_dispenses (main medication dispense data)")
         logger.info("  ✅ public.medication_dispense_identifiers (identifier system/value pairs)")
         logger.info("  ✅ public.medication_dispense_performers (performer/dispenser information)")
+        logger.info("  ✅ public.medication_dispense_auth_prescriptions (authorizing prescription references)")
+        logger.info("  ✅ public.medication_dispense_dosage_instructions (dosage instructions)")
         
         logger.info("\n📊 FINAL ETL STATISTICS:")
         logger.info(f"  📥 Total raw records processed: {total_records:,}")
         logger.info(f"  💊 Main medication dispense records: {main_count:,}")
         logger.info(f"  🏷️  Identifier records: {identifiers_count:,}")
         logger.info(f"  👤 Performer records: {performers_count:,}")
+        logger.info(f"  📝 Authorizing Prescription records: {auth_prescriptions_count:,}")
+        logger.info(f"  💉 Dosage Instruction records: {dosage_count:,}")
         
         # Calculate data expansion ratio
-        total_output_records = main_count + identifiers_count + performers_count
+        total_output_records = main_count + identifiers_count + performers_count + auth_prescriptions_count + dosage_count
         expansion_ratio = total_output_records / total_records if total_records > 0 else 0
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
