@@ -176,9 +176,7 @@ def transform_medication_request_notes(df):
         # Return empty DataFrame with expected schema
         return df.select(
             F.col("id").alias("medication_request_id"),
-            F.lit("").alias("note_text"),
-            F.lit(None).alias("note_author_reference"),
-            F.lit(None).alias("note_time")
+            F.lit("").alias("note_text")
         ).filter(F.lit(False))
     
     # First explode the note array
@@ -192,9 +190,7 @@ def transform_medication_request_notes(df):
     # Extract note details - Simple struct with just text field
     notes_final = notes_df.select(
         F.col("medication_request_id"),
-        F.col("note_item.text").alias("note_text"),
-        F.lit(None).alias("note_author_reference"),  # Not present in actual schema
-        F.lit(None).alias("note_time")  # Not present in actual schema
+        F.col("note_item.text").alias("note_text")
     ).filter(
         F.col("note_text").isNotNull()
     )
@@ -357,10 +353,8 @@ def create_medication_request_notes_table_sql():
     
     CREATE TABLE public.medication_request_notes (
         medication_request_id VARCHAR(255),
-        note_text VARCHAR(MAX),
-        note_author_reference VARCHAR(255),
-        note_time TIMESTAMP
-    ) SORTKEY (medication_request_id, note_time)
+        note_text VARCHAR(MAX)
+    ) SORTKEY (medication_request_id)
     """
 
 def create_medication_request_dosage_instructions_table_sql():
@@ -585,9 +579,7 @@ def main():
         
         notes_flat_df = medication_request_notes_df.select(
             F.col("medication_request_id").cast(StringType()).alias("medication_request_id"),
-            F.col("note_text").cast(StringType()).alias("note_text"),
-            F.col("note_author_reference").cast(StringType()).alias("note_author_reference"),
-            F.col("note_time").cast(TimestampType()).alias("note_time")
+            F.col("note_text").cast(StringType()).alias("note_text")
         )
         notes_dynamic_frame = DynamicFrame.fromDF(notes_flat_df, glueContext, "notes_dynamic_frame")
         
@@ -652,9 +644,7 @@ def main():
         notes_resolved_frame = notes_dynamic_frame.resolveChoice(
             specs=[
                 ("medication_request_id", "cast:string"),
-                ("note_text", "cast:string"),
-                ("note_author_reference", "cast:string"),
-                ("note_time", "cast:timestamp")
+                ("note_text", "cast:string")
             ]
         )
         
