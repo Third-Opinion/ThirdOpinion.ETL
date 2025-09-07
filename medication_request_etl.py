@@ -7,7 +7,7 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, TimestampType, BooleanType, DecimalType
+from pyspark.sql.types import StringType, TimestampType, BooleanType, DecimalType, IntegerType
 import json
 import logging
 
@@ -109,7 +109,9 @@ def transform_main_medication_request_data(df):
         F.when(F.col("medicationReference").isNotNull(),
                F.regexp_extract(F.col("medicationReference").getField("reference"), r"Medication/(.+)", 1)
               ).otherwise(None).alias("medication_id"),
-        F.col("medicationReference").getField("display").alias("medication_display"),
+        F.when(F.col("medicationReference").isNotNull(),
+               F.col("medicationReference").getField("display")
+              ).otherwise(None).alias("medication_display"),
         F.col("status").alias("status"),
         F.col("intent").alias("intent"),
         F.col("reportedBoolean").alias("reported_boolean"),
@@ -184,12 +186,12 @@ def transform_medication_request_notes(df):
         F.col("note_item").isNotNull()
     )
     
-    # Extract note details
+    # Extract note details - MedicationRequest notes only have text field
     notes_final = notes_df.select(
         F.col("medication_request_id"),
         F.col("note_item.text").alias("note_text"),
-        F.col("note_item.authorReference").alias("note_author_reference"),
-        F.to_timestamp(F.col("note_item.time"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("note_time")
+        F.lit(None).alias("note_author_reference"),  # Not present in MedicationRequest notes
+        F.lit(None).alias("note_time")  # Not present in MedicationRequest notes
     ).filter(
         F.col("note_text").isNotNull()
     )
@@ -524,8 +526,8 @@ def main():
         dosage_flat_df = medication_request_dosage_df.select(
             F.col("medication_request_id").cast(StringType()).alias("medication_request_id"),
             F.col("dosage_text").cast(StringType()).alias("dosage_text"),
-            F.col("dosage_timing_frequency").cast("int").alias("dosage_timing_frequency"),
-            F.col("dosage_timing_period").cast("int").alias("dosage_timing_period"),
+            F.col("dosage_timing_frequency").cast(IntegerType()).alias("dosage_timing_frequency"),
+            F.col("dosage_timing_period").cast(IntegerType()).alias("dosage_timing_period"),
             F.col("dosage_timing_period_unit").cast(StringType()).alias("dosage_timing_period_unit"),
             F.col("dosage_route_code").cast(StringType()).alias("dosage_route_code"),
             F.col("dosage_route_system").cast(StringType()).alias("dosage_route_system"),
