@@ -8,7 +8,7 @@
   },
   "command" : {
     "name" : "glueetl",
-    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMU_MedicationRequest.py",
+    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMU MedicationRequest.py",
     "pythonVersion" : "3"
   },
   "defaultArguments" : {
@@ -37,6 +37,6 @@
     "provider" : "GITHUB",
     "repository" : "ThirdOpinion.ETL",
     "branch" : "master",
-    "folder" : "HMU_MedicationRequest"
+    "folder" : "HMU MedicationRequest"
   }
 }
