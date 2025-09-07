@@ -1,5 +1,5 @@
 {
-  "name" : "HMUMedicationRequest",
+  "name" : "HMUMedication",
   "jobMode" : "SCRIPT",
   "description" : "",
   "role" : "arn:aws:iam::442042533707:role/Admin-TestingGlue-Leo",
@@ -8,7 +8,7 @@
   },
   "command" : {
     "name" : "glueetl",
-    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUMedicationRequest.py",
+    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUMedication.py",
     "pythonVersion" : "3"
   },
   "defaultArguments" : {
