@@ -189,7 +189,7 @@ def transform_medication_request_notes(df):
         F.col("note_item").isNotNull()
     )
     
-    # Extract note details - Based on actual schema: note only has text field
+    # Extract note details - Simple struct with just text field
     notes_final = notes_df.select(
         F.col("medication_request_id"),
         F.col("note_item.text").alias("note_text"),
