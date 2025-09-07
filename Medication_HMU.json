@@ -1,0 +1,591 @@
+"entry": [
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-329201",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.465805224Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-329201"
+          }
+        ],
+        "code": {
+          "text": "PAPAVERINE, PHENTOLAMINE, ALPROSTADIL (24 : 0.8 : 20)"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-361384",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.465671271Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-361384"
+          }
+        ],
+        "code": {
+          "text": "*TRIAMCINOLONE 0.05% EUCERIN CREAM"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-361385",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466848257Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-361385"
+          }
+        ],
+        "code": {
+          "text": "* 3MG/ML LANSOPRAZOLE"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-361563",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466862449Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-361563"
+          }
+        ],
+        "code": {
+          "text": "* 3MG/ML LANSOPRAZOLE"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-436369",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.467037101Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-436369"
+          }
+        ],
+        "code": {
+          "text": "T4-IR 100mcg 'VEGGIE' CAPS 100mcg-IR Capsule"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-436370",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466466017Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-436370"
+          }
+        ],
+        "code": {
+          "text": "T3-SR 36mcg VEGGIE CAPS 36 mcg-S.R. Capsule"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-464124",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466460928Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-464124"
+          }
+        ],
+        "code": {
+          "text": "Wartpeel/Remedium delivery system 5% fluorourcail /17% salicyclic acid -5 gram"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-664066",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466572789Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-664066"
+          }
+        ],
+        "code": {
+          "text": "PAPAVERINE, PHENTOLAMINE, ALPROSTADIL (24 : 0.8 : 20) 24MG/ 0.8MG/ 20MCG PER ML INJECTABLE 24MG/ 0.8MG/ 2"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-758824",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466877044Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-758824"
+          }
+        ],
+        "code": {
+          "text": "*BENZOC20% IN CALAMINE LOTN"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-810317",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.467115732Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-810317"
+          }
+        ],
+        "code": {
+          "text": "Stomatitis Cocktail (doxycycline/dexAMETHasone/diphenHYDRAMINE/nystatin) 180mL"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-810329",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.467114753Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-810329"
+          }
+        ],
+        "code": {
+          "text": "Tirzepatide 2.5mg weekly, 4 week supply"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-810517",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466902115Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-810517"
+          }
+        ],
+        "code": {
+          "text": "*STOMATITIS COCKTAIL STANDARD"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-823570",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466867245Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-823570"
+          }
+        ],
+        "code": {
+          "text": "rx tirzepatite 10mg per ml,\n\n\ndo 0.75 ml weekly sq\n\n\n3 ml/4 week supply\n\n\n"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-860447",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.467046125Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-860447"
+          }
+        ],
+        "code": {
+          "text": "naltrexone 3.5 mg tablets"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-889222",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466235504Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-889222"
+          }
+        ],
+        "code": {
+          "text": "naltrexone 6 mg cap"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.compmedication-896226",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466499773Z"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-13127"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.compmedication-896226"
+          }
+        ],
+        "code": {
+          "text": "testosterone gel 1MG/ML pump"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.historicalcompmedication-1",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466875360Z"
+        },
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.historicalcompmedication-1"
+          }
+        ],
+        "code": {
+          "text": "aspirin"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.historicalcompmedication-100097",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466490778Z"
+        },
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.historicalcompmedication-100097"
+          }
+        ],
+        "code": {
+          "text": "Multi Vitamin"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.historicalcompmedication-100099",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.466895244Z"
+        },
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.historicalcompmedication-100099"
+          }
+        ],
+        "code": {
+          "text": "Probiotic"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Medication",
+        "id": "a-13127.historicalcompmedication-100107",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-07-30T02:51:11.467307288Z"
+        },
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-medication",
+            "value": "a-13127.historicalcompmedication-100107"
+          }
+        ],
+        "code": {
+          "text": "Multi Vitamin"
+        },
+        "status": "active"
+      },
+      "search": {
+        "mode": "match"
+      }
+    }
+  ]
+}
