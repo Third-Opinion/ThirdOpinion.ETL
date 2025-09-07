@@ -1,0 +1,1105 @@
+{
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "link": [
+      {
+        "relation": "next",
+        "url": "https://healthlake.us-east-2.amazonaws.com/datastore/836e877666cebf177ce6370ec1478a92/r4/MedicationRequest?_count=20&page=AAMA-EFRSURBSGkybU51SXpBNHc5ZWpFWFBxQndHQTBkUUwrZlNXeEs1by9TeEJSdnNwd1FnR0NWcjhyV2Q0ekhrOXI0OEd4dXRaMkFBQUFmakI4QmdrcWhraUc5dzBCQndhZ2J6QnRBZ0VBTUdnR0NTcUdTSWIzRFFFSEFUQWVCZ2xnaGtnQlpRTUVBUzR3RVFRTVVoWEpsdnU2RWZBZi9zUUpBZ0VRZ0R1NWVnQm5KRVRQUUVjbkRpU2hZZHA1RFNTUkpSQ1V6QXNQY0Q5blBLSHFRS1FDZVhRdjVsR0FjWkxKZkNGNWF2cHFIUVcvdi9kazA5SDVEUT09qbPXEp5_pmCwZ_hTbBZ8Whv_N2G3UCA72dJAclAQs8HzQkYCRIJWU8SOkXVsfuD7AwpfBc4DDEvg4D71Zj8d7szvMW-6DV6d3NH-aMS2lhVSriir0IfvqeqYlefeRg9tK_KBIyweun-Z5qlaPaaUgi5YPDzqOeZi5c8d17JaxF22oNh1obEqKNFtycmdF6xqjo2g5P7K0PARLoeV6zS6Vp6o90ukbUPv5jubDJETLCrQuDtWujQkrHd4szpTJClotQubt3a3IhjBsq3AleIKb8ZdKsjvu1SUShTgIzHwnke3pe3ktDkDN5ui-n4gWbo8WxiqCqsjoVgEBCeHXnEYfx0W0qykoOjVhSORNk_Uvx9Flsz0_iI5so8cDbQOwvJlh0g-selN9B83oQdJqsEtDBY0pirr91pAKMFZqjzeoL4vjItE8F5oW-AeyqSu5QHlBSaGtfgk9mgE-EmPhoNIPxRzt3KVOucDr0f_0neGLM7Pbl_WPienxJk2ekPijmjysLaViMEI_lB4mC02JuqudeDWHWl4d3trL7OFjyHcbsfzmmLxtXBo_fUOIcUuOp1_rPRdPml024gOir-wBOM6_zU3V4kh19K48q-z4eCkOUG-ZR1mwtypHu3ti-jABtSg7Wno3e1fnEAx2TzRevwaCvrXfsMRQMNO2qVJ0jY3rTfM7gI7Gt7PjC1dcoTiGBdG0rNntRwEiMOpwsKWrR2y4OiV8rTutA_G7OwhfiZa3lKXQ0BaJn5XQbOHPEon6zuLLgPVyERHmEias3_F6MOnQaSPku2WHrP2h7FhA8ndI4GHoCmNkgw1SpG5rE9Ss9qVpj0vH1unbfpJObVeZjNXfPlDdVhoCDwItB0YNS-JQyJs_aKfSV2NlPGBg_G8yocaemBlvTVYMlJbmIRjhlsS41LBwoTA-7j0DEYMPCbCGjVHiAPmu7SoLDdtiQMUR8DSVmWUsZO97PlkJTblvZ7al9CCTvTlsodqign8zVa7TjiONAyibYFuyk5XtiQ="
+      }
+    ],
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-1",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T02:43:21.140624218Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-1"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-204441",
+            "display": "tamsulosin 0.4 mg capsule"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-324138"
+          },
+          "authoredOn": "2017-06-21T01:36:08-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T02:43:21.032933644Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-200003",
+            "display": "carvedilol 3.125 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-324138"
+          },
+          "authoredOn": "2017-06-21T01:36:08-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-100",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:53:29.983838137Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-100"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-198954",
+            "display": "sulfamethoxazole 800 mg-trimethoprim 160 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-387132"
+          },
+          "authoredOn": "2017-06-26T11:23:32-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-1000",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:47:52.287858273Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-1000"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-191220",
+            "display": "atorvastatin 10 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-248904"
+          },
+          "authoredOn": "2017-06-27T10:40:58-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:54:38.181937196Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000"
+            }
+          ],
+          "status": "stopped",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-200414",
+            "display": "glimepiride 1 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-386298"
+          },
+          "authoredOn": "2017-06-28T12:36:18-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          },
+          "note": [
+            {
+              "text": "(Stop Date) 2018-03-27"
+            }
+          ],
+          "dosageInstruction": [
+            {
+              "text": "Take 1 tablet every day by oral route.",
+              "timing": {
+                "repeat": {
+                  "frequency": 1,
+                  "period": 1,
+                  "periodUnit": "d"
+                }
+              },
+              "asNeededBoolean": false,
+              "route": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "26643006",
+                    "display": "Oral use"
+                  }
+                ],
+                "text": "ORAL"
+              },
+              "method": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "419652001",
+                    "display": "Take"
+                  }
+                ],
+                "text": "TAKE"
+              },
+              "doseAndRate": [
+                {
+                  "doseQuantity": {
+                    "value": 1,
+                    "unit": "tablet(s)",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "{tbl}"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-100000",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:50:06.163323475Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-100000"
+            }
+          ],
+          "status": "stopped",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-187682",
+            "display": "fluconazole 100 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-310466"
+          },
+          "authoredOn": "2017-07-17T15:33:10-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          },
+          "note": [
+            {
+              "text": "(Stop Date) 2019-02-22"
+            }
+          ]
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-1000000",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:44:53.175767031Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-1000000"
+            }
+          ],
+          "status": "stopped",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-209125",
+            "display": "minocycline 50 mg capsule"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-264777"
+          },
+          "authoredOn": "2018-05-14T06:19:03-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000000",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:14.505232290Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000000"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-395052",
+            "display": "Repatha Pushtronex 420 mg/3.5 mL subcutaneous wearable injector"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-340166"
+          },
+          "authoredOn": "2024-12-22T12:03:07-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000001",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:14.504559204Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000001"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-194192",
+            "display": "famotidine 40 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-340166"
+          },
+          "authoredOn": "2024-12-22T12:03:07-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000002",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:14.505509221Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000002"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-207043",
+            "display": "metformin 1,000 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-340166"
+          },
+          "authoredOn": "2024-12-22T12:03:07-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000003",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:27:14.692240359Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000003"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-387676",
+            "display": "Repatha SureClick 140 mg/mL subcutaneous pen injector"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-365386"
+          },
+          "authoredOn": "2024-12-22T12:03:10-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000004",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:05.081987951Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000004"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-254323",
+            "display": "lactulose 10 gram/15 mL oral solution"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-315152"
+          },
+          "authoredOn": "2024-12-22T12:03:12-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000005",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:05.081954884Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000005"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-217238",
+            "display": "losartan 100 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-315152"
+          },
+          "authoredOn": "2024-12-22T12:03:12-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000006",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:05.081147161Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000006"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-217553",
+            "display": "fluticasone propionate 50 mcg/actuation nasal spray,suspension"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-315152"
+          },
+          "authoredOn": "2024-12-22T12:03:12-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000007",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:05.081985043Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000007"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-199015",
+            "display": "omeprazole 40 mg capsule,delayed release"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-315152"
+          },
+          "authoredOn": "2024-12-22T12:03:12-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000008",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:41:05.081796743Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000008"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-196162",
+            "display": "clobetasol 0.05 % topical cream"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-315152"
+          },
+          "authoredOn": "2024-12-22T12:03:12-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000009",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:54:38.183573729Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000009"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-199274",
+            "display": "tramadol 50 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-386276"
+          },
+          "authoredOn": "2024-12-22T12:03:15-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-1000001",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:44:53.175595818Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-1000001"
+            }
+          ],
+          "status": "stopped",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-264748",
+            "display": "AzaSite 1 % eye drops"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-264777"
+          },
+          "authoredOn": "2018-05-14T06:19:03-04:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000010",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T03:54:38.181222966Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000010"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-218454",
+            "display": "finasteride 5 mg tablet"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-386276"
+          },
+          "authoredOn": "2024-12-22T12:03:15-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "a-15454.historicalmedrequest-10000011",
+          "meta": {
+            "versionId": "1",
+            "lastUpdated": "2025-08-28T02:38:38.400006020Z"
+          },
+          "extension": [
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+              "valueReference": {
+                "reference": "Organization/a-1.Practice-15454"
+              }
+            },
+            {
+              "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+              "valueReference": {
+                "reference": "Organization/a-15454.CSG-1"
+              }
+            }
+          ],
+          "identifier": [
+            {
+              "system": "https://fhir.athena.io/sid/ah-medicationrequest",
+              "value": "a-15454.historicalmedrequest-10000011"
+            }
+          ],
+          "status": "active",
+          "intent": "order",
+          "reportedBoolean": true,
+          "medicationReference": {
+            "reference": "Medication/a-15454.medication-217621",
+            "display": "metformin ER 500 mg tablet,extended release 24 hr"
+          },
+          "subject": {
+            "reference": "Patient/a-15454.E-388035"
+          },
+          "authoredOn": "2024-12-22T12:03:18-05:00",
+          "requester": {
+            "extension": [
+              {
+                "url": "http://hl7.org/fhir/StructureDefinition/data-absent-reason",
+                "valueCode": "unknown"
+              }
+            ]
+          }
+        },
+        "search": {
+          "mode": "match"
+        }
+      }
+    ]
+  }
