@@ -40,10 +40,17 @@ def transform_main_medication_data(df):
     # Build the select statement dynamically based on available columns
     select_columns = [
         F.col("id").alias("medication_id"),
-        F.col("code").getField("text").alias("code_text"),
+        F.col("resourceType").alias("resource_type"),
+        F.when(F.col("code").isNotNull(),
+               F.col("code").getField("text")
+              ).otherwise(None).alias("code_text"),
         F.col("status").alias("status"),
-        F.col("meta").getField("versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("meta_last_updated"),
+        F.when(F.col("meta").isNotNull(),
+               F.col("meta").getField("versionId")
+              ).otherwise(None).alias("meta_version_id"),
+        F.when(F.col("meta").isNotNull(),
+               F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'")
+              ).otherwise(None).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ]
@@ -88,52 +95,6 @@ def transform_medication_identifiers(df):
     
     return identifiers_final
 
-def transform_medication_code_codings(df):
-    """Transform medication code codings"""
-    logger.info("Transforming medication code codings...")
-    
-    # Check if code.coding exists
-    if "code" not in df.columns:
-        logger.warning("code column not found in data, returning empty DataFrame")
-        return df.select(
-            F.col("id").alias("medication_id"),
-            F.lit("").alias("code_system"),
-            F.lit("").alias("code_value"),
-            F.lit("").alias("code_display")
-        ).filter(F.lit(False))
-    
-    # Filter to only records that have coding arrays
-    coding_df = df.filter(
-        F.col("code.coding").isNotNull() & 
-        (F.size(F.col("code.coding")) > 0)
-    )
-    
-    if coding_df.count() == 0:
-        logger.info("No code.coding data found, returning empty DataFrame")
-        return df.select(
-            F.col("id").alias("medication_id"),
-            F.lit("").alias("code_system"),
-            F.lit("").alias("code_value"),
-            F.lit("").alias("code_display")
-        ).filter(F.lit(False))
-    
-    # Explode the coding array
-    codings_df = coding_df.select(
-        F.col("id").alias("medication_id"),
-        F.explode(F.col("code.coding")).alias("coding_item")
-    )
-    
-    # Extract coding details
-    codings_final = codings_df.select(
-        F.col("medication_id"),
-        F.col("coding_item.system").alias("code_system"),
-        F.col("coding_item.code").alias("code_value"),
-        F.col("coding_item.display").alias("code_display")
-    ).filter(
-        F.col("code_value").isNotNull()
-    )
-    
-    return codings_final
 
 def create_redshift_tables_sql():
     """Generate SQL for creating main medications table in Redshift"""
@@ -144,6 +105,7 @@ def create_redshift_tables_sql():
     -- Main medications table
     CREATE TABLE public.medications (
         medication_id VARCHAR(255) PRIMARY KEY,
+        resource_type VARCHAR(50),
         code_text VARCHAR(500),
         status VARCHAR(50),
         meta_version_id VARCHAR(50),
@@ -166,19 +128,6 @@ def create_medication_identifiers_table_sql():
     ) SORTKEY (medication_id, identifier_system)
     """
 
-def create_medication_code_codings_table_sql():
-    """Generate SQL for creating medication_code_codings table"""
-    return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.medication_code_codings CASCADE;
-    
-    CREATE TABLE public.medication_code_codings (
-        medication_id VARCHAR(255),
-        code_system VARCHAR(255),
-        code_value VARCHAR(100),
-        code_display VARCHAR(500)
-    ) SORTKEY (medication_id, code_system)
-    """
 
 def write_to_redshift(dynamic_frame, table_name, preactions=""):
     """Write DynamicFrame to Redshift using JDBC connection"""
@@ -216,7 +165,7 @@ def main():
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
-        logger.info(f"🎯 Target: Redshift (3 tables)")
+        logger.info(f"🎯 Target: Redshift (2 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
         logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
         
@@ -303,18 +252,10 @@ def main():
         identifiers_count = medication_identifiers_df.count()
         logger.info(f"✅ Transformed {identifiers_count:,} medication identifier records")
         
-        medication_code_codings_df = transform_medication_code_codings(medication_df)
-        codings_count = medication_code_codings_df.count()
-        logger.info(f"✅ Transformed {codings_count:,} medication code coding records")
-        
         # Debug: Show samples of multi-valued data if available
         if identifiers_count > 0:
             logger.info("Sample of medication identifiers data:")
             medication_identifiers_df.show(3, truncate=False)
-        
-        if codings_count > 0:
-            logger.info("Sample of medication code codings data:")
-            medication_code_codings_df.show(3, truncate=False)
         
         # Step 4: Convert to DynamicFrames and ensure data is flat for Redshift compatibility
         logger.info("\n" + "=" * 50)
@@ -325,6 +266,7 @@ def main():
         # Convert main medications DataFrame and ensure flat structure
         main_flat_df = main_medication_df.select(
             F.col("medication_id").cast(StringType()).alias("medication_id"),
+            F.col("resource_type").cast(StringType()).alias("resource_type"),
             F.col("code_text").cast(StringType()).alias("code_text"),
             F.col("status").cast(StringType()).alias("status"),
             F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
@@ -343,14 +285,6 @@ def main():
         )
         identifiers_dynamic_frame = DynamicFrame.fromDF(identifiers_flat_df, glueContext, "identifiers_dynamic_frame")
         
-        codings_flat_df = medication_code_codings_df.select(
-            F.col("medication_id").cast(StringType()).alias("medication_id"),
-            F.col("code_system").cast(StringType()).alias("code_system"),
-            F.col("code_value").cast(StringType()).alias("code_value"),
-            F.col("code_display").cast(StringType()).alias("code_display")
-        )
-        codings_dynamic_frame = DynamicFrame.fromDF(codings_flat_df, glueContext, "codings_dynamic_frame")
-        
         # Step 5: Resolve any remaining choice types to ensure Redshift compatibility
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 5: RESOLVING CHOICE TYPES")
@@ -360,6 +294,7 @@ def main():
         main_resolved_frame = main_dynamic_frame.resolveChoice(
             specs=[
                 ("medication_id", "cast:string"),
+                ("resource_type", "cast:string"),
                 ("code_text", "cast:string"),
                 ("status", "cast:string"),
                 ("meta_version_id", "cast:string"),
@@ -374,15 +309,6 @@ def main():
                 ("medication_id", "cast:string"),
                 ("identifier_system", "cast:string"),
                 ("identifier_value", "cast:string")
-            ]
-        )
-        
-        codings_resolved_frame = codings_dynamic_frame.resolveChoice(
-            specs=[
-                ("medication_id", "cast:string"),
-                ("code_system", "cast:string"),
-                ("code_value", "cast:string"),
-                ("code_display", "cast:string")
             ]
         )
         
@@ -403,9 +329,8 @@ def main():
         
         # Validate other tables
         identifiers_final_count = identifiers_resolved_frame.toDF().count()
-        codings_final_count = codings_resolved_frame.toDF().count()
         
-        logger.info(f"Final counts - Identifiers: {identifiers_final_count}, Code Codings: {codings_final_count}")
+        logger.info(f"Final counts - Identifiers: {identifiers_final_count}")
         
         # Debug: Show final sample data being written
         logger.info("Final sample data being written to Redshift (main medications):")
@@ -447,11 +372,6 @@ def main():
         write_to_redshift(identifiers_resolved_frame, "medication_identifiers", identifiers_table_sql)
         logger.info("✅ Medication identifiers table dropped, recreated and written successfully")
         
-        logger.info("📝 Dropping and recreating medication code codings table...")
-        codings_table_sql = create_medication_code_codings_table_sql()
-        write_to_redshift(codings_resolved_frame, "medication_code_codings", codings_table_sql)
-        logger.info("✅ Medication code codings table dropped, recreated and written successfully")
-        
         # Calculate processing time
         end_time = datetime.now()
         processing_time = end_time - start_time
@@ -466,16 +386,14 @@ def main():
         logger.info("\n📋 TABLES WRITTEN TO REDSHIFT:")
         logger.info("  ✅ public.medications (main medication data)")
         logger.info("  ✅ public.medication_identifiers (identifier system/value pairs)")
-        logger.info("  ✅ public.medication_code_codings (medication code codings)")
         
         logger.info("\n📊 FINAL ETL STATISTICS:")
         logger.info(f"  📥 Total raw records processed: {total_records:,}")
         logger.info(f"  💊 Main medication records: {main_count:,}")
         logger.info(f"  🏷️  Identifier records: {identifiers_count:,}")
-        logger.info(f"  🔢 Code coding records: {codings_count:,}")
         
         # Calculate data expansion ratio
-        total_output_records = main_count + identifiers_count + codings_count
+        total_output_records = main_count + identifiers_count
         expansion_ratio = total_output_records / total_records if total_records > 0 else 0
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
