@@ -62,19 +62,9 @@ def transform_main_care_plan_data(df):
         F.when(F.col("subject").isNotNull(), 
                F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
               ).otherwise(None).alias("patient_id"),
-        F.when(F.col("encounter").isNotNull(),
-               F.regexp_extract(F.col("encounter").getField("reference"), r"Encounter/(.+)", 1)
-              ).otherwise(None).alias("encounter_id"),
         F.col("status").alias("status"),
         F.col("intent").alias("intent"),
         F.col("title").alias("title"),
-        F.col("description").alias("description"),
-        F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("period_start"),
-        F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("period_end"),
-        F.to_timestamp(F.col("created"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("created"),
-        F.when(F.col("author").isNotNull(),
-               F.regexp_extract(F.col("author").getField("reference"), r"Practitioner/(.+)|Organization/(.+)", 1)
-              ).otherwise(None).alias("author_id"),
         F.col("meta").getField("versionId").alias("meta_version_id"),
         F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
@@ -207,20 +197,14 @@ def create_care_plans_table_sql():
     CREATE TABLE public.care_plans (
         care_plan_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
-        encounter_id VARCHAR(255),
         status VARCHAR(50),
         intent VARCHAR(50),
         title VARCHAR(500),
-        description VARCHAR(MAX),
-        period_start TIMESTAMP,
-        period_end TIMESTAMP,
-        created TIMESTAMP,
-        author_id VARCHAR(255),
         meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) DISTKEY (patient_id) SORTKEY (patient_id, created);
+    ) DISTKEY (patient_id) SORTKEY (patient_id);
     """
 
 def create_care_plan_identifiers_table_sql():
