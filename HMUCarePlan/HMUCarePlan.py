@@ -99,7 +99,7 @@ def transform_care_plan_identifiers(df):
     
     identifiers_final = identifiers_df.select(
         F.col("care_plan_id"),
-        F.col("identifier_item.system").alias("identifier_system"),
+        F.lit(None).cast(StringType()).alias("identifier_system"),
         F.col("identifier_item.value").alias("identifier_value")
     ).filter(
         F.col("identifier_value").isNotNull()
