@@ -1,50 +1,99 @@
-{ "entry": [
+{"entry": [
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-1",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10000689",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:33.302995556Z"
+          "lastUpdated": "2025-08-28T03:57:59.263441947Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-1"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10000689"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-204441",
-          "display": "TAMSULOSIN   CAP 0.4MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-324138"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808523"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-321006"
+        },
+        "date": "2024-02-26T17:33:29.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10000689.dp.SCANPAGE.5163106"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10000689.dp.SCANPAGE.5163107"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10000689.dp.SCANPAGE.5163108"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10000689.dp.SCANPAGE.5163109"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10000689.dp.SCANPAGE.5163110"
             }
           }
         ],
-        "quantity": {
-          "value": 90
-        },
-        "whenHandedOver": "2017-06-01T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-21",
+            "end": "2024-02-21"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -52,50 +101,80 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-10",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10001048",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:33.303594157Z"
+          "lastUpdated": "2025-08-28T01:32:10.694353088Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-10"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10001048"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-200003",
-          "display": "CARVEDILOL   TAB 3.125MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-324138"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808523"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-426915"
+        },
+        "date": "2024-02-26T18:04:14.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-1933848"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10001048.dp.SCANPAGE.5163443"
             }
           }
         ],
-        "quantity": {
-          "value": 180
-        },
-        "whenHandedOver": "2017-01-19T05:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-26T18:04:14Z",
+            "end": "2024-02-26T18:04:14Z"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -103,50 +182,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-1000208",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T04:03:18.558640374Z"
+          "lastUpdated": "2025-08-28T03:58:58.792262321Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-1000208"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-198954",
-          "display": "SMZ/TMP DS   TAB 800-160"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-387132"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808230"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-352949"
+        },
+        "date": "2018-04-30T15:48:42.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Electrocardiogram",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.1000208.dp.SCANPAGE.521311"
             }
           }
         ],
-        "quantity": {
-          "value": 20
-        },
-        "whenHandedOver": "2017-06-13T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2018-04-11",
+            "end": "2018-04-11"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -154,50 +258,86 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-1000",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10002955",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T04:03:16.846324217Z"
+          "lastUpdated": "2025-08-28T00:08:26.915443491Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-1000"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10002955"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-191220",
-          "display": "ATORVASTATIN TAB 10MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-248904"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10815525"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-422528"
+        },
+        "date": "2024-02-26T20:27:22.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-2576202"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Electrocardiogram Interpretation*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10002955.dp.SCANPAGE.5164569"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10002955.dp.SCANPAGE.5164571"
             }
           }
         ],
-        "quantity": {
-          "value": 90
-        },
-        "whenHandedOver": "2016-08-04T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-22",
+            "end": "2024-02-22"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -205,50 +345,80 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100000",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10003666",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727225868Z"
+          "lastUpdated": "2025-08-28T03:52:01.207667415Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100000"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10003666"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-187682",
-          "display": "fluconazole 100 mg tablet"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-482390"
+        },
+        "date": "2024-02-26T21:16:09.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-1003794"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10003666.dp.SCANPAGE.5164907"
             }
           }
         ],
-        "quantity": {
-          "value": 4
-        },
-        "whenHandedOver": "2017-06-05T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-07",
+            "end": "2024-02-07"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -256,50 +426,81 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100001",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10004568",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727098056Z"
+          "lastUpdated": "2025-08-28T03:48:09.587607075Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100001"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10004568"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-198976",
-          "display": "HYDROCO/APAP TAB 10-325MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-498244"
+        },
+        "date": "2024-02-26T22:16:36.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10004568.dp.SCANPAGE.5165387"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10004568.dp.SCANPAGE.5165388"
             }
           }
         ],
-        "quantity": {
-          "value": 90
-        },
-        "whenHandedOver": "2017-06-05T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-26",
+            "end": "2024-02-26"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -307,50 +508,81 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100002",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10004703",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.726990960Z"
+          "lastUpdated": "2025-08-28T03:48:09.586545335Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100002"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10004703"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-192328",
-          "display": "TIZANIDINE   TAB 4MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-498244"
+        },
+        "date": "2024-02-26T22:25:57.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10004703.dp.SCANPAGE.5165492"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10004703.dp.SCANPAGE.5165493"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-06-05T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-26",
+            "end": "2024-02-26"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -358,50 +590,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100003",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10004719",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.730622160Z"
+          "lastUpdated": "2025-08-28T00:55:33.892178807Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100003"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10004719"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-203441",
-          "display": "LORAZEPAM    TAB 0.5MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-430856"
+        },
+        "date": "2024-02-26T22:27:26.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Electrocardiogram Interpretation*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10004719.dp.SCANPAGE.5165499"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-06-05T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-26",
+            "end": "2024-02-26"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -409,50 +666,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100004",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10005392",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727279951Z"
+          "lastUpdated": "2025-08-28T03:57:30.210475989Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100004"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10005392"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-198976",
-          "display": "HYDROCO/APAP TAB 10-325MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-505151"
+        },
+        "date": "2024-02-27T00:43:17.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10005392.dp.SCANPAGE.5165952"
             }
           }
         ],
-        "quantity": {
-          "value": 90
-        },
-        "whenHandedOver": "2017-05-05T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-29T20:22:52Z",
+            "end": "2024-02-29T20:22:52Z"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -460,50 +742,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100005",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10007430",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727000114Z"
+          "lastUpdated": "2025-08-28T00:29:39.047202464Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100005"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10007430"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-203441",
-          "display": "LORAZEPAM    TAB 0.5MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-432299"
+        },
+        "date": "2024-02-27T15:54:27.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Electrocardiogram Interpretation*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10007430.dp.SCANPAGE.5166949"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-05-05T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-26",
+            "end": "2024-02-26"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -511,50 +818,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100006",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10009373",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.730165232Z"
+          "lastUpdated": "2025-08-28T01:35:33.727246200Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100006"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10009373"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-192328",
-          "display": "TIZANIDINE   TAB 4MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-457682"
+        },
+        "date": "2024-02-27T17:54:19.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Electrocardiogram",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10009373.dp.SCANPAGE.5167844"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-05-04T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-27",
+            "end": "2024-02-27"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -562,50 +894,80 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100007",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10010011",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.728211929Z"
+          "lastUpdated": "2025-08-28T03:52:25.911233971Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100007"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10010011"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-192328",
-          "display": "TIZANIDINE   TAB 4MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-479339"
+        },
+        "date": "2024-02-22T10:58:39.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-1302472"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Electrocardiogram, Routine Ecg, 12 Leads Min",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10010011.dp.SCANPAGE.5151203"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-04-06T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-27T19:13:08Z",
+            "end": "2024-02-27T19:13:08Z"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -613,50 +975,80 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100008",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10012598",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.726791502Z"
+          "lastUpdated": "2025-08-28T03:55:53.056791359Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100008"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10012598"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-198976",
-          "display": "HYDROCO/APAP TAB 10-325MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-485669"
+        },
+        "date": "2024-02-27T22:11:53.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-1003794"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10012598.dp.SCANPAGE.5169347"
             }
           }
         ],
-        "quantity": {
-          "value": 90
-        },
-        "whenHandedOver": "2017-04-06T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-27",
+            "end": "2024-02-27"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -664,50 +1056,81 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100009",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10012645",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727728569Z"
+          "lastUpdated": "2025-08-28T03:57:40.854103408Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100009"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10012645"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-192123",
-          "display": "METOPROL TAR TAB 100MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-510535"
+        },
+        "date": "2024-02-27T22:17:29.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10012645.dp.SCANPAGE.5169375"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10012645.dp.SCANPAGE.5169376"
             }
           }
         ],
-        "quantity": {
-          "value": 180
-        },
-        "whenHandedOver": "2017-04-06T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-01-25",
+            "end": "2024-01-25"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -715,50 +1138,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100010",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10013024",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727415316Z"
+          "lastUpdated": "2025-08-28T04:00:05.326034224Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100010"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10013024"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-203441",
-          "display": "LORAZEPAM    TAB 0.5MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-510975"
+        },
+        "date": "2024-02-27T22:57:46.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10013024.dp.SCANPAGE.5169640"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-04-06T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-26",
+            "end": "2024-02-26"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -766,50 +1214,80 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100011",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10018157",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.727947634Z"
+          "lastUpdated": "2025-08-28T04:00:18.072575531Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100011"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10018157"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-198027",
-          "display": "APAP/CODEINE TAB 300-30MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-194258"
+        },
+        "date": "2024-02-28T19:59:34.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-1003794"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10018157.dp.SCANPAGE.5172855"
             }
           }
         ],
-        "quantity": {
-          "value": 30
-        },
-        "whenHandedOver": "2017-04-02T04:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-28T19:59:34Z",
+            "end": "2024-02-28T19:59:34Z"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -817,50 +1295,123 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100012",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10020215",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.728167381Z"
+          "lastUpdated": "2025-08-28T00:40:10.911500870Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100012"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10020215"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-192328",
-          "display": "TIZANIDINE   TAB 4MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-399184"
+        },
+        "date": "2024-02-28T22:51:08.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173722"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173723"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173725"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173726"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173727"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173728"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173729"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173730"
+            }
+          },
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020215.dp.SCANPAGE.5173731"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-03-06T05:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2023-12-08",
+            "end": "2023-12-08"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -868,50 +1419,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100013",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10020300",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.728492879Z"
+          "lastUpdated": "2025-08-28T01:35:40.523718586Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100013"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10020300"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-198976",
-          "display": "HYDROCO/APAP TAB 10-325MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-456418"
+        },
+        "date": "2024-02-28T23:11:01.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10020300.dp.SCANPAGE.5173869"
             }
           }
         ],
-        "quantity": {
-          "value": 90
-        },
-        "whenHandedOver": "2017-03-06T05:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2023-12-22",
+            "end": "2023-12-22"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -919,50 +1495,80 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100014",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10021462",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.728280298Z"
+          "lastUpdated": "2025-08-28T01:10:54.727724196Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100014"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10021462"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-203441",
-          "display": "LORAZEPAM    TAB 0.5MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-451640"
+        },
+        "date": "2024-02-29T14:11:00.000Z",
+        "author": [
+          {
+            "reference": "Practitioner/a-15454.User-1933848"
+          }
+        ],
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10021462.dp.SCANPAGE.5174788"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-03-06T05:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-29T14:11:00Z",
+            "end": "2024-02-29T14:11:00Z"
+          }
+        }
       },
       "search": {
         "mode": "match"
@@ -970,50 +1576,75 @@
     },
     {
       "resource": {
-        "resourceType": "MedicationDispense",
-        "id": "a-15454.amd-100015",
+        "resourceType": "DocumentReference",
+        "id": "a-15454.cardiologyReport-10021549",
         "meta": {
           "versionId": "1",
-          "lastUpdated": "2025-08-28T01:48:39.728751770Z"
+          "lastUpdated": "2025-08-28T03:57:26.713119774Z"
         },
         "extension": [
-          {
-            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
-            "valueReference": {
-              "reference": "Organization/a-15454.CSG-1"
-            }
-          },
           {
             "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
             "valueReference": {
               "reference": "Organization/a-1.Practice-15454"
             }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
           }
         ],
         "identifier": [
           {
-            "value": "a-15454.amd-100015"
+            "system": "https://fhir.athena.io/sid/ah-documentreference",
+            "value": "a-15454.cardiologyReport-10021549"
           }
         ],
-        "status": "completed",
-        "medicationReference": {
-          "reference": "Medication/a-15454.medication-203441",
-          "display": "LORAZEPAM    TAB 0.5MG"
+        "status": "current",
+        "type": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "75425-9",
+              "display": "Cardiology Diagnostic Study Note"
+            }
+          ]
         },
-        "subject": {
-          "reference": "Patient/a-15454.E-310466"
-        },
-        "performer": [
+        "category": [
           {
-            "actor": {
-              "reference": "Organization/a-1.CP-10808556"
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/us-core-documentreference-category",
+                "code": "clinical-note",
+                "display": "Clinical Note"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/a-15454.E-508538"
+        },
+        "date": "2024-02-29T14:25:26.000Z",
+        "custodian": {
+          "reference": "Organization/a-1.Org-ATHENA"
+        },
+        "description": "Rhythm Strip, Ekg*",
+        "content": [
+          {
+            "attachment": {
+              "contentType": "image/png",
+              "url": "Binary/a-15454.DR-doc.10021549.dp.SCANPAGE.5174884"
             }
           }
         ],
-        "quantity": {
-          "value": 60
-        },
-        "whenHandedOver": "2017-02-06T05:00:00+00:00"
+        "context": {
+          "period": {
+            "start": "2024-02-29",
+            "end": "2024-02-29"
+          }
+        }
       },
       "search": {
         "mode": "match"
