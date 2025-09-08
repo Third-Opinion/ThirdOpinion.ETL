@@ -67,16 +67,10 @@ def transform_main_medication_dispense_data(df):
                F.col("type.coding")[0].getField("display")
               ).otherwise(None).alias("type_display"),
 
-        # Extract quantity value, handling nested struct
+        # Extract quantity value
         F.when(F.col("quantity").isNotNull(),
-               F.coalesce(
-                   F.col("quantity").getField("value").getField("double"),
-                   F.col("quantity").getField("value").getField("int")
-               )
+               F.col("quantity").getField("value")
               ).otherwise(None).alias("quantity_value"),
-        F.when(F.col("quantity").isNotNull(),
-               F.col("quantity").getField("unit")
-              ).otherwise(None).alias("quantity_unit"),
         
         # Convert whenHandedOver to timestamp
         F.to_timestamp(F.col("whenHandedOver"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("when_handed_over"),
@@ -289,7 +283,6 @@ def create_redshift_tables_sql():
         type_code VARCHAR(50),
         type_display VARCHAR(255),
         quantity_value DECIMAL(10,2),
-        quantity_unit VARCHAR(50),
         when_handed_over TIMESTAMP,
         meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
@@ -530,7 +523,6 @@ def main():
             F.col("type_code").cast(StringType()).alias("type_code"),
             F.col("type_display").cast(StringType()).alias("type_display"),
             F.col("quantity_value").cast(DecimalType(10,2)).alias("quantity_value"),
-            F.col("quantity_unit").cast(StringType()).alias("quantity_unit"),
             F.col("when_handed_over").cast(TimestampType()).alias("when_handed_over"),
             F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
             F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
@@ -596,7 +588,6 @@ def main():
                 ("type_code", "cast:string"),
                 ("type_display", "cast:string"),
                 ("quantity_value", "cast:decimal"),
-                ("quantity_unit", "cast:string"),
                 ("when_handed_over", "cast:timestamp"),
                 ("meta_version_id", "cast:string"),
                 ("meta_last_updated", "cast:timestamp"),
