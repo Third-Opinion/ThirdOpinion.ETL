@@ -56,36 +56,6 @@ def transform_main_practitioner_data(df):
     
     return main_df
 
-def transform_practitioner_identifiers(df):
-    """Transform practitioner identifiers"""
-    logger.info("Transforming practitioner identifiers...")
-    
-    if "identifier" not in df.columns:
-        logger.warning("identifier column not found")
-        return spark.createDataFrame([], df.select(F.col("id").alias("practitioner_id")).schema
-                                     .add("use", StringType())
-                                     .add("type_text", StringType())
-                                     .add("system", StringType())
-                                     .add("value", StringType()))
-
-    identifiers_df = df.select(
-        F.col("id").alias("practitioner_id"),
-        F.explode(F.col("identifier")).alias("identifier_item")
-    ).filter(
-        F.col("identifier_item").isNotNull()
-    )
-    
-    identifiers_final = identifiers_df.select(
-        F.col("practitioner_id"),
-        F.col("identifier_item.use").alias("use"),
-        F.col("identifier_item.type.text").alias("type_text"),
-        F.col("identifier_item.system").alias("system"),
-        F.col("identifier_item.value").alias("value")
-    ).filter(
-        F.col("value").isNotNull()
-    )
-    
-    return identifiers_final
 
 def transform_practitioner_names(df):
     """Transform practitioner names"""
@@ -180,17 +150,6 @@ def create_redshift_tables_sql():
     ) SORTKEY (practitioner_id);
     """
 
-def create_practitioner_identifiers_table_sql():
-    return """
-    DROP TABLE IF EXISTS public.practitioner_identifiers CASCADE;
-    CREATE TABLE public.practitioner_identifiers (
-        practitioner_id VARCHAR(255),
-        "use" VARCHAR(50),
-        type_text VARCHAR(255),
-        system VARCHAR(255),
-        value VARCHAR(255)
-    ) SORTKEY (practitioner_id, system);
-    """
 
 def create_practitioner_names_table_sql():
     return """
@@ -208,9 +167,9 @@ def create_practitioner_telecoms_table_sql():
     DROP TABLE IF EXISTS public.practitioner_telecoms CASCADE;
     CREATE TABLE public.practitioner_telecoms (
         practitioner_id VARCHAR(255),
-        system VARCHAR(50),
+        "system" VARCHAR(50),
         value VARCHAR(255)
-    ) SORTKEY (practitioner_id, system);
+    ) SORTKEY (practitioner_id, "system");
     """
 
 def create_practitioner_addresses_table_sql():
@@ -272,10 +231,6 @@ def main():
         main_count = main_practitioner_df.count()
         logger.info(f"✅ Transformed {main_count:,} main practitioner records")
         
-        practitioner_identifiers_df = transform_practitioner_identifiers(practitioner_df)
-        identifiers_count = practitioner_identifiers_df.count()
-        logger.info(f"✅ Transformed {identifiers_count:,} practitioner identifier records")
-        
         practitioner_names_df = transform_practitioner_names(practitioner_df)
         names_count = practitioner_names_df.count()
         logger.info(f"✅ Transformed {names_count:,} practitioner name records")
@@ -289,19 +244,16 @@ def main():
         logger.info(f"✅ Transformed {addresses_count:,} practitioner address records")
 
         main_dynamic_frame = DynamicFrame.fromDF(main_practitioner_df, glueContext, "main_practitioner_dynamic_frame")
-        identifiers_dynamic_frame = DynamicFrame.fromDF(practitioner_identifiers_df, glueContext, "identifiers_dynamic_frame")
         names_dynamic_frame = DynamicFrame.fromDF(practitioner_names_df, glueContext, "names_dynamic_frame")
         telecoms_dynamic_frame = DynamicFrame.fromDF(practitioner_telecoms_df, glueContext, "telecoms_dynamic_frame")
         addresses_dynamic_frame = DynamicFrame.fromDF(practitioner_addresses_df, glueContext, "addresses_dynamic_frame")
         
         main_resolved_frame = main_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
-        identifiers_resolved_frame = identifiers_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
         names_resolved_frame = names_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
         telecoms_resolved_frame = telecoms_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
         addresses_resolved_frame = addresses_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
 
         write_to_redshift(main_resolved_frame, "practitioners", create_redshift_tables_sql())
-        write_to_redshift(identifiers_resolved_frame, "practitioner_identifiers", create_practitioner_identifiers_table_sql())
         write_to_redshift(names_resolved_frame, "practitioner_names", create_practitioner_names_table_sql())
         write_to_redshift(telecoms_resolved_frame, "practitioner_telecoms", create_practitioner_telecoms_table_sql())
         write_to_redshift(addresses_resolved_frame, "practitioner_addresses", create_practitioner_addresses_table_sql())

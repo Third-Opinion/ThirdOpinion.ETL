@@ -4,12 +4,13 @@ This document contains the complete DDL (Data Definition Language) for all table
 
 **Database:** `dev`  
 **Schema:** `public`  
-**Total Tables:** 60  
+**Total Tables:** 68  
 **Generated:** $(date)
 
 ## Table Categories
 
 - [Patient Tables](#patient-tables) - Core patient information and related data
+- [Care Plan Tables](#care-plan-tables) - Patient care plans and goals
 - [Condition Tables](#condition-tables) - Medical conditions and diagnoses
 - [Encounter Tables](#encounter-tables) - Healthcare encounters and visits
 - [Observation Tables](#observation-tables) - Clinical observations and measurements
@@ -172,6 +173,71 @@ CREATE TABLE patient_practitioners (
     organization_id VARCHAR(65535),
     reference_type VARCHAR(65535),
     dummy VARCHAR(65535)
+);
+```
+
+---
+
+## Care Plan Tables
+
+### care_plans
+Main table for patient care plans.
+
+```sql
+CREATE TABLE care_plans (
+    care_plan_id VARCHAR(255) NOT NULL,
+    patient_id VARCHAR(255) NOT NULL,
+    status VARCHAR(50),
+    intent VARCHAR(50),
+    title VARCHAR(500),
+    meta_version_id VARCHAR(50),
+    meta_last_updated TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+```
+
+### care_plan_care_teams
+Care teams associated with care plans.
+
+```sql
+CREATE TABLE care_plan_care_teams (
+    care_plan_id VARCHAR(255),
+    care_team_id VARCHAR(255)
+);
+```
+
+### care_plan_categories
+Categories for care plans.
+
+```sql
+CREATE TABLE care_plan_categories (
+    care_plan_id VARCHAR(255),
+    category_code VARCHAR(50),
+    category_system VARCHAR(255),
+    category_display VARCHAR(255),
+    category_text VARCHAR(500)
+);
+```
+
+### care_plan_goals
+Goals associated with care plans.
+
+```sql
+CREATE TABLE care_plan_goals (
+    care_plan_id VARCHAR(255),
+    goal_id VARCHAR(255)
+);
+```
+
+### care_plan_identifiers
+External identifiers for care plans.
+
+```sql
+CREATE TABLE care_plan_identifiers (
+    care_plan_id VARCHAR(255),
+    identifier_system VARCHAR(255),
+    identifier_value VARCHAR(255)
 );
 ```
 
@@ -1001,6 +1067,42 @@ CREATE TABLE practitioners (
     meta_last_updated TIMESTAMP,
     created_at TIMESTAMP DEFAULT ('now'::text)::timestamp with time zone,
     updated_at TIMESTAMP DEFAULT ('now'::text)::timestamp with time zone
+);
+```
+
+### practitioner_addresses
+Practitioner address information.
+
+```sql
+CREATE TABLE practitioner_addresses (
+    practitioner_id VARCHAR(255),
+    state VARCHAR(50),
+    line VARCHAR(500),
+    city VARCHAR(100),
+    postal_code VARCHAR(20)
+);
+```
+
+### practitioner_names
+Practitioner name information.
+
+```sql
+CREATE TABLE practitioner_names (
+    practitioner_id VARCHAR(255),
+    family VARCHAR(255),
+    text VARCHAR(500),
+    given VARCHAR(255)
+);
+```
+
+### practitioner_telecoms
+Practitioner telecommunication contact information.
+
+```sql
+CREATE TABLE practitioner_telecoms (
+    practitioner_id VARCHAR(255),
+    system VARCHAR(50),
+    value VARCHAR(255)
 );
 ```
 

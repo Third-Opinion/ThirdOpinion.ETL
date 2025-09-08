@@ -128,15 +128,35 @@ def transform_care_plan_categories(df):
         F.col("category_item").isNotNull()
     )
     
-    categories_final = categories_df.select(
+    # First check if coding array exists and is not null
+    categories_with_coding = categories_df.filter(
+        F.col("category_item.coding").isNotNull() &
+        (F.size(F.col("category_item.coding")) > 0)
+    )
+    
+    if categories_with_coding.count() == 0:
+        logger.warning("No categories with coding found, returning empty DataFrame")
+        return categories_df.select(
+            F.col("care_plan_id"),
+            F.lit("").alias("category_code"),
+            F.lit("").alias("category_system"),
+            F.lit("").alias("category_display"),
+            F.lit("").alias("category_text")
+        ).filter(F.lit(False))
+    
+    categories_exploded = categories_with_coding.select(
         F.col("care_plan_id"),
         F.explode(F.col("category_item.coding")).alias("coding_item"),
-        F.col("category_item.text").alias("category_text")
-    ).select(
+        F.lit(None).cast(StringType()).alias("category_text")  # Set to null since text field doesn't exist
+    )
+    
+    categories_final = categories_exploded.select(
         F.col("care_plan_id"),
-        F.col("coding_item.code").alias("category_code"),
-        F.col("coding_item.system").alias("category_system"),
-        F.col("coding_item.display").alias("category_display"),
+        F.when(F.col("coding_item.code").isNotNull(), 
+               F.col("coding_item.code")).otherwise(None).alias("category_code"),
+        F.when(F.col("coding_item.system").isNotNull(), 
+               F.col("coding_item.system")).otherwise(None).alias("category_system"),
+        F.lit(None).cast(StringType()).alias("category_display"),  # Set to null since display field doesn't exist
         F.col("category_text")
     ).filter(
         F.col("category_code").isNotNull()
@@ -158,7 +178,10 @@ def transform_care_plan_care_teams(df):
     care_teams_df = df.select(
         F.col("id").alias("care_plan_id"),
         F.explode(F.col("careTeam")).alias("care_team_item")
-    ).filter(F.col("care_team_item").isNotNull())
+    ).filter(
+        F.col("care_team_item").isNotNull() &
+        F.col("care_team_item.reference").isNotNull()
+    )
     
     care_teams_final = care_teams_df.select(
         F.col("care_plan_id"),
@@ -181,7 +204,10 @@ def transform_care_plan_goals(df):
     goals_df = df.select(
         F.col("id").alias("care_plan_id"),
         F.explode(F.col("goal")).alias("goal_item")
-    ).filter(F.col("goal_item").isNotNull())
+    ).filter(
+        F.col("goal_item").isNotNull() &
+        F.col("goal_item.reference").isNotNull()
+    )
     
     goals_final = goals_df.select(
         F.col("care_plan_id"),
