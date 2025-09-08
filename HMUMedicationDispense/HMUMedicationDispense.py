@@ -105,7 +105,7 @@ def transform_medication_dispense_identifiers(df):
         # Return empty DataFrame with expected schema
         return df.select(
             F.col("id").alias("medication_dispense_id"),
-            F.lit("").alias("identifier_system"),
+            F.lit(None).cast(StringType()).alias("identifier_system"),
             F.lit("").alias("identifier_value")
         ).filter(F.lit(False))
     
@@ -120,7 +120,7 @@ def transform_medication_dispense_identifiers(df):
     # Extract identifier details
     identifiers_final = identifiers_df.select(
         F.col("medication_dispense_id"),
-        F.col("identifier_item.system").alias("identifier_system"),
+        F.lit(None).cast(StringType()).alias("identifier_system"),
         F.col("identifier_item.value").alias("identifier_value")
     ).filter(
         F.col("identifier_value").isNotNull()
@@ -138,9 +138,7 @@ def transform_medication_dispense_performers(df):
         # Return empty DataFrame with expected schema
         return df.select(
             F.col("id").alias("medication_dispense_id"),
-            F.lit("").alias("performer_actor_reference"),
-            F.lit("").alias("performer_function_code"),
-            F.lit("").alias("performer_function_display")
+            F.lit("").alias("performer_actor_reference")
         ).filter(F.lit(False))
     
     # First explode the performer array
@@ -156,15 +154,7 @@ def transform_medication_dispense_performers(df):
         F.col("medication_dispense_id"),
         F.when(F.col("performer_item.actor").isNotNull(),
                F.col("performer_item.actor.reference")
-              ).otherwise(None).alias("performer_actor_reference"),
-        F.when(F.col("performer_item.function.coding").isNotNull() & 
-               (F.size(F.col("performer_item.function.coding")) > 0),
-               F.col("performer_item.function.coding")[0].getField("code")
-              ).otherwise(None).alias("performer_function_code"),
-        F.when(F.col("performer_item.function.coding").isNotNull() & 
-               (F.size(F.col("performer_item.function.coding")) > 0),
-               F.col("performer_item.function.coding")[0].getField("display")
-              ).otherwise(None).alias("performer_function_display")
+              ).otherwise(None).alias("performer_actor_reference")
     ).filter(
         F.col("performer_actor_reference").isNotNull()
     )
@@ -312,9 +302,7 @@ def create_medication_dispense_performers_table_sql():
     
     CREATE TABLE public.medication_dispense_performers (
         medication_dispense_id VARCHAR(255),
-        performer_actor_reference VARCHAR(255),
-        performer_function_code VARCHAR(50),
-        performer_function_display VARCHAR(255)
+        performer_actor_reference VARCHAR(255)
     ) SORTKEY (medication_dispense_id, performer_actor_reference)
     """
 
@@ -542,9 +530,7 @@ def main():
         
         performers_flat_df = medication_dispense_performers_df.select(
             F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
-            F.col("performer_actor_reference").cast(StringType()).alias("performer_actor_reference"),
-            F.col("performer_function_code").cast(StringType()).alias("performer_function_code"),
-            F.col("performer_function_display").cast(StringType()).alias("performer_function_display")
+            F.col("performer_actor_reference").cast(StringType()).alias("performer_actor_reference")
         )
         performers_dynamic_frame = DynamicFrame.fromDF(performers_flat_df, glueContext, "performers_dynamic_frame")
         
@@ -607,9 +593,7 @@ def main():
         performers_resolved_frame = performers_dynamic_frame.resolveChoice(
             specs=[
                 ("medication_dispense_id", "cast:string"),
-                ("performer_actor_reference", "cast:string"),
-                ("performer_function_code", "cast:string"),
-                ("performer_function_display", "cast:string")
+                ("performer_actor_reference", "cast:string")
             ]
         )
         
