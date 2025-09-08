@@ -7,9 +7,7 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, TimestampType, BooleanType, DecimalType, IntegerType
-import json
-import logging
+from pyspark.sql.types import StringType, TimestampType, BooleanType
 
 # Set up logging
 logger = logging.getLogger()
@@ -25,55 +23,22 @@ job.init(args['JOB_NAME'], args)
 
 # Configuration
 DATABASE_NAME = "hmu-healthlake-database"
-TABLE_NAME = "documentreference"
+TABLE_NAME = "diagnosticreport"
 REDSHIFT_CONNECTION = "Redshift connection"
 S3_TEMP_DIR = "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
 
-def extract_patient_id_from_reference(reference_field):
-    """Extract patient ID from FHIR reference format"""
-    if reference_field:
-        if hasattr(reference_field, 'reference'):
-            reference = reference_field.reference
-            if reference and "/" in reference:
-                return reference.split("/")[-1]
-        elif isinstance(reference_field, dict):
-            reference = reference_field.get('reference')
-            if reference and "/" in reference:
-                return reference.split("/")[-1]
-        elif isinstance(reference_field, str):
-            if "/" in reference_field:
-                return reference_field.split("/")[-1]
-    return None
-
-def transform_main_document_reference_data(df):
-    """Transform the main document reference data"""
-    logger.info("Transforming main document reference data...")
-    
-    available_columns = df.columns
-    logger.info(f"Available columns: {available_columns}")
+def transform_main_diagnostic_report_data(df):
+    """Transform the main diagnostic report data"""
+    logger.info("Transforming main diagnostic report data...")
     
     select_columns = [
-        F.col("id").alias("document_reference_id"),
-        F.when(F.col("subject").isNotNull(), 
-               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
-              ).otherwise(None).alias("patient_id"),
+        F.col("id").alias("diagnostic_report_id"),
         F.col("status").alias("status"),
-        F.when(F.col("type").isNotNull() & (F.size(F.col("type.coding")) > 0),
-               F.col("type.coding")[0].getField("code")
-              ).otherwise(None).alias("type_code"),
-        F.when(F.col("type").isNotNull() & (F.size(F.col("type.coding")) > 0),
-               F.col("type.coding")[0].getField("system")
-              ).otherwise(None).alias("type_system"),
-        F.when(F.col("type").isNotNull() & (F.size(F.col("type.coding")) > 0),
-               F.col("type.coding")[0].getField("display")
-              ).otherwise(None).alias("type_display"),
-        F.to_timestamp(F.col("date")).alias("date"),
-        F.when(F.col("custodian").isNotNull(),
-               F.regexp_extract(F.col("custodian").getField("reference"), r"Organization/(.+)", 1)
-              ).otherwise(None).alias("custodian_id"),
-        F.col("description").alias("description"),
-        F.to_timestamp(F.col("context.period.start")).alias("context_period_start"),
-        F.to_timestamp(F.col("context.period.end")).alias("context_period_end"),
+        F.regexp_extract(F.col("subject.reference"), r"Patient/(.+)", 1).alias("patient_id"),
+        F.regexp_extract(F.col("encounter.reference"), r"Encounter/(.+)", 1).alias("encounter_id"),
+        F.to_timestamp(F.col("effectiveDateTime")).alias("effective_date_time"),
+        F.to_timestamp(F.col("issued")).alias("issued"),
+        F.col("code.text").alias("code_text"),
         F.col("meta.versionId").alias("meta_version_id"),
         F.to_timestamp(F.col("meta.lastUpdated")).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
@@ -81,194 +46,164 @@ def transform_main_document_reference_data(df):
     ]
     
     main_df = df.select(*select_columns).filter(
-        F.col("document_reference_id").isNotNull() & 
+        F.col("diagnostic_report_id").isNotNull() & 
         F.col("patient_id").isNotNull()
     )
     
     return main_df
 
-def transform_document_reference_identifiers(df):
-    """Transform document reference identifiers"""
-    logger.info("Transforming document reference identifiers...")
-    
-    if "identifier" not in df.columns:
-        logger.warning("identifier column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, identifier_system string, identifier_value string")
-
-    identifiers_df = df.select(
-        F.col("id").alias("document_reference_id"),
-        F.explode(F.col("identifier")).alias("identifier_item")
-    ).filter(
-        F.col("identifier_item").isNotNull()
-    )
-    
-    identifiers_final = identifiers_df.select(
-        F.col("document_reference_id"),
-        F.col("identifier_item.system").alias("identifier_system"),
-        F.col("identifier_item.value").alias("identifier_value")
-    ).filter(
-        F.col("identifier_value").isNotNull()
-    )
-    
-    return identifiers_final
-
-def transform_document_reference_categories(df):
-    """Transform document reference categories"""
-    logger.info("Transforming document reference categories...")
+def transform_diagnostic_report_categories(df):
+    """Transform diagnostic report categories"""
+    logger.info("Transforming diagnostic report categories...")
     
     if "category" not in df.columns:
-        logger.warning("category column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, category_code string, category_system string, category_display string")
-
-    categories_df = df.select(
-        F.col("id").alias("document_reference_id"),
-        F.explode(F.col("category")).alias("category_item")
-    ).filter(
-        F.col("category_item").isNotNull()
-    )
+        return spark.createDataFrame([], schema="diagnostic_report_id string, category_code string, category_system string, category_display string")
     
-    categories_final = categories_df.select(
-        F.col("document_reference_id"),
-        F.explode(F.col("category_item.coding")).alias("coding_item")
+    return df.select(
+        F.col("id").alias("diagnostic_report_id"),
+        F.explode("category").alias("category_item")
     ).select(
-        F.col("document_reference_id"),
+        "diagnostic_report_id",
+        F.explode("category_item.coding").alias("coding_item")
+    ).select(
+        "diagnostic_report_id",
         F.col("coding_item.code").alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.col("coding_item.display").alias("category_display")
-    ).filter(
-        F.col("category_code").isNotNull()
     )
-    
-    return categories_final
 
-def transform_document_reference_authors(df):
-    """Transform document reference authors"""
-    logger.info("Transforming document reference authors...")
+def transform_diagnostic_report_codes(df):
+    """Transform diagnostic report codes"""
+    logger.info("Transforming diagnostic report codes...")
     
-    if "author" not in df.columns:
-        logger.warning("author column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, author_id string")
-    
-    authors_df = df.select(
-        F.col("id").alias("document_reference_id"),
-        F.explode(F.col("author")).alias("author_item")
-    ).filter(
-        F.col("author_item").isNotNull()
-    )
-    
-    authors_final = authors_df.select(
-        F.col("document_reference_id"),
-        F.regexp_extract(F.col("author_item.reference"), r"Practitioner/(.+)", 1).alias("author_id")
-    ).filter(
-        F.col("author_id") != ""
-    )
-    
-    return authors_final
+    if "code.coding" not in df.columns:
+        return spark.createDataFrame([], schema="diagnostic_report_id string, code_code string, code_system string, code_display string")
 
-def transform_document_reference_content(df):
-    """Transform document reference content"""
-    logger.info("Transforming document reference content...")
-    
-    if "content" not in df.columns:
-        logger.warning("content column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, attachment_content_type string, attachment_url string")
+    return df.select(
+        F.col("id").alias("diagnostic_report_id"),
+        F.explode("code.coding").alias("coding_item")
+    ).select(
+        "diagnostic_report_id",
+        F.col("coding_item.code").alias("code_code"),
+        F.col("coding_item.system").alias("code_system"),
+        F.col("coding_item.display").alias("code_display")
+    )
 
-    content_df = df.select(
-        F.col("id").alias("document_reference_id"),
-        F.explode(F.col("content")).alias("content_item")
-    ).filter(
-        F.col("content_item").isNotNull()
-    )
+def transform_diagnostic_report_performers(df):
+    """Transform diagnostic report performers"""
+    logger.info("Transforming diagnostic report performers...")
     
-    content_final = content_df.select(
-        F.col("document_reference_id"),
-        F.col("content_item.attachment.contentType").alias("attachment_content_type"),
-        F.col("content_item.attachment.url").alias("attachment_url")
-    ).filter(
-        F.col("attachment_url").isNotNull()
-    )
+    if "performer" not in df.columns:
+        return spark.createDataFrame([], schema="diagnostic_report_id string, performer_id string")
     
-    return content_final
+    return df.select(
+        F.col("id").alias("diagnostic_report_id"),
+        F.explode("performer").alias("performer_item")
+    ).select(
+        "diagnostic_report_id",
+        F.regexp_extract(F.col("performer_item.reference"), r"Organization/(.+)", 1).alias("performer_id")
+    )
+
+def transform_diagnostic_report_results(df):
+    """Transform diagnostic report results"""
+    logger.info("Transforming diagnostic report results...")
+    
+    if "result" not in df.columns:
+        return spark.createDataFrame([], schema="diagnostic_report_id string, result_id string")
+        
+    return df.select(
+        F.col("id").alias("diagnostic_report_id"),
+        F.explode("result").alias("result_item")
+    ).select(
+        "diagnostic_report_id",
+        F.regexp_extract(F.col("result_item.reference"), r"Observation/(.+)", 1).alias("result_id")
+    )
+
+def transform_diagnostic_report_media(df):
+    """Transform diagnostic report media"""
+    logger.info("Transforming diagnostic report media...")
+
+    if "media" not in df.columns:
+        return spark.createDataFrame([], schema="diagnostic_report_id string, media_link_id string")
+
+    return df.select(
+        F.col("id").alias("diagnostic_report_id"),
+        F.explode("media").alias("media_item")
+    ).select(
+        "diagnostic_report_id",
+        F.regexp_extract(F.col("media_item.link.reference"), r"Media/(.+)", 1).alias("media_link_id")
+    )
 
 def create_redshift_tables_sql():
-    """Generate SQL for creating main document references table in Redshift"""
     return """
-    DROP TABLE IF EXISTS public.document_references CASCADE;
-    
-    CREATE TABLE public.document_references (
-        document_reference_id VARCHAR(255) PRIMARY KEY,
+    DROP TABLE IF EXISTS public.diagnostic_reports CASCADE;
+    CREATE TABLE public.diagnostic_reports (
+        diagnostic_report_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
+        encounter_id VARCHAR(255),
         status VARCHAR(50),
-        type_code VARCHAR(50),
-        type_system VARCHAR(255),
-        type_display VARCHAR(500),
-        date TIMESTAMP,
-        custodian_id VARCHAR(255),
-        description VARCHAR(MAX),
-        context_period_start TIMESTAMP,
-        context_period_end TIMESTAMP,
+        effective_date_time TIMESTAMP,
+        issued TIMESTAMP,
+        code_text VARCHAR(MAX),
         meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) DISTKEY (patient_id) SORTKEY (patient_id, date);
+    ) DISTKEY (patient_id) SORTKEY (patient_id, effective_date_time);
     """
 
-def create_document_reference_identifiers_table_sql():
-    """Generate SQL for creating document_reference_identifiers table"""
+def create_diagnostic_report_categories_table_sql():
     return """
-    DROP TABLE IF EXISTS public.document_reference_identifiers CASCADE;
-    
-    CREATE TABLE public.document_reference_identifiers (
-        document_reference_id VARCHAR(255),
-        identifier_system VARCHAR(255),
-        identifier_value VARCHAR(255)
-    ) SORTKEY (document_reference_id, identifier_system);
-    """
-
-def create_document_reference_categories_table_sql():
-    """Generate SQL for creating document_reference_categories table"""
-    return """
-    DROP TABLE IF EXISTS public.document_reference_categories CASCADE;
-    
-    CREATE TABLE public.document_reference_categories (
-        document_reference_id VARCHAR(255),
+    DROP TABLE IF EXISTS public.diagnostic_report_categories CASCADE;
+    CREATE TABLE public.diagnostic_report_categories (
+        diagnostic_report_id VARCHAR(255),
         category_code VARCHAR(50),
         category_system VARCHAR(255),
         category_display VARCHAR(255)
-    ) SORTKEY (document_reference_id, category_code);
+    ) SORTKEY (diagnostic_report_id);
     """
 
-def create_document_reference_authors_table_sql():
-    """Generate SQL for creating document_reference_authors table"""
+def create_diagnostic_report_codes_table_sql():
     return """
-    DROP TABLE IF EXISTS public.document_reference_authors CASCADE;
-    
-    CREATE TABLE public.document_reference_authors (
-        document_reference_id VARCHAR(255),
-        author_id VARCHAR(255)
-    ) SORTKEY (document_reference_id);
+    DROP TABLE IF EXISTS public.diagnostic_report_codes CASCADE;
+    CREATE TABLE public.diagnostic_report_codes (
+        diagnostic_report_id VARCHAR(255),
+        code_code VARCHAR(50),
+        code_system VARCHAR(255),
+        code_display VARCHAR(255)
+    ) SORTKEY (diagnostic_report_id);
     """
 
-def create_document_reference_content_table_sql():
-    """Generate SQL for creating document_reference_content table"""
+def create_diagnostic_report_performers_table_sql():
     return """
-    DROP TABLE IF EXISTS public.document_reference_content CASCADE;
-    
-    CREATE TABLE public.document_reference_content (
-        document_reference_id VARCHAR(255),
-        attachment_content_type VARCHAR(100),
-        attachment_url VARCHAR(MAX)
-    ) SORTKEY (document_reference_id);
+    DROP TABLE IF EXISTS public.diagnostic_report_performers CASCADE;
+    CREATE TABLE public.diagnostic_report_performers (
+        diagnostic_report_id VARCHAR(255),
+        performer_id VARCHAR(255)
+    ) SORTKEY (diagnostic_report_id);
+    """
+
+def create_diagnostic_report_results_table_sql():
+    return """
+    DROP TABLE IF EXISTS public.diagnostic_report_results CASCADE;
+    CREATE TABLE public.diagnostic_report_results (
+        diagnostic_report_id VARCHAR(255),
+        result_id VARCHAR(255)
+    ) SORTKEY (diagnostic_report_id);
+    """
+
+def create_diagnostic_report_media_table_sql():
+    return """
+    DROP TABLE IF EXISTS public.diagnostic_report_media CASCADE;
+    CREATE TABLE public.diagnostic_report_media (
+        diagnostic_report_id VARCHAR(255),
+        media_link_id VARCHAR(255)
+    ) SORTKEY (diagnostic_report_id);
     """
 
 def write_to_redshift(dynamic_frame, table_name, preactions=""):
     """Write DynamicFrame to Redshift using JDBC connection"""
     logger.info(f"Writing {table_name} to Redshift...")
-    
-    logger.info(f"🔧 Preactions SQL for {table_name}:")
-    logger.info(preactions)
-    
     try:
         glueContext.write_dynamic_frame.from_options(
             frame=dynamic_frame,
@@ -285,96 +220,52 @@ def write_to_redshift(dynamic_frame, table_name, preactions=""):
         logger.info(f"✅ Successfully wrote {table_name} to Redshift")
     except Exception as e:
         logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
-        logger.error(f"🔧 Preactions that were executed: {preactions}")
         raise e
 
 def main():
     """Main ETL process"""
     start_time = datetime.now()
     try:
-        logger.info("=" * 80)
-        logger.info("🚀 STARTING FHIR DOCUMENTREFERENCE ETL PROCESS")
-        logger.info("=" * 80)
+        logger.info("🚀 STARTING FHIR DIAGNOSTICREPORT ETL PROCESS")
         
-        # Step 1: Read data from HealthLake using AWS Glue Data Catalog
-        document_reference_dynamic_frame = glueContext.create_dynamic_frame.from_catalog(
-                database=DATABASE_NAME, 
+        dyf = glueContext.create_dynamic_frame.from_catalog(
+            database=DATABASE_NAME, 
             table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_document_reference_node"
+            transformation_ctx="AWSGlueDataCatalog"
         )
         
-        document_reference_df_raw = document_reference_dynamic_frame.toDF()
-        total_records = document_reference_df_raw.count()
-        logger.info(f"📊 Read {total_records:,} raw document reference records")
-
-        if total_records == 0:
-            logger.error("❌ No raw data found! Check the data source.")
+        df = dyf.toDF()
+        
+        if df.count() == 0:
+            logger.warning("No data found in source. Exiting job.")
             return
 
-        # Step 2: Transform main document reference data
-        main_document_reference_df = transform_main_document_reference_data(document_reference_df_raw)
-        main_count = main_document_reference_df.count()
-        logger.info(f"✅ Transformed {main_count:,} main document reference records")
+        main_df = transform_main_diagnostic_report_data(df)
+        categories_df = transform_diagnostic_report_categories(df)
+        codes_df = transform_diagnostic_report_codes(df)
+        performers_df = transform_diagnostic_report_performers(df)
+        results_df = transform_diagnostic_report_results(df)
+        media_df = transform_diagnostic_report_media(df)
 
-        if main_count == 0:
-            logger.error("❌ No main document reference records after transformation! Check filtering criteria.")
-            return
-            
-        # Step 3: Transform multi-valued data
-        doc_ref_identifiers_df = transform_document_reference_identifiers(document_reference_df_raw)
-        identifiers_count = doc_ref_identifiers_df.count()
-        logger.info(f"✅ Transformed {identifiers_count:,} document reference identifier records")
-        
-        doc_ref_categories_df = transform_document_reference_categories(document_reference_df_raw)
-        categories_count = doc_ref_categories_df.count()
-        logger.info(f"✅ Transformed {categories_count:,} document reference category records")
-        
-        doc_ref_authors_df = transform_document_reference_authors(document_reference_df_raw)
-        authors_count = doc_ref_authors_df.count()
-        logger.info(f"✅ Transformed {authors_count:,} document reference author records")
-        
-        doc_ref_content_df = transform_document_reference_content(document_reference_df_raw)
-        content_count = doc_ref_content_df.count()
-        logger.info(f"✅ Transformed {content_count:,} document reference content records")
+        main_dyf = DynamicFrame.fromDF(main_df, glueContext, "main_dyf")
+        categories_dyf = DynamicFrame.fromDF(categories_df, glueContext, "categories_dyf")
+        codes_dyf = DynamicFrame.fromDF(codes_df, glueContext, "codes_dyf")
+        performers_dyf = DynamicFrame.fromDF(performers_df, glueContext, "performers_dyf")
+        results_dyf = DynamicFrame.fromDF(results_df, glueContext, "results_dyf")
+        media_dyf = DynamicFrame.fromDF(media_df, glueContext, "media_dyf")
 
-        # Step 4: Convert to DynamicFrames
-        main_dynamic_frame = DynamicFrame.fromDF(main_document_reference_df, glueContext, "main_doc_ref_dynamic_frame")
-        identifiers_dynamic_frame = DynamicFrame.fromDF(doc_ref_identifiers_df, glueContext, "identifiers_dynamic_frame")
-        categories_dynamic_frame = DynamicFrame.fromDF(doc_ref_categories_df, glueContext, "categories_dynamic_frame")
-        authors_dynamic_frame = DynamicFrame.fromDF(doc_ref_authors_df, glueContext, "authors_dynamic_frame")
-        content_dynamic_frame = DynamicFrame.fromDF(doc_ref_content_df, glueContext, "content_dynamic_frame")
-
-        # Step 5: Write to Redshift
-        logger.info("\n" + "=" * 50)
-        logger.info("💾 STEP 5: WRITING DATA TO REDSHIFT")
-        logger.info("=" * 50)
-        
-        document_references_table_sql = create_redshift_tables_sql()
-        write_to_redshift(main_dynamic_frame, "document_references", document_references_table_sql)
-        
-        identifiers_table_sql = create_document_reference_identifiers_table_sql()
-        write_to_redshift(identifiers_dynamic_frame, "document_reference_identifiers", identifiers_table_sql)
-        
-        categories_table_sql = create_document_reference_categories_table_sql()
-        write_to_redshift(categories_dynamic_frame, "document_reference_categories", categories_table_sql)
-        
-        authors_table_sql = create_document_reference_authors_table_sql()
-        write_to_redshift(authors_dynamic_frame, "document_reference_authors", authors_table_sql)
-        
-        content_table_sql = create_document_reference_content_table_sql()
-        write_to_redshift(content_dynamic_frame, "document_reference_content", content_table_sql)
+        write_to_redshift(main_dyf, "diagnostic_reports", create_redshift_tables_sql())
+        write_to_redshift(categories_dyf, "diagnostic_report_categories", create_diagnostic_report_categories_table_sql())
+        write_to_redshift(codes_dyf, "diagnostic_report_codes", create_diagnostic_report_codes_table_sql())
+        write_to_redshift(performers_dyf, "diagnostic_report_performers", create_diagnostic_report_performers_table_sql())
+        write_to_redshift(results_dyf, "diagnostic_report_results", create_diagnostic_report_results_table_sql())
+        write_to_redshift(media_dyf, "diagnostic_report_media", create_diagnostic_report_media_table_sql())
 
         end_time = datetime.now()
-        logger.info("\n" + "=" * 80)
-        logger.info("🎉 ETL PROCESS COMPLETED SUCCESSFULLY!")
-        logger.info(f"⏱️  Total processing time: {end_time - start_time}")
-        logger.info("=" * 80)
+        logger.info(f"🎉 ETL PROCESS COMPLETED SUCCESSFULLY! Total processing time: {end_time - start_time}")
 
     except Exception as e:
-        logger.error("\n" + "=" * 80)
-        logger.error("❌ ETL PROCESS FAILED!")
-        logger.error(f"🚨 Error: {str(e)}")
-        logger.error("=" * 80)
+        logger.error(f"❌ ETL PROCESS FAILED: {str(e)}")
         raise e
 
 if __name__ == "__main__":
