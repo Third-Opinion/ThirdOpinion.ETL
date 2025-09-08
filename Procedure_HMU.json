@@ -1,0 +1,1023 @@
+{"entry": [
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-1",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:05:16.461883664Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-1"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-302949"
+        },
+        "performedDateTime": "2017-06-27"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-101",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T01:49:02.053578226Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-101"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-246942"
+        },
+        "performedDateTime": "1999-07-07"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-102",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T01:49:02.052185744Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-102"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-246942"
+        },
+        "performedDateTime": "2004-06-11"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-121",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:20.856240370Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-121"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-459294"
+        },
+        "performedDateTime": "1986-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-122",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:20.850102083Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-122"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-459294"
+        },
+        "performedDateTime": "1987-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-123",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:20.850381430Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-123"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-459294"
+        },
+        "performedDateTime": "1990-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-124",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:20.850660896Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-124"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-459294"
+        },
+        "performedDateTime": "2000-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-125",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:20.850358869Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-125"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-459294"
+        },
+        "performedDateTime": "2002-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-141",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:13:54.328559564Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-141"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-461813"
+        },
+        "performedDateTime": "2019-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-142",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:05:15.132356385Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-142"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-466473"
+        },
+        "performedDateTime": "2010-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-163",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:05:19.451363387Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-163"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-495355"
+        },
+        "performedDateTime": "2016-08-21"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-182",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T01:49:04.471588973Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-182"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-502952"
+        },
+        "performedDateTime": "1993-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-183",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T01:49:04.473263659Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-183"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-502952"
+        },
+        "performedDateTime": "2012-10-19"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-184",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:13:50.718592243Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-184"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-498136"
+        },
+        "performedDateTime": "1982-12-07"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-185",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:13:50.717449046Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-185"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-498136"
+        },
+        "performedDateTime": "1984-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-186",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:13:50.718718038Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-186"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-498136"
+        },
+        "performedDateTime": "1988-10-06"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-187",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:13:50.718901595Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-187"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-498136"
+        },
+        "performedDateTime": "1989-01-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-188",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:05:18.358130403Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-188"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-334183"
+        },
+        "performedDateTime": "1981-08-05"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-189",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T02:05:18.358060971Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-189"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-334183"
+        },
+        "performedDateTime": "1983-09-06"
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "a-15454.obdi-190",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T01:49:05.373579463Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-procedure"
+          ]
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "system": "https://fhir.athena.io/sid/ah-procedure",
+            "value": "a-15454.obdi-190"
+          }
+        ],
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "236973005",
+              "display": "Delivery procedure"
+            }
+          ],
+          "text": "Delivery procedure"
+        },
+        "subject": {
+          "reference": "Patient/a-15454.E-360192"
+        },
+        "performedDateTime": "1959-09-01"
+      },
+      "search": {
+        "mode": "match"
+      }
+    }
+  ]
+}}

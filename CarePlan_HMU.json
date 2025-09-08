@@ -1,0 +1,1232 @@
+{"entry": [
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.852534186Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 07-06-2022</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1"
+          }
+        ],
+        "status": "entered-in-error",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 07-06-2022",
+        "subject": {
+          "reference": "Patient/a-15454.E-217732"
+        }
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1003",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851093564Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 11-21-2024</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1003"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 11-21-2024",
+        "subject": {
+          "reference": "Patient/a-15454.E-504228"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-507057"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1023",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.850007036Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 12-09-2024</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1023"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 12-09-2024",
+        "subject": {
+          "reference": "Patient/a-15454.E-521011"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-523911"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1024",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.850471549Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 12-11-2024</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1024"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 12-11-2024",
+        "subject": {
+          "reference": "Patient/a-15454.E-418258"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-418850"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-742"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-103",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.852314199Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 03-01-2023</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-103"
+          }
+        ],
+        "status": "entered-in-error",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 03-01-2023",
+        "subject": {
+          "reference": "Patient/a-15454.E-471576"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-473994"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1043",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.850565203Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-10-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1043"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-10-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-295832"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-295927"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-762"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1063",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.850926759Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-15-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1063"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-15-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-464979"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-466822"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1064",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851725575Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-17-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1064"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-17-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-271630"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-271725"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-782"
+          },
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-783"
+          },
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-784"
+          },
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-785"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1083",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.849181718Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-28-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1083"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-28-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-267029"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-267124"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-802"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1084",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851093536Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-28-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1084"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-28-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-529983"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-532897"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1085",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851918430Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-30-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1085"
+          }
+        ],
+        "status": "entered-in-error",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-30-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-513705"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-516605"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1086",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851591379Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-31-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1086"
+          }
+        ],
+        "status": "entered-in-error",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-31-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-383853"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-383948"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1087",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.849410725Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-31-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1087"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-31-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-427979"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-428966"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1088",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.852581314Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 01-31-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1088"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 01-31-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-265327"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-265422"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1103",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.850671961Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 02-04-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1103"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 02-04-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-404339"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-404647"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1123",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.853210268Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 02-12-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1123"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 02-12-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-484511"
+        },
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-822"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1124",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.850477118Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 02-13-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1124"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 02-13-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-517636"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-520536"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-827"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1125",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851992243Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 02-14-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1125"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 02-14-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-504913"
+        }
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1143",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.849000070Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 02-18-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1143"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 02-18-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-533873"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-536809"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "a-15454.AmbulatoryCarePlan-1144",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-28T04:03:36.851960453Z",
+          "profile": [
+            "http://hl7.org/fhir/us/core/StructureDefinition/us-core-careplan"
+          ]
+        },
+        "text": {
+          "status": "additional",
+          "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p>Care Plan created on 02-19-2025</p></div>"
+        },
+        "extension": [
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-practice",
+            "valueReference": {
+              "reference": "Organization/a-1.Practice-15454"
+            }
+          },
+          {
+            "url": "https://fhir.athena.io/StructureDefinition/ah-chart-sharing-group",
+            "valueReference": {
+              "reference": "Organization/a-15454.CSG-1"
+            }
+          }
+        ],
+        "identifier": [
+          {
+            "value": "a-15454.AmbulatoryCarePlan-1144"
+          }
+        ],
+        "status": "active",
+        "intent": "plan",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://hl7.org/fhir/us/core/CodeSystem/careplan-category",
+                "code": "assess-plan"
+              }
+            ]
+          }
+        ],
+        "title": "Care Plan created on 02-19-2025",
+        "subject": {
+          "reference": "Patient/a-15454.E-493782"
+        },
+        "careTeam": [
+          {
+            "reference": "CareTeam/a-15454.AmbulatoryCareTeam-496447"
+          }
+        ],
+        "goal": [
+          {
+            "reference": "Goal/a-15454.AmbulatoryPlanGoal-842"
+          }
+        ]
+      },
+      "search": {
+        "mode": "match"
+      }
+    }
+  ]
+}}

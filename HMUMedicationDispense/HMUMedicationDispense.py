@@ -67,9 +67,12 @@ def transform_main_medication_dispense_data(df):
                F.col("type.coding")[0].getField("display")
               ).otherwise(None).alias("type_display"),
 
-        # Extract quantity value
+        # Extract quantity value, handling nested struct
         F.when(F.col("quantity").isNotNull(),
-               F.col("quantity").getField("value")
+               F.coalesce(
+                   F.col("quantity").getField("value").getField("double"),
+                   F.col("quantity").getField("value").getField("int")
+               )
               ).otherwise(None).alias("quantity_value"),
         
         # Convert whenHandedOver to timestamp
