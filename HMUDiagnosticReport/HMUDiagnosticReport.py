@@ -35,13 +35,13 @@ def transform_main_diagnostic_report_data(df):
     select_columns = [
         F.col("id").alias("diagnostic_report_id"),
         F.col("status").alias("status"),
-        F.regexp_extract(F.col("subject.reference"), r"Patient/(.+)", 1).alias("patient_id"),
-        F.regexp_extract(F.col("encounter.reference"), r"Encounter/(.+)", 1).alias("encounter_id"),
+        F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1).alias("patient_id"),
+        F.regexp_extract(F.col("encounter").getField("reference"), r"Encounter/(.+)", 1).alias("encounter_id"),
         F.to_timestamp(F.col("effectiveDateTime")).alias("effective_date_time"),
         F.to_timestamp(F.col("issued")).alias("issued"),
-        F.col("code.text").alias("code_text"),
-        F.col("meta.versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta.lastUpdated")).alias("meta_last_updated"),
+        F.col("code").getField("text").alias("code_text"),
+        F.col("meta").getField("versionId").alias("meta_version_id"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated")).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ]
@@ -62,15 +62,15 @@ def transform_diagnostic_report_categories(df):
     
     return df.select(
         F.col("id").alias("diagnostic_report_id"),
-        F.explode("category").alias("category_item")
+        F.explode(F.col("category")).alias("category_item")
     ).select(
         "diagnostic_report_id",
-        F.explode("category_item.coding").alias("coding_item")
+        F.explode(F.col("category_item").getField("coding")).alias("coding_item")
     ).select(
         "diagnostic_report_id",
-        F.col("coding_item.code").alias("category_code"),
-        F.col("coding_item.system").alias("category_system"),
-        F.col("coding_item.display").alias("category_display")
+        F.col("coding_item").getField("code").alias("category_code"),
+        F.col("coding_item").getField("system").alias("category_system"),
+        F.col("coding_item").getField("display").alias("category_display")
     )
 
 def transform_diagnostic_report_codes(df):
@@ -82,12 +82,12 @@ def transform_diagnostic_report_codes(df):
 
     return df.select(
         F.col("id").alias("diagnostic_report_id"),
-        F.explode("code.coding").alias("coding_item")
+        F.explode(F.col("code").getField("coding")).alias("coding_item")
     ).select(
         "diagnostic_report_id",
-        F.col("coding_item.code").alias("code_code"),
-        F.col("coding_item.system").alias("code_system"),
-        F.col("coding_item.display").alias("code_display")
+        F.col("coding_item").getField("code").alias("code_code"),
+        F.col("coding_item").getField("system").alias("code_system"),
+        F.col("coding_item").getField("display").alias("code_display")
     )
 
 def transform_diagnostic_report_performers(df):
@@ -99,10 +99,10 @@ def transform_diagnostic_report_performers(df):
     
     return df.select(
         F.col("id").alias("diagnostic_report_id"),
-        F.explode("performer").alias("performer_item")
+        F.explode(F.col("performer")).alias("performer_item")
     ).select(
         "diagnostic_report_id",
-        F.regexp_extract(F.col("performer_item.reference"), r"Organization/(.+)", 1).alias("performer_id")
+        F.regexp_extract(F.col("performer_item").getField("reference"), r"Organization/(.+)", 1).alias("performer_id")
     )
 
 def transform_diagnostic_report_results(df):
@@ -114,10 +114,10 @@ def transform_diagnostic_report_results(df):
         
     return df.select(
         F.col("id").alias("diagnostic_report_id"),
-        F.explode("result").alias("result_item")
+        F.explode(F.col("result")).alias("result_item")
     ).select(
         "diagnostic_report_id",
-        F.regexp_extract(F.col("result_item.reference"), r"Observation/(.+)", 1).alias("result_id")
+        F.regexp_extract(F.col("result_item").getField("reference"), r"Observation/(.+)", 1).alias("result_id")
     )
 
 def transform_diagnostic_report_media(df):
@@ -129,10 +129,10 @@ def transform_diagnostic_report_media(df):
 
     return df.select(
         F.col("id").alias("diagnostic_report_id"),
-        F.explode("media").alias("media_item")
+        F.explode(F.col("media")).alias("media_item")
     ).select(
         "diagnostic_report_id",
-        F.regexp_extract(F.col("media_item.link.reference"), r"Media/(.+)", 1).alias("media_link_id")
+        F.regexp_extract(F.col("media_item").getField("link").getField("reference"), r"Media/(.+)", 1).alias("media_link_id")
     )
 
 def create_redshift_tables_sql():

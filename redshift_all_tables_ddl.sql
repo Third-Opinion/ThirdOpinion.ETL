@@ -1,5 +1,5 @@
 -- Redshift DDL Export
--- Generated on: Sun Sep  7 20:03:35 PDT 2025
+-- Generated on: Mon Sep  8 08:02:24 PDT 2025
 -- Cluster: prod-redshift-main-ue2
 -- Database: dev
 

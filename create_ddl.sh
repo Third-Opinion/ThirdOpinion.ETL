@@ -7,7 +7,7 @@ DATABASE="dev"
 REGION="us-east-2"
 OUTPUT_FILE="redshift_all_tables_ddl.sql"
 # Set your AWS profile here if needed, or leave empty to use the default
-PROFILE=""
+PROFILE="to-prd-admin"
 
 # Colors for output
 RED='\033[0;31m'
@@ -87,91 +87,51 @@ echo "$TABLES_TO_PROCESS" | while read -r SCHEMA TABLE; do
     
     # DDL query for individual table
     DDL_QUERY="
-WITH table_info AS (
-    SELECT 
-        n.nspname AS schemaname,
-        c.relname AS tablename,
+WITH columns AS (
+    SELECT
         a.attname AS columnname,
         CASE 
-            WHEN t.typname = 'varchar' THEN 'VARCHAR'
-            WHEN t.typname = 'bpchar' THEN 'CHAR'
-            WHEN t.typname = 'int4' THEN 'INTEGER'
-            WHEN t.typname = 'int8' THEN 'BIGINT'
-            WHEN t.typname = 'int2' THEN 'SMALLINT'
-            WHEN t.typname = 'bool' THEN 'BOOLEAN'
-            WHEN t.typname = 'float8' THEN 'DOUBLE PRECISION'
-            WHEN t.typname = 'float4' THEN 'REAL'
-            WHEN t.typname = 'numeric' THEN 'NUMERIC'
-            WHEN t.typname = 'date' THEN 'DATE'
-            WHEN t.typname = 'timestamp' THEN 'TIMESTAMP'
-            WHEN t.typname = 'timestamptz' THEN 'TIMESTAMPTZ'
+            WHEN t.typname = 'varchar' THEN 'VARCHAR(' || (a.atttypmod - 4) || ')'
+            WHEN t.typname = 'bpchar' THEN 'CHAR(' || (a.atttypmod - 4) || ')'
+            WHEN t.typname = 'numeric' THEN 'NUMERIC(' || ((a.atttypmod - 4) >> 16 & 65535) || ',' || ((a.atttypmod - 4) & 65535) || ')'
             ELSE UPPER(t.typname)
         END AS datatype,
-        CASE 
-            WHEN t.typname IN ('varchar', 'bpchar') AND a.atttypmod > 0 THEN a.atttypmod - 4
-            ELSE NULL
-        END AS columnlength,
-        CASE 
-            WHEN t.typname = 'numeric' AND a.atttypmod > 0 THEN (a.atttypmod - 4) >> 16 & 65535
-            ELSE NULL
-        END AS precision,
-        CASE 
-            WHEN t.typname = 'numeric' AND a.atttypmod > 0 THEN (a.atttypmod - 4) & 65535
-            ELSE NULL
-        END AS scale,
-        a.attnum AS columnposition,
         a.attnotnull AS notnull,
-        CASE WHEN a.attisdistkey THEN a.attname ELSE NULL END AS distkey,
-        CASE WHEN a.attsortkey > 0 THEN a.attname ELSE NULL END AS sortkey,
-        a.attsortkey AS sortkeyorder
+        a.attnum
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_attribute a ON c.oid = a.attrelid
     JOIN pg_type t ON a.atttypid = t.oid
     WHERE c.relkind = 'r'
-    AND a.attnum > 0
-    AND NOT a.attisdropped
-    AND n.nspname = '$SCHEMA'
-    AND c.relname = '$TABLE'
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+      AND n.nspname = '$SCHEMA'
+      AND c.relname = '$TABLE'
+),
+aggregated_cols AS (
+    SELECT LISTAGG(QUOTE_IDENT(columnname) || ' ' || datatype || CASE WHEN notnull THEN ' NOT NULL' ELSE '' END, ',\\n    ') WITHIN GROUP (ORDER BY attnum) AS column_definitions
+    FROM columns
 ),
 dist_sort_keys AS (
     SELECT 
-        schemaname,
-        tablename,
-        LISTAGG(CASE WHEN distkey IS NOT NULL THEN distkey END, ', ') WITHIN GROUP (ORDER BY columnposition) AS distkeys,
-        LISTAGG(CASE WHEN sortkey IS NOT NULL THEN sortkey END, ', ') WITHIN GROUP (ORDER BY sortkeyorder) AS sortkeys
-    FROM table_info
-    GROUP BY schemaname, tablename
+        LISTAGG(CASE WHEN a.attisdistkey THEN QUOTE_IDENT(a.attname) END, ', ') WITHIN GROUP (ORDER BY a.attnum) AS distkey,
+        LISTAGG(CASE WHEN a.attsortkey > 0 THEN QUOTE_IDENT(a.attname) END, ', ') WITHIN GROUP (ORDER BY a.attsortkey) AS sortkey
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind = 'r'
+      AND a.attnum > 0
+      AND NOT a.attisdropped
+      AND n.nspname = '$SCHEMA'
+      AND c.relname = '$TABLE'
 )
 SELECT 
-    'CREATE TABLE ' || QUOTE_IDENT('$SCHEMA') || '.' || QUOTE_IDENT('$TABLE') || ' (' || CHR(10) ||
-    '    ' || LISTAGG(
-        QUOTE_IDENT(columnname) || ' ' || 
-        CASE 
-            WHEN datatype IN ('VARCHAR', 'CHAR') AND columnlength IS NOT NULL 
-                THEN datatype || '(' || columnlength || ')'
-            WHEN datatype = 'NUMERIC' AND precision IS NOT NULL 
-                THEN datatype || '(' || precision || CASE WHEN scale > 0 THEN ',' || scale ELSE '' END || ')'
-            ELSE datatype
-        END ||
-        CASE WHEN notnull THEN ' NOT NULL' ELSE '' END,
-        ',' || CHR(10) || '    '
-    ) WITHIN GROUP (ORDER BY columnposition) || CHR(10) ||
-    ')' ||
-    CASE 
-        WHEN dsk.distkeys IS NOT NULL AND dsk.distkeys != '' 
-            THEN CHR(10) || 'DISTKEY(' || dsk.distkeys || ')'
-        ELSE ''
-    END ||
-    CASE 
-        WHEN dsk.sortkeys IS NOT NULL AND dsk.sortkeys != '' 
-            THEN CHR(10) || 'SORTKEY(' || dsk.sortkeys || ')'
-        ELSE ''
-    END ||
-    ';' AS ddl_statement
-FROM table_info ti
-JOIN dist_sort_keys dsk ON ti.schemaname = dsk.schemaname AND ti.tablename = dsk.tablename
-GROUP BY ti.schemaname, ti.tablename, dsk.distkeys, dsk.sortkeys;"
+    'CREATE TABLE ' || QUOTE_IDENT('$SCHEMA') || '.' || QUOTE_IDENT('$TABLE') || ' (\\n    ' || 
+    ac.column_definitions || '\\n)' ||
+    CASE WHEN dsk.distkey IS NOT NULL THEN '\\nDISTKEY(' || dsk.distkey || ')' ELSE '' END ||
+    CASE WHEN dsk.sortkey IS NOT NULL THEN '\\nSORTKEY(' || dsk.sortkey || ')' ELSE '' END || ';'
+FROM aggregated_cols ac, dist_sort_keys dsk;
+"
 
     # Execute DDL query
     DDL_STATEMENT_ID=$(aws redshift-data execute-statement \
