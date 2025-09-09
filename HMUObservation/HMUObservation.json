@@ -8,7 +8,7 @@
   },
   "command" : {
     "name" : "glueetl",
-    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUObservation.py",
+    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMU Observation.py",
     "pythonVersion" : "3"
   },
   "defaultArguments" : {
