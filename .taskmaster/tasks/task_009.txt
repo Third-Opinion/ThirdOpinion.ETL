@@ -1,0 +1,11 @@
+# Task ID: 9
+# Title: Create fact_fhir_procedures_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for procedures with code codings and identifier aggregation
+# Details:
+Create materialized view joining procedures with procedure_code_codings and procedure_identifiers. Aggregate procedure codes, include performer information, procedure dates, and status. Handle procedure relationships, outcomes, and complications. Use JSON_PARSE for coded elements and LISTAGG for multiple code codings per procedure.
+
+# Test Strategy:
+Test view creation, validate procedure code aggregation, verify date handling for performed procedures, and ensure proper status and outcome tracking.

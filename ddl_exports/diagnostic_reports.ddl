@@ -1,0 +1,21 @@
+CREATE TABLE public.diagnostic_reports (
+    diagnostic_report_id character varying(65535),
+    resource_type character varying(65535),
+    status character varying(65535),
+    effective_datetime timestamp without time zone,
+    issued_datetime timestamp without time zone,
+    code_text character varying(65535),
+    code_primary_code character varying(65535),
+    code_primary_system character varying(65535),
+    code_primary_display character varying(65535),
+    patient_id character varying(65535),
+    encounter_id character varying(65535),
+    meta_data character varying(65535),
+    extensions character varying(65535),
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone,
+    meta_last_updated timestamp without time zone,
+    effective_date_time timestamp without time zone,
+    meta_version_id character varying(65535),
+    issued timestamp without time zone
+);

@@ -1,0 +1,11 @@
+# Task ID: 8
+# Title: Create fact_fhir_practitioners_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for practitioners with names, addresses, and telecom aggregation
+# Details:
+Create materialized view joining practitioners with practitioner_names, practitioner_addresses, and practitioner_telecoms. Use similar name ranking logic as in existing patient view. Aggregate addresses and contact information. Include practitioner qualifications, specialties, and active status. Use JSON_PARSE for structured contact data and address information.
+
+# Test Strategy:
+Test view creation, validate name ranking logic consistency with patient view, verify address and telecom aggregation, and confirm practitioner qualification data integrity.

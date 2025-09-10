@@ -1,0 +1,11 @@
+# Task ID: 10
+# Title: Upgrade existing views to V2 and implement scheduled refresh infrastructure
+# Status: pending
+# Dependencies: 2, 3, 4, 5, 6, 7, 8, 9
+# Priority: high
+# Description: Convert existing patient and encounter views to V2 with enhanced features, remove AUTO REFRESH, and set up scheduled refresh system
+# Details:
+Update fact_fhir_patients_view_v1.sql to V2 with window functions, LISTAGG, and subqueries as specified in PRD appendix. Update fact_fhir_encounters_view_v1.sql to V2 with duration calculations, participant aggregations, and diagnosis/procedure counts. Remove AUTO REFRESH from all views. Create AWS Lambda function for scheduled refresh, implement CloudWatch Events rule for hourly execution, and create deployment scripts with AWS CLI commands for all 10 materialized views.
+
+# Test Strategy:
+Test V2 view functionality with window functions, validate scheduled refresh execution, verify Lambda function operation, confirm CloudWatch Events scheduling, and run end-to-end deployment validation script to ensure all views refresh successfully.

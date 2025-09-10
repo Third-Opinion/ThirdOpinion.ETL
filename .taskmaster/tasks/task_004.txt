@@ -1,0 +1,11 @@
+# Task ID: 4
+# Title: Create fact_fhir_diagnostic_reports_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for diagnostic reports with results and performer aggregation
+# Details:
+Create materialized view joining diagnostic_reports with diagnostic_report_results, diagnostic_report_performers, diagnostic_report_categories, diagnostic_report_media, diagnostic_report_presented_forms, and diagnostic_report_based_on. Aggregate results as JSON array, include performer information, and handle media attachments. Use JSON_PARSE for structured data and LISTAGG for lists. Include status, issued date, effective period, and all coded categories.
+
+# Test Strategy:
+Validate view creation, test results aggregation accuracy, verify performer data integrity, and confirm proper handling of media and presented forms.

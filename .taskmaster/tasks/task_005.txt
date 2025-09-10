@@ -1,0 +1,11 @@
+# Task ID: 5
+# Title: Create fact_fhir_document_references_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for document references with content and author aggregation
+# Details:
+Create materialized view joining document_references with document_reference_content, document_reference_authors, document_reference_categories, and document_reference_identifiers. Aggregate content metadata, author information, and categories. Include document status, creation date, document type, and security labels. Use JSON_PARSE for content structure and LISTAGG for multiple authors and categories.
+
+# Test Strategy:
+Test view creation, validate content aggregation, verify author data completeness, and ensure proper handling of document security metadata.

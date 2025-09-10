@@ -1,0 +1,11 @@
+# Task ID: 7
+# Title: Create fact_fhir_observations_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for observations with components and reference ranges using enhanced aggregation patterns
+# Details:
+Create materialized view joining observations with observation_components, observation_categories, observation_performers, observation_reference_ranges, observation_interpretations, observation_notes, observation_derived_from, and observation_members. Use MAX/MIN for vital signs pivoting as shown in PRD example. Aggregate components as JSON, include reference ranges, and handle observation relationships. Implement the blood pressure systolic/diastolic pattern from PRD specifications.
+
+# Test Strategy:
+Test view creation, validate vital signs pivoting logic, verify component aggregation accuracy, and ensure reference ranges are properly associated with observations.

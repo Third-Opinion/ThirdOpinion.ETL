@@ -1,0 +1,11 @@
+# Task ID: 3
+# Title: Create fact_fhir_conditions_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for conditions entity with comprehensive condition data aggregation
+# Details:
+Create materialized view joining conditions table with condition_body_sites, condition_categories, condition_codes, condition_evidence, condition_extensions, condition_notes, and condition_stages. Aggregate condition codes, body sites, and clinical status information. Use LISTAGG for multiple values and JSON_PARSE for complex nested structures. Include onset/abatement dates, clinical status, verification status, and all coded elements.
+
+# Test Strategy:
+Test view creation, validate condition code aggregation, verify clinical status handling, and ensure proper null handling for optional condition attributes.

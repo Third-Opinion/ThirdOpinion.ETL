@@ -1,0 +1,11 @@
+# Task ID: 6
+# Title: Create fact_fhir_medication_requests_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for medication requests with dosage and category aggregation
+# Details:
+Create materialized view joining medication_requests with medication_request_dosage_instructions, medication_request_categories, medication_request_notes, and medication_request_identifiers. Join with medications table for medication details. Aggregate dosage instructions as JSON, include prescriber information, fulfillment status, and categories. Handle dispense requests, substitution preferences, and prior authorizations.
+
+# Test Strategy:
+Validate view creation, test dosage instruction aggregation, verify medication data joins correctly, and confirm proper handling of prescription workflow statuses.

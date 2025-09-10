@@ -1,0 +1,11 @@
+# Task ID: 2
+# Title: Create fact_fhir_care_plans_view_v1 materialized view
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Implement materialized view for care plans entity following PRD specifications with scheduled refresh pattern
+# Details:
+Create materialized view joining care_plans table with care_plan_categories, care_plan_goals, care_plan_identifiers, and care_plan_care_teams. Use JSON_PARSE and LISTAGG for aggregating related data. Include REGEXP_REPLACE for data sanitization. Remove AUTO REFRESH and implement for scheduled refresh. Include all core care plan fields, aggregated categories, goals, and care team information as JSON structures using SUPER data type.
+
+# Test Strategy:
+Verify view creates successfully, test query performance, validate JSON structure output, and confirm data integrity through row count comparisons with source tables.

@@ -1,0 +1,93 @@
+{
+	"meta": {
+		"generatedAt": "2025-09-10T00:25:12.572Z",
+		"tasksAnalyzed": 10,
+		"totalTasks": 10,
+		"analysisCount": 10,
+		"thresholdScore": 5,
+		"projectName": "Taskmaster",
+		"usedResearch": false
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 1,
+			"taskTitle": "Analyze existing table schemas and relationships",
+			"complexityScore": 4,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Break down schema analysis by FHIR entity groupings: 1) Care Plans tables analysis, 2) Conditions tables analysis, 3) Diagnostic Reports tables analysis, 4) Document References tables analysis, 5) Medication Requests tables analysis, 6) Observations tables analysis, 7) Practitioners tables analysis, 8) Procedures tables analysis. For each entity, document table structures, relationships, primary/foreign keys, and create entity-specific data dictionaries showing join patterns needed for materialized views.",
+			"reasoning": "Medium-low complexity. Project has 68 DDL files (570 total lines) with clear table structure. Existing fact views show established patterns for JSON_PARSE, LISTAGG, and table joins. Schema analysis is methodical but straightforward given existing documentation and patterns."
+		},
+		{
+			"taskId": 2,
+			"taskTitle": "Create fact_fhir_care_plans_view_v1 materialized view",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Create subtasks for: 1) Design care plans view structure based on existing patient/encounter view patterns, 2) Implement core care_plans table joins with care_plan_categories, care_plan_goals, care_plan_identifiers, and care_plan_care_teams, 3) Develop JSON aggregation logic using JSON_PARSE and LISTAGG following established patterns, 4) Create view with data sanitization using REGEXP_REPLACE and test query performance and data integrity.",
+			"reasoning": "Medium complexity. Follows established patterns from existing views. Care plans entity has 4 related tables requiring JSON aggregation. Can leverage existing JSON_PARSE and LISTAGG patterns from patient/encounter views."
+		},
+		{
+			"taskId": 3,
+			"taskTitle": "Create fact_fhir_conditions_view_v1 materialized view",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Break into subtasks: 1) Design conditions view structure analyzing the complex conditions main table (40+ columns), 2) Implement joins with 7 related condition tables (body_sites, categories, codes, evidence, extensions, notes, stages), 3) Handle complex nested data structures for clinical status, verification status, and onset/abatement dates, 4) Develop comprehensive JSON aggregation for codes, body sites, and evidence using LISTAGG and JSON_PARSE, 5) Implement data validation and testing for complex condition hierarchies and optional attributes.",
+			"reasoning": "Medium-high complexity. Conditions has the most complex main table (40+ fields) and 7 related tables. Requires handling clinical status codes, onset/abatement dates, and complex nested structures. More intricate than other entities."
+		},
+		{
+			"taskId": 4,
+			"taskTitle": "Create fact_fhir_diagnostic_reports_view_v1 materialized view",
+			"complexityScore": 5,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Create subtasks for: 1) Design diagnostic reports view following existing patterns, 2) Implement joins with 6 related tables (results, performers, categories, media, presented_forms, based_on), 3) Develop JSON aggregation for results array and performer information using established JSON_PARSE patterns, 4) Handle media attachments and presented forms with proper null handling and test view performance.",
+			"reasoning": "Medium complexity. Has 6 related tables requiring JSON aggregation. Results aggregation is key requirement. Follows similar patterns to existing views but requires handling media attachments and complex results structures."
+		},
+		{
+			"taskId": 5,
+			"taskTitle": "Create fact_fhir_document_references_view_v1 materialized view",
+			"complexityScore": 4,
+			"recommendedSubtasks": 4,
+			"expansionPrompt": "Break down into: 1) Design document references view structure, 2) Implement joins with 4 related tables (content, authors, categories, identifiers), 3) Develop JSON aggregation for content metadata and author information using LISTAGG and JSON_PARSE, 4) Handle document security metadata and test content structure validation.",
+			"reasoning": "Medium-low complexity. Has 4 related tables, simpler than conditions/observations. Document content and author aggregation follows established JSON patterns. Security metadata handling is straightforward."
+		},
+		{
+			"taskId": 6,
+			"taskTitle": "Create fact_fhir_medication_requests_view_v1 materialized view",
+			"complexityScore": 6,
+			"recommendedSubtasks": 5,
+			"expansionPrompt": "Create subtasks: 1) Design medication requests view with complex dosage requirements, 2) Implement joins with 4 medication request tables plus medications table for medication details, 3) Develop complex JSON aggregation for dosage instructions with timing and quantity patterns, 4) Handle prescription workflow statuses, fulfillment tracking, and prior authorizations, 5) Test dosage instruction accuracy and prescription workflow logic.",
+			"reasoning": "Medium-high complexity. Requires joining with medications table plus 4 related tables. Dosage instructions are complex with timing patterns. Prescription workflow states and prior authorization logic add complexity beyond basic aggregation."
+		},
+		{
+			"taskId": 7,
+			"taskTitle": "Create fact_fhir_observations_view_v1 materialized view",
+			"complexityScore": 7,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Break into subtasks: 1) Design observations view with complex component relationships and main table analysis (44 columns), 2) Implement joins with 8 related observation tables, 3) Develop vital signs pivoting logic using MAX/MIN functions for blood pressure patterns as specified in PRD, 4) Create comprehensive JSON aggregation for components, reference ranges, and interpretations, 5) Handle observation relationships (derived_from, members) and complex reference range logic, 6) Test vital signs pivoting accuracy and component aggregation integrity.",
+			"reasoning": "High complexity. Most complex entity with 8 related tables and 44-column main table. Requires special vital signs pivoting logic (MAX/MIN for blood pressure). Component aggregation and reference ranges add significant complexity beyond standard patterns."
+		},
+		{
+			"taskId": 8,
+			"taskTitle": "Create fact_fhir_practitioners_view_v1 materialized view",
+			"complexityScore": 3,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Create subtasks for: 1) Design practitioners view reusing name ranking logic from existing patient view, 2) Implement joins with 3 practitioner tables (names, addresses, telecoms) and adapt existing name ranking patterns, 3) Aggregate addresses and telecom information using established JSON_PARSE patterns and test name ranking consistency.",
+			"reasoning": "Low-medium complexity. Simplest entity with only 3 related tables. Can directly reuse name ranking logic from existing patient view. Address and telecom aggregation follows established patterns."
+		},
+		{
+			"taskId": 9,
+			"taskTitle": "Create fact_fhir_procedures_view_v1 materialized view",
+			"complexityScore": 4,
+			"recommendedSubtasks": 3,
+			"expansionPrompt": "Break down into: 1) Design procedures view structure, 2) Implement joins with 2 procedure tables (code_codings, identifiers) and aggregate procedure codes using LISTAGG, 3) Handle procedure dates, performer information, and outcomes with proper status tracking and test code aggregation accuracy.",
+			"reasoning": "Medium-low complexity. Only 2 related tables for joins. Procedure code aggregation and status tracking are straightforward. Less complex than most other entities."
+		},
+		{
+			"taskId": 10,
+			"taskTitle": "Upgrade existing views to V2 and implement scheduled refresh infrastructure",
+			"complexityScore": 8,
+			"recommendedSubtasks": 8,
+			"expansionPrompt": "Create comprehensive subtasks: 1) Analyze PRD V2 specifications for patients and encounters views with window functions and enhanced aggregations, 2) Upgrade fact_fhir_patients_view_v1.sql to V2 with window functions, LISTAGG, and subqueries, 3) Upgrade fact_fhir_encounters_view_v1.sql to V2 with duration calculations and participant aggregations, 4) Remove AUTO REFRESH from all 10 materialized views, 5) Design AWS Lambda function for scheduled refresh with error handling and logging, 6) Implement CloudWatch Events rule for hourly execution with proper IAM permissions, 7) Create deployment scripts with AWS CLI commands for all 10 views, 8) Develop end-to-end testing and validation scripts for scheduled refresh system.",
+			"reasoning": "High complexity. Requires upgrading existing views (complex window functions), removing AUTO REFRESH from all views, creating AWS Lambda infrastructure, CloudWatch Events, IAM permissions, and deployment automation. Multi-component infrastructure task with AWS services integration and dependency on all other view tasks."
+		}
+	]
+}
