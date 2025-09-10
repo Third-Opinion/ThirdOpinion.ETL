@@ -1,5 +1,6 @@
 
 #!/bin/bash
+set -e  # Exit on error
 
 # ===================================================================
 # CREATE FHIR MATERIALIZED VIEWS - SIMPLE VERSION
@@ -89,6 +90,7 @@ echo ""
 # Wait for all statements to complete and check status
 SUCCESS_COUNT=0
 FAIL_COUNT=0
+SKIP_COUNT=0
 
 for i in "${!STATEMENT_IDS[@]}"; do
     STATEMENT_ID="${STATEMENT_IDS[$i]}"
@@ -111,8 +113,7 @@ for i in "${!STATEMENT_IDS[@]}"; do
                 break
                 ;;
             FAILED)
-                echo -e "${RED}✗ Failed${NC}"
-                # Get error message
+                # Get error message first
                 ERROR_MSG=$(aws redshift-data describe-statement \
                     --id "$STATEMENT_ID" \
                     --region "$REGION" \
@@ -121,11 +122,13 @@ for i in "${!STATEMENT_IDS[@]}"; do
                 
                 # Check if it's because view already exists
                 if [[ "$ERROR_MSG" == *"already exists"* ]]; then
-                    echo -e "  ${YELLOW}→ View already exists${NC}"
+                    echo -e "${YELLOW}✓ Already exists${NC}"
+                    ((SKIP_COUNT++))
                 else
+                    echo -e "${RED}✗ Failed${NC}"
                     echo -e "  ${RED}→ Error: $ERROR_MSG${NC}"
+                    ((FAIL_COUNT++))
                 fi
-                ((FAIL_COUNT++))
                 break
                 ;;
             ABORTED)
@@ -146,7 +149,8 @@ echo -e "${BLUE}================================================================
 echo "SUMMARY"
 echo "====================================================================="
 echo -e "${GREEN}Successfully created: $SUCCESS_COUNT views${NC}"
-echo -e "${RED}Failed/Skipped: $FAIL_COUNT views${NC}"
+echo -e "${YELLOW}Already existed: $SKIP_COUNT views${NC}"
+echo -e "${RED}Failed: $FAIL_COUNT views${NC}"
 echo -e "${BLUE}=====================================================================${NC}"
 
 exit 0

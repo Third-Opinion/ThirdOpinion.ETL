@@ -19,6 +19,55 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Function to get record count from a view
+get_record_count() {
+    local view_name=$1
+    
+    STATEMENT_ID=$(aws redshift-data execute-statement \
+        --cluster-identifier "$CLUSTER_ID" \
+        --database "$DATABASE" \
+        --secret-arn "$SECRET_ARN" \
+        --sql "SELECT COUNT(*) FROM ${view_name}" \
+        --region "$REGION" \
+        --query 'Id' \
+        --output text 2>/dev/null)
+    
+    if [ $? -ne 0 ]; then
+        echo "N/A"
+        return 1
+    fi
+    
+    # Wait for completion
+    while true; do
+        STATUS=$(aws redshift-data describe-statement \
+            --id "$STATEMENT_ID" \
+            --region "$REGION" \
+            --query 'Status' \
+            --output text 2>/dev/null)
+        
+        if [ "$STATUS" = "FINISHED" ]; then
+            break
+        elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "ABORTED" ]; then
+            echo "N/A"
+            return 1
+        fi
+        sleep 1
+    done
+    
+    # Get the result
+    COUNT=$(aws redshift-data get-statement-result \
+        --id "$STATEMENT_ID" \
+        --region "$REGION" \
+        --query 'Records[0][0].longValue' \
+        --output text 2>/dev/null)
+    
+    if [ $? -eq 0 ] && [ "$COUNT" != "None" ] && [ "$COUNT" != "null" ]; then
+        echo "$COUNT"
+    else
+        echo "N/A"
+    fi
+}
+
 # Function to execute SQL and wait for completion
 execute_sql_file() {
     local sql_file=$1
@@ -60,17 +109,32 @@ execute_sql_file() {
         case $STATUS in
             FINISHED)
                 echo -e "${GREEN}✓ Successfully created: $view_name${NC}"
+                # Get record count for newly created view
+                echo -n "  Getting record count... "
+                RECORD_COUNT=$(get_record_count "$view_name")
+                echo -e "${GREEN}Records: $RECORD_COUNT${NC}"
                 break
                 ;;
             FAILED)
-                echo -e "${RED}✗ Failed to create: $view_name${NC}"
                 ERROR_MSG=$(aws redshift-data describe-statement \
                     --id "$STATEMENT_ID" \
                     --region "$REGION" \
                     --query 'Error' \
                     --output text)
-                echo -e "${RED}Error: $ERROR_MSG${NC}"
-                return 1
+                
+                # Check if it's because view already exists
+                if [[ "$ERROR_MSG" == *"already exists"* ]]; then
+                    echo -e "${YELLOW}✓ View already exists: $view_name${NC}"
+                    # Get record count for existing view
+                    echo -n "  Getting record count... "
+                    RECORD_COUNT=$(get_record_count "$view_name")
+                    echo -e "${YELLOW}Records: $RECORD_COUNT${NC}"
+                    return 0  # Treat as success
+                else
+                    echo -e "${RED}✗ Failed to create: $view_name${NC}"
+                    echo -e "${RED}Error: $ERROR_MSG${NC}"
+                    return 1
+                fi
                 ;;
             ABORTED)
                 echo -e "${RED}✗ Query aborted: $view_name${NC}"
@@ -170,6 +234,10 @@ for i in "${!VIEWS[@]}"; do
     # Check if view already exists
     if check_view_exists "$VIEW_NAME"; then
         echo -e "${YELLOW}⊘ View already exists, skipping: $VIEW_NAME${NC}"
+        # Get record count for existing view
+        echo -n "  Getting record count... "
+        RECORD_COUNT=$(get_record_count "$VIEW_NAME")
+        echo -e "${YELLOW}Records: $RECORD_COUNT${NC}"
         ((SKIP_COUNT++))
     else
         # Try to create the view

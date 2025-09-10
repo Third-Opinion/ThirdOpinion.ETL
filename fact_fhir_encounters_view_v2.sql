@@ -18,7 +18,7 @@
 -- - public.encounter_reasons: Reason codes
 -- - public.encounter_types: Encounter type classifications
 -- - public.conditions: Associated diagnoses via encounter_id (V2 enhancement)
--- - public.condition_codings: Condition codes and descriptions
+-- - public.condition_codes: Condition codes and descriptions
 -- 
 -- REFRESH STRATEGY:
 -- - AUTO REFRESH NO: Uses scheduled refresh via AWS Lambda
@@ -37,21 +37,44 @@
 CREATE MATERIALIZED VIEW fact_fhir_encounters_view_v2
 BACKUP NO
 AS
-WITH encounter_conditions AS (
+WITH condition_counts AS (
+    -- Count conditions and get primary diagnosis
+    SELECT 
+        c.encounter_id,
+        COUNT(DISTINCT c.condition_id) AS diagnosis_count,
+        MIN(cc.code_code) AS primary_diagnosis_code,
+        MIN(COALESCE(cc.code_display, c.condition_text)) AS primary_diagnosis_display
+    FROM public.conditions c
+        LEFT JOIN public.condition_codes cc ON c.condition_id = cc.condition_id
+    WHERE c.encounter_id IS NOT NULL
+    GROUP BY c.encounter_id
+),
+encounter_conditions AS (
     -- Aggregate conditions linked to each encounter using conditions table
     SELECT 
         c.encounter_id,
         LISTAGG(DISTINCT 
             COALESCE(cc.code_code, '') || ':' || COALESCE(cc.code_display, c.condition_text, ''),
             ' | '
-        ) WITHIN GROUP (ORDER BY c.onset_datetime) AS all_diagnoses,
-        COUNT(DISTINCT c.condition_id) AS diagnosis_count,
-        MIN(cc.code_code) AS primary_diagnosis_code,
-        MIN(COALESCE(cc.code_display, c.condition_text)) AS primary_diagnosis_display
+        ) WITHIN GROUP (ORDER BY c.onset_datetime) AS all_diagnoses
     FROM public.conditions c
-        LEFT JOIN public.condition_codings cc ON c.condition_id = cc.condition_id
+        LEFT JOIN public.condition_codes cc ON c.condition_id = cc.condition_id
     WHERE c.encounter_id IS NOT NULL
     GROUP BY c.encounter_id
+),
+participant_counts AS (
+    -- Count participants
+    SELECT 
+        encounter_id,
+        COUNT(DISTINCT participant_id) AS participant_count,
+        COUNT(DISTINCT CASE 
+            WHEN participant_type = 'primary_performer' THEN participant_id 
+        END) AS primary_performer_count,
+        MAX(CASE 
+            WHEN participant_type = 'primary_performer' THEN participant_display 
+        END) AS primary_performer_name
+    FROM public.encounter_participants
+    GROUP BY encounter_id
 ),
 participant_aggregation AS (
     -- Enhanced participant aggregation with roles
@@ -65,34 +88,34 @@ participant_aggregation AS (
                 ELSE '' 
             END,
             ' | '
-        ) WITHIN GROUP (ORDER BY participant_type) AS all_participants,
-        COUNT(DISTINCT participant_id) AS participant_count,
-        COUNT(DISTINCT CASE 
-            WHEN participant_type = 'primary_performer' THEN participant_id 
-        END) AS primary_performer_count,
-        MAX(CASE 
-            WHEN participant_type = 'primary_performer' THEN participant_display 
-        END) AS primary_performer_name
+        ) WITHIN GROUP (ORDER BY participant_type) AS all_participants
     FROM public.encounter_participants
     GROUP BY encounter_id
 ),
+location_counts AS (
+    -- Count distinct locations
+    SELECT 
+        encounter_id,
+        COUNT(DISTINCT location_id) AS location_count
+    FROM public.encounter_locations
+    GROUP BY encounter_id
+),
 location_timeline AS (
-    -- Track location changes and duration
+    -- Track location changes
     SELECT 
         encounter_id,
         LISTAGG(
-            location_id || 
-            CASE 
-                WHEN location_display IS NOT NULL 
-                THEN ' (' || location_display || ')' 
-                ELSE '' 
-            END,
+            location_id,
             ' -> '
-        ) WITHIN GROUP (ORDER BY period_start) AS location_sequence,
-        COUNT(DISTINCT location_id) AS location_count,
-        MIN(period_start) AS first_location_time,
-        MAX(COALESCE(period_end, CURRENT_TIMESTAMP)) AS last_location_time
+        ) WITHIN GROUP (ORDER BY location_id) AS location_sequence
     FROM public.encounter_locations
+    GROUP BY encounter_id
+),
+identifier_counts AS (
+    SELECT 
+        encounter_id,
+        COUNT(DISTINCT identifier_value) AS identifier_count
+    FROM public.encounter_identifiers
     GROUP BY encounter_id
 ),
 aggregated_identifiers AS (
@@ -102,8 +125,7 @@ aggregated_identifiers AS (
         LISTAGG(DISTINCT 
             identifier_system || ':' || identifier_value,
             ' | '
-        ) WITHIN GROUP (ORDER BY identifier_system) AS all_identifiers,
-        COUNT(DISTINCT identifier_value) AS identifier_count
+        ) WITHIN GROUP (ORDER BY identifier_system) AS all_identifiers
     FROM public.encounter_identifiers
     GROUP BY encounter_id
 ),
@@ -149,10 +171,7 @@ aggregated_hospitalization AS (
         encounter_id,
         MAX(discharge_disposition_text) AS discharge_disposition_text,
         MAX(discharge_code) AS discharge_code,
-        MAX(discharge_system) AS discharge_system,
-        MAX(admit_source_code) AS admit_source_code,
-        MAX(admit_source_display) AS admit_source_display,
-        MAX(readmission_indicator) AS readmission_indicator
+        MAX(discharge_system) AS discharge_system
     FROM public.encounter_hospitalization
     GROUP BY encounter_id
 )
@@ -179,7 +198,7 @@ SELECT
     -- IDENTIFIERS (FROM CTE)
     -- ============================================
     ai.all_identifiers,
-    ai.identifier_count,
+    ic.identifier_count,
     
     -- ============================================
     -- HOSPITALIZATION DETAILS (FROM CTE)
@@ -187,25 +206,20 @@ SELECT
     ah.discharge_disposition_text,
     ah.discharge_code,
     ah.discharge_system,
-    ah.admit_source_code,
-    ah.admit_source_display,
-    ah.readmission_indicator,
     
     -- ============================================
     -- LOCATION TRACKING (FROM CTE)
     -- ============================================
     lt.location_sequence,
-    lt.location_count,
-    lt.first_location_time,
-    lt.last_location_time,
+    lc.location_count,
     
     -- ============================================
     -- ENHANCED PARTICIPANTS (FROM CTE)
     -- ============================================
     pa.all_participants,
-    pa.participant_count,
-    pa.primary_performer_count,
-    pa.primary_performer_name,
+    pc.participant_count,
+    pc.primary_performer_count,
+    pc.primary_performer_name,
     
     -- ============================================
     -- REASONS (FROM CTE)
@@ -221,9 +235,9 @@ SELECT
     -- CONDITIONS/DIAGNOSES (FROM CTE)
     -- ============================================
     ec.all_diagnoses,
-    ec.diagnosis_count,
-    ec.primary_diagnosis_code,
-    ec.primary_diagnosis_display,
+    condc.diagnosis_count,
+    condc.primary_diagnosis_code,
+    condc.primary_diagnosis_display,
     
     -- ============================================
     -- DURATION CALCULATIONS (V2 ENHANCEMENTS)
@@ -271,8 +285,8 @@ SELECT
     
     -- Encounter complexity score (based on diagnosis count only)
     CASE 
-        WHEN ec.diagnosis_count >= 5 THEN 'high_complexity'
-        WHEN ec.diagnosis_count >= 3 THEN 'medium_complexity'
+        WHEN condc.diagnosis_count >= 5 THEN 'high_complexity'
+        WHEN condc.diagnosis_count >= 3 THEN 'medium_complexity'
         ELSE 'low_complexity'
     END AS complexity_level,
     
@@ -311,12 +325,16 @@ SELECT
     END AS los_rank
 
 FROM public.encounters e
+    LEFT JOIN identifier_counts ic ON e.encounter_id = ic.encounter_id
     LEFT JOIN aggregated_identifiers ai ON e.encounter_id = ai.encounter_id
     LEFT JOIN aggregated_hospitalization ah ON e.encounter_id = ah.encounter_id
+    LEFT JOIN location_counts lc ON e.encounter_id = lc.encounter_id
     LEFT JOIN location_timeline lt ON e.encounter_id = lt.encounter_id
+    LEFT JOIN participant_counts pc ON e.encounter_id = pc.encounter_id
     LEFT JOIN participant_aggregation pa ON e.encounter_id = pa.encounter_id
     LEFT JOIN aggregated_reasons ar ON e.encounter_id = ar.encounter_id
     LEFT JOIN aggregated_types at ON e.encounter_id = at.encounter_id
+    LEFT JOIN condition_counts condc ON e.encounter_id = condc.encounter_id
     LEFT JOIN encounter_conditions ec ON e.encounter_id = ec.encounter_id
 
 WHERE e.status != 'cancelled';

@@ -56,7 +56,14 @@ CREATE MATERIALIZED VIEW fact_fhir_document_references_view_v1
 BACKUP NO
 AUTO REFRESH NO
 AS
-WITH aggregated_content AS (
+WITH content_counts AS (
+    SELECT 
+        drc.document_reference_id,
+        COUNT(DISTINCT drc.attachment_content_type) AS content_count
+    FROM public.document_reference_content drc
+    GROUP BY drc.document_reference_id
+),
+aggregated_content AS (
     SELECT 
         drc.document_reference_id,
         JSON_PARSE(
@@ -67,10 +74,16 @@ WITH aggregated_content AS (
                 '}',
                 ','
             ) WITHIN GROUP (ORDER BY drc.attachment_content_type) || ']'
-        ) AS content,
-        COUNT(DISTINCT drc.attachment_content_type) AS content_count
+        ) AS content
     FROM public.document_reference_content drc
     GROUP BY drc.document_reference_id
+),
+author_counts AS (
+    SELECT 
+        dra.document_reference_id,
+        COUNT(DISTINCT dra.author_id) AS author_count
+    FROM public.document_reference_authors dra
+    GROUP BY dra.document_reference_id
 ),
 aggregated_authors AS (
     SELECT 
@@ -82,10 +95,16 @@ aggregated_authors AS (
                 '}',
                 ','
             ) WITHIN GROUP (ORDER BY dra.author_id) || ']'
-        ) AS authors,
-        COUNT(DISTINCT dra.author_id) AS author_count
+        ) AS authors
     FROM public.document_reference_authors dra
     GROUP BY dra.document_reference_id
+),
+category_counts AS (
+    SELECT 
+        drcat.document_reference_id,
+        COUNT(DISTINCT drcat.category_code) AS category_count
+    FROM public.document_reference_categories drcat
+    GROUP BY drcat.document_reference_id
 ),
 aggregated_categories AS (
     SELECT 
@@ -99,10 +118,16 @@ aggregated_categories AS (
                 '}',
                 ','
             ) WITHIN GROUP (ORDER BY drcat.category_system, drcat.category_code) || ']'
-        ) AS categories,
-        COUNT(DISTINCT drcat.category_code) AS category_count
+        ) AS categories
     FROM public.document_reference_categories drcat
     GROUP BY drcat.document_reference_id
+),
+identifier_counts AS (
+    SELECT 
+        dri.document_reference_id,
+        COUNT(DISTINCT dri.identifier_value) AS identifier_count
+    FROM public.document_reference_identifiers dri
+    GROUP BY dri.document_reference_id
 ),
 aggregated_identifiers AS (
     SELECT 
@@ -115,8 +140,7 @@ aggregated_identifiers AS (
                 '}',
                 ','
             ) WITHIN GROUP (ORDER BY dri.identifier_system, dri.identifier_value) || ']'
-        ) AS identifiers,
-        COUNT(DISTINCT dri.identifier_value) AS identifier_count
+        ) AS identifiers
     FROM public.document_reference_identifiers dri
     GROUP BY dri.document_reference_id
 )
@@ -181,25 +205,29 @@ SELECT
     END AS document_age_days,
     
     -- Count of authors (from CTE)
-    COALESCE(aa.author_count, 0) AS author_count,
+    COALESCE(authc.author_count, 0) AS author_count,
     
     -- Count of categories (from CTE)
-    COALESCE(acat.category_count, 0) AS category_count,
+    COALESCE(catc.category_count, 0) AS category_count,
     
     -- Determine if document has content attachments (from CTE)
     CASE 
-        WHEN COALESCE(ac.content_count, 0) > 0 
+        WHEN COALESCE(cc.content_count, 0) > 0 
         THEN TRUE
         ELSE FALSE
     END AS has_content,
     
     -- Count of identifiers (from CTE)
-    COALESCE(ai.identifier_count, 0) AS identifier_count
+    COALESCE(ic.identifier_count, 0) AS identifier_count
 
 FROM public.document_references dr
+    LEFT JOIN content_counts cc ON dr.document_reference_id = cc.document_reference_id
     LEFT JOIN aggregated_content ac ON dr.document_reference_id = ac.document_reference_id
+    LEFT JOIN author_counts authc ON dr.document_reference_id = authc.document_reference_id
     LEFT JOIN aggregated_authors aa ON dr.document_reference_id = aa.document_reference_id
+    LEFT JOIN category_counts catc ON dr.document_reference_id = catc.document_reference_id
     LEFT JOIN aggregated_categories acat ON dr.document_reference_id = acat.document_reference_id
+    LEFT JOIN identifier_counts ic ON dr.document_reference_id = ic.document_reference_id
     LEFT JOIN aggregated_identifiers ai ON dr.document_reference_id = ai.document_reference_id
 
 WHERE dr.status NOT IN ('entered-in-error', 'superseded');

@@ -81,6 +81,16 @@ WITH ranked_names AS (
        OR (given IS NOT NULL AND given != '')
        OR (text IS NOT NULL AND text != '')
 ),
+address_counts AS (
+    SELECT 
+        practitioner_id,
+        COUNT(DISTINCT line) AS address_count,
+        MAX(city) AS primary_city,
+        MAX(state) AS primary_state
+    FROM public.practitioner_addresses
+    WHERE line IS NOT NULL
+    GROUP BY practitioner_id
+),
 aggregated_addresses AS (
     SELECT 
         pra.practitioner_id,
@@ -94,13 +104,20 @@ aggregated_addresses AS (
                 '}',
                 ','
             ) WITHIN GROUP (ORDER BY pra.city, pra.state) || ']'
-        ) AS addresses,
-        COUNT(DISTINCT pra.line) AS address_count,
-        MAX(pra.city) AS primary_city,
-        MAX(pra.state) AS primary_state
+        ) AS addresses
     FROM public.practitioner_addresses pra
     WHERE pra.line IS NOT NULL
     GROUP BY pra.practitioner_id
+),
+telecom_counts AS (
+    SELECT 
+        practitioner_id,
+        COUNT(DISTINCT "value") AS telecom_count,
+        MAX(CASE WHEN "system" = 'phone' THEN "value" END) AS primary_phone,
+        MAX(CASE WHEN "system" = 'email' THEN "value" END) AS primary_email
+    FROM public.practitioner_telecoms
+    WHERE "value" IS NOT NULL
+    GROUP BY practitioner_id
 ),
 aggregated_telecoms AS (
     SELECT 
@@ -108,17 +125,14 @@ aggregated_telecoms AS (
         JSON_PARSE(
             '[' || LISTAGG(DISTINCT
                 '{' ||
-                '"system":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(prt.system, '[\r\n\t]', ''), '"', ''), '') || '",' ||
-                '"value":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(prt.value, '[\r\n\t]', ''), '"', ''), '') || '"' ||
+                '"system":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(prt."system", '[\r\n\t]', ''), '"', ''), '') || '",' ||
+                '"value":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(prt."value", '[\r\n\t]', ''), '"', ''), '') || '"' ||
                 '}',
                 ','
-            ) WITHIN GROUP (ORDER BY prt.system, prt.value) || ']'
-        ) AS telecoms,
-        COUNT(DISTINCT prt.value) AS telecom_count,
-        MAX(CASE WHEN prt.system = 'phone' THEN prt.value END) AS primary_phone,
-        MAX(CASE WHEN prt.system = 'email' THEN prt.value END) AS primary_email
+            ) WITHIN GROUP (ORDER BY prt."system", prt."value") || ']'
+        ) AS telecoms
     FROM public.practitioner_telecoms prt
-    WHERE prt.value IS NOT NULL
+    WHERE prt."value" IS NOT NULL
     GROUP BY prt.practitioner_id
 )
 SELECT 
@@ -188,32 +202,31 @@ SELECT
     -- TELECOMS (AGGREGATED FROM CTE)
     -- ============================================
     at.telecoms,
+    tc.telecom_count,
+    tc.primary_phone,
+    tc.primary_email,
     
     -- Determine if practitioner has complete contact info
     CASE 
-        WHEN COALESCE(at.telecom_count, 0) > 0 AND COALESCE(aa.address_count, 0) > 0 
+        WHEN COALESCE(tc.telecom_count, 0) > 0 AND COALESCE(ac.address_count, 0) > 0 
         THEN TRUE
         ELSE FALSE
     END AS has_complete_contact,
     
-    -- Primary phone number (from CTE)
-    at.primary_phone,
-    
-    -- Primary email (from CTE)
-    at.primary_email,
-    
     -- Primary address city (from CTE)
-    aa.primary_city,
+    ac.primary_city,
     
     -- Primary address state (from CTE)
-    aa.primary_state
+    ac.primary_state
 
 -- ============================================
 -- TABLE JOINS AND NAME RANKING LOGIC
 -- ============================================
 FROM public.practitioners pr
     LEFT JOIN ranked_names rn ON pr.practitioner_id = rn.practitioner_id AND rn.name_rank = 1  -- Only join rank 1 (best) name
+    LEFT JOIN address_counts ac ON pr.practitioner_id = ac.practitioner_id
     LEFT JOIN aggregated_addresses aa ON pr.practitioner_id = aa.practitioner_id
+    LEFT JOIN telecom_counts tc ON pr.practitioner_id = tc.practitioner_id
     LEFT JOIN aggregated_telecoms at ON pr.practitioner_id = at.practitioner_id;
 
 -- ===================================================================

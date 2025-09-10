@@ -13,7 +13,7 @@
 -- - public.patient_names: Patient name information with use types
 -- 
 -- REFRESH STRATEGY:
--- - AUTO REFRESH YES: Automatically refreshes when underlying data changes
+-- - AUTO REFRESH NO: Manual refresh required via scheduled jobs
 -- - BACKUP NO: No backup required for this materialized view
 -- 
 -- DATA PROCESSING:
@@ -55,7 +55,7 @@
 
 CREATE MATERIALIZED VIEW fact_fhir_patients_view_v1
 BACKUP NO
-AUTO REFRESH YES
+AUTO REFRESH NO
 AS
 SELECT 
     -- ============================================

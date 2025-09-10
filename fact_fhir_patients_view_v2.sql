@@ -13,7 +13,7 @@
 -- - public.patients: Core patient demographic and metadata
 -- - public.patient_names: Patient name information with use types
 -- - public.patient_addresses: Patient address information
--- - public.patient_identifiers: Patient identifiers (MRN, SSN, etc.)
+-- - public.patients: Core patient data (identifiers are in main table)
 -- 
 -- REFRESH STRATEGY:
 -- - AUTO REFRESH NO: Uses scheduled refresh via AWS Lambda
@@ -66,40 +66,26 @@ WITH ranked_names AS (
     WHERE family_name IS NOT NULL 
     AND given_names IS NOT NULL
 ),
-aggregated_identifiers AS (
-    -- Aggregate all patient identifiers
-    SELECT 
-        patient_id,
-        LISTAGG(DISTINCT 
-            identifier_system || ':' || identifier_value, 
-            ' | '
-        ) WITHIN GROUP (ORDER BY identifier_system) AS all_identifiers,
-        COUNT(DISTINCT identifier_value) AS identifier_count,
-        MAX(CASE WHEN identifier_system = 'MRN' THEN identifier_value END) AS primary_mrn
-    FROM public.patient_identifiers
-    GROUP BY patient_id
-),
 aggregated_addresses AS (
     -- Aggregate all patient addresses
     SELECT 
         patient_id,
         LISTAGG(
-            COALESCE(line_1, '') || ' ' || 
-            COALESCE(line_2, '') || ', ' ||
+            COALESCE(address_line, '') || ', ' ||
             COALESCE(city, '') || ', ' ||
             COALESCE(state, '') || ' ' ||
             COALESCE(postal_code, ''),
             ' | '
         ) WITHIN GROUP (ORDER BY 
-            CASE use 
+            CASE address_use 
                 WHEN 'home' THEN 1
                 WHEN 'work' THEN 2
                 ELSE 3
             END
         ) AS all_addresses,
         COUNT(*) AS address_count,
-        MAX(CASE WHEN use = 'home' THEN city END) AS primary_city,
-        MAX(CASE WHEN use = 'home' THEN state END) AS primary_state
+        MAX(CASE WHEN address_use = 'home' THEN city END) AS primary_city,
+        MAX(CASE WHEN address_use = 'home' THEN state END) AS primary_state
     FROM public.patient_addresses
     GROUP BY patient_id
 ),
@@ -172,12 +158,6 @@ SELECT
         '"}}'
     ) AS names,
     
-    -- ============================================
-    -- AGGREGATED IDENTIFIERS (V2 ENHANCEMENT)
-    -- ============================================
-    ai.all_identifiers,
-    ai.identifier_count,
-    ai.primary_mrn,
     
     -- ============================================
     -- AGGREGATED ADDRESSES (V2 ENHANCEMENT)
@@ -240,7 +220,6 @@ SELECT
 
 FROM public.patients p
     LEFT JOIN ranked_names rn ON p.patient_id = rn.patient_id AND rn.name_rank = 1
-    LEFT JOIN aggregated_identifiers ai ON p.patient_id = ai.patient_id
     LEFT JOIN aggregated_addresses aa ON p.patient_id = aa.patient_id
     LEFT JOIN encounter_metrics em ON p.patient_id = em.patient_id
     LEFT JOIN condition_metrics cm ON p.patient_id = cm.patient_id;
