@@ -364,9 +364,16 @@ def main():
         care_teams_dynamic_frame = DynamicFrame.fromDF(care_teams_df, glueContext, "care_teams_dynamic_frame")
         goals_dynamic_frame = DynamicFrame.fromDF(goals_df, glueContext, "goals_dynamic_frame")
 
-        # Step 5: Resolve choice types
+        # Step 5: Resolve choice types (preserve timestamp columns)
         logger.info("🔄 STEP 5: RESOLVING CHOICE TYPES")
-        main_resolved_frame = main_dynamic_frame.resolveChoice(specs=[(c, "cast:string") for c in main_care_plan_df.columns])
+        # Keep timestamp columns as timestamps, convert others to string
+        timestamp_columns = ['meta_last_updated', 'created_at', 'updated_at']
+        string_columns = [c for c in main_care_plan_df.columns if c not in timestamp_columns]
+        
+        # Apply resolveChoice only to non-timestamp columns
+        specs = [(c, "cast:string") for c in string_columns]
+        specs.extend([(c, "cast:timestamp") for c in timestamp_columns])
+        main_resolved_frame = main_dynamic_frame.resolveChoice(specs=specs)
         
         # Step 6: Write to Redshift
         logger.info("💾 STEP 6: WRITING DATA TO REDSHIFT")
