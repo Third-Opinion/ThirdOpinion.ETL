@@ -171,8 +171,8 @@ SELECT
     dr.meta_last_updated,                -- Last updated timestamp
     
     -- ETL Audit Fields
-    dr.created_at,
-    dr.updated_at,
+    dr.created_at AS etl_created_at,
+    dr.updated_at AS etl_updated_at,
     
     -- ============================================
     -- CONTENT ATTACHMENTS (FROM CTE)

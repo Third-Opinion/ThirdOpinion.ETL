@@ -66,7 +66,14 @@ def transform_main_care_plan_data(df):
         F.col("intent").alias("intent"),
         F.col("title").alias("title"),
         F.col("meta").getField("versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("meta_last_updated"),
+        # Handle meta.lastUpdated with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ]
