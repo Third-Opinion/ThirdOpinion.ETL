@@ -5,31 +5,32 @@ All FHIR materialized views use **AUTO REFRESH NO** with external scheduled refr
 
 ## Refresh Strategy by Entity
 
-### Phase 1: High-Volume Entities (Require Careful Scheduling)
-| View | Records | Refresh Frequency | Strategy |
-|------|---------|------------------|----------|
-| **fact_fhir_observations_view_v1** | 14.8M | Every 4-6 hours | Incremental if possible |
-| **fact_fhir_medication_requests_view_v1** | 10M | Every 2-4 hours | Full refresh |
-| **fact_fhir_document_references_view_v1** | 4.5M | Every 2-4 hours | Full refresh |
-| **fact_fhir_conditions_view_v1** | 3.2M | Every 2-4 hours | Full refresh |
-| **fact_fhir_diagnostic_reports_view_v1** | 1.8M | Every 1-2 hours | Full refresh |
+### Phase 1: High-Volume Entities (Require Careful Scheduling) 
+| View | Records | Refresh Frequency | Strategy | Status |
+|------|---------|------------------|----------|---------|
+| **fact_fhir_observations_view_v1** | 14.8M | Every 4-6 hours | Full refresh | ✅ Production Ready |
+| **fact_fhir_medication_requests_view_v1** | 10M | Every 2-4 hours | Full refresh | ✅ Production Ready |
+| **fact_fhir_document_references_view_v1** | 4.5M | Every 2-4 hours | Full refresh | ✅ Production Ready |
+| **fact_fhir_conditions_view_v1** | 3.2M | Every 2-4 hours | Full refresh | ✅ Production Ready |
+| **fact_fhir_diagnostic_reports_view_v1** | 1.8M | Every 1-2 hours | Full refresh | ✅ Production Ready |
 
 ### Phase 2: Medium-Volume Entities
-| View | Records | Refresh Frequency | Strategy |
-|------|---------|------------------|----------|
-| **fact_fhir_procedures_view_v1** | 611K | Hourly | Full refresh |
+| View | Records | Refresh Frequency | Strategy | Status |
+|------|---------|------------------|----------|---------|
+| **fact_fhir_encounters_view_v2** | 1.1M | Every 1-2 hours | Full refresh | ✅ Production Ready |
+| **fact_fhir_procedures_view_v1** | 611K | Hourly | Full refresh | ✅ Production Ready |
 
 ### Phase 3: Low-Volume Entities (High-Frequency Refresh)
-| View | Records | Refresh Frequency | Strategy |
-|------|---------|------------------|----------|
-| **fact_fhir_practitioners_view_v1** | 7,333 | Every 15-30 minutes | Full refresh |
-| **fact_fhir_care_plans_view_v1** | 171 | Every 15-30 minutes | Full refresh |
+| View | Records | Refresh Frequency | Strategy | Status |
+|------|---------|------------------|----------|---------|
+| **fact_fhir_patients_view_v2** | 350K | Hourly | Full refresh | ✅ Production Ready |
+| **fact_fhir_practitioners_view_v1** | 7,333 | Every 15-30 minutes | Full refresh | ✅ Production Ready |
 
-### Existing Views (Upgrade Required)
-| View | Records | Refresh Frequency | Strategy |
-|------|---------|------------------|----------|
-| **fact_fhir_patients_view_v2** | 350K | Hourly | Full refresh |
-| **fact_fhir_encounters_view_v2** | 1.1M | Every 1-2 hours | Full refresh |
+### Additional Views (All Production Ready)
+| View | Records | Refresh Frequency | Strategy | Status |
+|------|---------|------------------|----------|---------|
+| **fact_fhir_patients_view_v1** | 350K | Hourly | Full refresh | ✅ Production Ready |
+| **fact_fhir_encounters_view_v1** | 1.1M | Every 1-2 hours | Full refresh | ✅ Production Ready |
 
 ## Implementation Options
 
@@ -155,22 +156,26 @@ aws cloudwatch put-metric-alarm \
 
 ## Refresh Commands
 
+### Automated Refresh Scripts (Recommended)
+```bash
+# Use the automated refresh script
+./refresh_all_fhir_views.sh
+```
+
 ### Manual Refresh Commands
 ```sql
--- Refresh individual view
-REFRESH MATERIALIZED VIEW fact_fhir_care_plans_view_v1;
-
--- Refresh all views (run in sequence)
-REFRESH MATERIALIZED VIEW fact_fhir_care_plans_view_v1;
+-- Refresh all views in optimal order (low to high volume)
 REFRESH MATERIALIZED VIEW fact_fhir_practitioners_view_v1;
+REFRESH MATERIALIZED VIEW fact_fhir_patients_view_v1;
+REFRESH MATERIALIZED VIEW fact_fhir_patients_view_v2;
 REFRESH MATERIALIZED VIEW fact_fhir_procedures_view_v1;
-REFRESH MATERIALIZED VIEW fact_fhir_conditions_view_v1;
+REFRESH MATERIALIZED VIEW fact_fhir_encounters_view_v1;
+REFRESH MATERIALIZED VIEW fact_fhir_encounters_view_v2;
 REFRESH MATERIALIZED VIEW fact_fhir_diagnostic_reports_view_v1;
+REFRESH MATERIALIZED VIEW fact_fhir_conditions_view_v1;
 REFRESH MATERIALIZED VIEW fact_fhir_document_references_view_v1;
 REFRESH MATERIALIZED VIEW fact_fhir_medication_requests_view_v1;
 REFRESH MATERIALIZED VIEW fact_fhir_observations_view_v1;
-REFRESH MATERIALIZED VIEW fact_fhir_patients_view_v2;
-REFRESH MATERIALIZED VIEW fact_fhir_encounters_view_v2;
 ```
 
 ### Check Refresh Status
@@ -233,24 +238,42 @@ AND status = 'Running';
 CANCEL pid;
 ```
 
-## Implementation Timeline
+## Current Implementation Status
 
-### Phase 1: Core Infrastructure (Week 1)
-- Set up Lambda function for basic refresh
-- Configure CloudWatch Events
-- Implement basic monitoring
+### ✅ Phase 1: Complete - All Views Production Ready
+- All 11 materialized views created and tested
+- Redshift compatibility issues resolved (LISTAGG/COUNT mixing, REGEXP patterns, boolean casting)
+- Enhanced deployment scripts with record count validation
+- Comprehensive error handling for "already exists" scenarios
 
-### Phase 2: View-Specific Scheduling (Week 2-3)  
-- Implement different refresh frequencies by volume
-- Add error handling and retries
-- Set up alerting
+### 🔄 Phase 2: Ready for Implementation - Automated Refresh
+**Infrastructure Setup (Ready to Deploy):**
+- Set up Lambda function for automated refresh
+- Configure CloudWatch Events for scheduling by data volume
+- Implement view-specific refresh frequencies
+- Add retry logic and failure notifications
 
-### Phase 3: Advanced Monitoring (Week 4)
-- Create comprehensive dashboards
-- Implement data freshness monitoring
-- Performance optimization based on production usage
+**Recommended Implementation Order:**
+1. Deploy Lambda function with the refresh logic from the provided examples
+2. Configure different CloudWatch Events for each refresh tier
+3. Set up CloudWatch monitoring and alerting
+4. Test refresh schedules and adjust frequencies
+
+### 📊 Phase 3: Monitoring and Optimization (Ready to Implement)
+**Infrastructure Available:**
+- Performance monitoring dashboards
+- Data freshness alerting
+- Resource utilization tracking during refresh
+- Query performance optimization
 
 ---
 
-**Status**: Ready for implementation
-**Next Steps**: Choose implementation option and begin Phase 1 setup
+**Status**: ✅ **All views complete and ready for production deployment**
+
+**Deployment Command**: `./create_all_fhir_views.sh`
+
+**Next Steps**: 
+1. Deploy all materialized views to production
+2. Implement automated refresh scheduling (Lambda + CloudWatch)
+3. Set up monitoring and alerting infrastructure
+4. Create QuickSight dashboards using the views
