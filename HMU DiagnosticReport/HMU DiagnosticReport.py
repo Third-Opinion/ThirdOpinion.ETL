@@ -85,20 +85,23 @@ def transform_main_diagnostic_report_data(df):
         F.col("id").alias("diagnostic_report_id"),
         F.col("resourcetype").alias("resource_type"),
         F.col("status"),
-        F.when(F.col("effectivedatetime").isNotNull(),
-               F.when(F.col("effectivedatetime").rlike("T"),
-                      F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd'T'HH:mm:ss'Z'")
-                     ).otherwise(
-                      F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd")
-                     )
-              ).otherwise(None).alias("effective_datetime"),
-        F.when(F.col("issued").isNotNull(),
-               F.when(F.col("issued").rlike("\\."),
-                      F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-                     ).otherwise(
-                      F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss'Z'")
-                     )
-              ).otherwise(None).alias("issued_datetime"),
+        # Handle effectivedatetime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),  # With nanoseconds
+            F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),        # With milliseconds
+            F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),             # No milliseconds
+            F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),             # UTC format
+            F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd'T'HH:mm:ss"),                # No timezone
+            F.to_timestamp(F.col("effectivedatetime"), "yyyy-MM-dd")                            # Date only
+        ).alias("effective_datetime"),
+        # Handle issued datetime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("issued_datetime"),
         F.col("code.text").alias("code_text"),
         F.when(F.col("code.coding").isNotNull() & (F.size(F.col("code.coding")) > 0),
                F.col("code.coding")[0].getField("code")
