@@ -167,6 +167,29 @@ aggregated_reference_ranges AS (
         ) AS reference_ranges
     FROM public.observation_reference_ranges orr
     GROUP BY orr.observation_id
+),
+interpretation_counts AS (
+    SELECT 
+        oi.observation_id,
+        COUNT(DISTINCT oi.interpretation_code) AS interpretation_count
+    FROM public.observation_interpretations oi
+    GROUP BY oi.observation_id
+),
+aggregated_interpretations AS (
+    SELECT 
+        oi.observation_id,
+        JSON_PARSE(
+            '[' || LISTAGG(DISTINCT
+                '{' ||
+                '"code":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(oi.interpretation_code, '[\r\n\t]', ''), '"', ''), '') || '",' ||
+                '"system":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(oi.interpretation_system, '[\r\n\t]', ''), '"', ''), '') || '",' ||
+                '"display":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(oi.interpretation_display, '[\r\n\t]', ''), '"', ''), '') || '"' ||
+                '}',
+                ','
+            ) WITHIN GROUP (ORDER BY oi.interpretation_code) || ']'
+        ) AS interpretations
+    FROM public.observation_interpretations oi
+    GROUP BY oi.observation_id
 )
 SELECT 
     -- ============================================
@@ -185,6 +208,10 @@ SELECT
     o.primary_code,                      -- Primary observation code (LOINC, SNOMED, etc.)
     o.primary_system,                    -- Code system
     o.primary_display,                   -- Code display name
+    
+    -- Aliases for query compatibility
+    o.primary_code AS observation_code,  -- Alias for queries using observation_code
+    o.primary_display AS observation_display,  -- Alias for queries using observation_display
     
     -- Value Information (multiple data types supported)
     o.value_string,                      -- String value
@@ -233,8 +260,8 @@ SELECT
     o.extensions,
     
     -- ETL Audit Fields
-    o.created_at,
-    o.updated_at,
+    o.created_at AS etl_created_at,
+    o.updated_at AS etl_updated_at,
     
     -- ============================================
     -- VITAL SIGNS PIVOTING (FROM CTE)
@@ -260,6 +287,11 @@ SELECT
     -- REFERENCE RANGES (FROM CTE)
     -- ============================================
     arr.reference_ranges,
+    
+    -- ============================================
+    -- INTERPRETATIONS (FROM CTE)
+    -- ============================================
+    ai.interpretations,
     
     -- ============================================
     -- CALCULATED FIELDS
@@ -293,14 +325,21 @@ SELECT
     COALESCE(cc.component_count, 0) AS component_count,
     
     -- Count of categories (from CTE)
-    COALESCE(catc.category_count, 0) AS category_count
+    COALESCE(catc.category_count, 0) AS category_count,
+    
+    -- Count of interpretations (from CTE)
+    COALESCE(ic.interpretation_count, 0) AS interpretation_count
 
 FROM public.observations o
     LEFT JOIN component_counts cc ON o.observation_id = cc.observation_id
     LEFT JOIN aggregated_components ac ON o.observation_id = ac.observation_id
     LEFT JOIN category_counts catc ON o.observation_id = catc.observation_id
     LEFT JOIN aggregated_categories acat ON o.observation_id = acat.observation_id
-    LEFT JOIN aggregated_reference_ranges arr ON o.observation_id = arr.observation_id;
+    LEFT JOIN aggregated_reference_ranges arr ON o.observation_id = arr.observation_id
+    LEFT JOIN interpretation_counts ic ON o.observation_id = ic.observation_id
+    LEFT JOIN aggregated_interpretations ai ON o.observation_id = ai.observation_id
+
+WHERE o.status != 'entered-in-error';
 
 -- ===================================================================
 -- REFRESH CONFIGURATION
