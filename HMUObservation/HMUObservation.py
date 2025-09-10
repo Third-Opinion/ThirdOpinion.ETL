@@ -120,12 +120,30 @@ def transform_main_observation_data(df):
         F.col("dataAbsentReason").getField("coding")[0].getField("system").alias("data_absent_reason_system"),
     ])
     
-    # Add temporal information - using actual schema field names
+    # Add temporal information - handle multiple datetime formats
     select_columns.extend([
-        F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX").alias("effective_datetime"),
-        F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX").alias("effective_period_start"),
+        # Handle effectiveDateTime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),  # With nanoseconds
+            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),        # With milliseconds
+            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),             # No milliseconds (your format)
+            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss")                 # No timezone
+        ).alias("effective_datetime"),
+        # Handle effectivePeriod.start with multiple formats
+        F.coalesce(
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("effective_period_start"),
         F.lit(None).alias("effective_period_end"),  # end field not in schema
-        F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX").alias("issued"),
+        # Handle issued with multiple formats
+        F.coalesce(
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("issued"),
     ])
     
     # Add body site and method (fields not in schema)

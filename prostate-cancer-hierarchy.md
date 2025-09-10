@@ -22,36 +22,163 @@
 #### Prostate Cancer Patients
 ```sql
 -- Identify patients with prostate cancer diagnosis
-SELECT DISTINCT patient_id, condition_text, code_codings
-FROM fact_fhir_conditions_view_v1 
-WHERE JSON_EXTRACT_PATH_TEXT(code_codings, '[0].code') = 'C61'
-   OR condition_text ILIKE '%prostate cancer%';
+  SELECT 
+        code_code, 
+       patient_id
+    FROM fact_fhir_conditions_view_v1 AS c 
+    WHERE c.code_code IN ('C61', 'Z19.1', 'Z19.2', 'R97.21') 
+        AND EXTRACT(YEAR FROM c.recorded_date) = 2025 
+    GROUP BY code_code, patient_id;
 ```
 
 #### ADT Medication Tracking
 ```sql
 -- Find patients on ADT medications
-SELECT patient_id, medication_display, status, authored_on
-FROM fact_fhir_medication_requests_view_v1
-WHERE medication_display ILIKE ANY(ARRAY[
-    '%leuprolide%', '%goserelin%', '%triptorelin%', 
-    '%degarelix%', '%bicalutamide%', '%enzalutamide%',
-    '%abiraterone%', '%lupron%', '%zoladex%'
-]);
+WITH target_patients AS (
+     SELECT 
+        code_code, 
+       patient_id
+    FROM fact_fhir_conditions_view_v1 AS c 
+    WHERE c.code_code IN ('C61', 'Z19.1', 'Z19.2', 'R97.21') 
+        AND EXTRACT(YEAR FROM c.recorded_date) = 2025 
+    GROUP BY code_code, patient_id
+)
+
+SELECT 
+    tp.patient_id,
+    medication_id,
+    tp.code_code as condition_code,
+  "medication_display",
+  authored_on,
+  "status"
+  FROM target_patients tp
+INNER JOIN public.fact_fhir_medication_requests_view_v1 mpv 
+    ON tp.patient_id = mpv.patient_id
+WHERE
+ mpv.medication_display ILIKE '%Leuprolide%' OR 
+mpv.medication_display ILIKE '%Leuprorelin%' OR 
+mpv.medication_display ILIKE '%Leuproreline%' OR 
+mpv.medication_display ILIKE '%Lupron%' OR 
+mpv.medication_display ILIKE '%Eligard%' OR 
+mpv.medication_display ILIKE '%Camcevi%' OR 
+mpv.medication_display ILIKE '%Fensolvi%' OR 
+mpv.medication_display ILIKE '%Viadur%' OR 
+mpv.medication_display ILIKE '%TAP-144%' OR 
+mpv.medication_display ILIKE '%A-43818%' OR 
+mpv.medication_display ILIKE '%Abbott-43818%' OR 
+
+-- Goserelin
+mpv.medication_display ILIKE '%Goserelin%' OR 
+mpv.medication_display ILIKE '%Zoladex%' OR 
+mpv.medication_display ILIKE '%ICI-118630%' OR 
+
+-- Triptorelin (including international variations)
+mpv.medication_display ILIKE '%Triptorelin%' OR 
+mpv.medication_display ILIKE '%Triptoréline%' OR 
+mpv.medication_display ILIKE '%Triptorelinum%' OR 
+mpv.medication_display ILIKE '%Trelstar%' OR 
+mpv.medication_display ILIKE '%Triptodur%' OR 
+mpv.medication_display ILIKE '%Decapeptyl%' OR 
+mpv.medication_display ILIKE '%CL 118532%' OR 
+
+-- LHRH/GnRH Antagonists
+-- Degarelix
+mpv.medication_display ILIKE '%Degarelix%' OR 
+mpv.medication_display ILIKE '%Firmagon%' OR 
+mpv.medication_display ILIKE '%FE 200486%' OR 
+mpv.medication_display ILIKE '%ASP-3550%' OR 
+
+-- Relugolix
+mpv.medication_display ILIKE '%Relugolix%' OR 
+mpv.medication_display ILIKE '%Orgovyx%' OR 
+mpv.medication_display ILIKE '%Relumina%' OR 
+mpv.medication_display ILIKE '%Myfembree%' OR 
+mpv.medication_display ILIKE '%Ryeqo%' OR 
+mpv.medication_display ILIKE '%TAK-385%' OR 
+mpv.medication_display ILIKE '%RVT-601%' OR 
+
+-- Anti-androgens
+-- Bicalutamide
+mpv.medication_display ILIKE '%Bicalutamide%' OR 
+mpv.medication_display ILIKE '%Casodex%' OR 
+mpv.medication_display ILIKE '%Cosudex%' OR 
+mpv.medication_display ILIKE '%Calutide%' OR 
+mpv.medication_display ILIKE '%ICI 176334%' OR 
+mpv.medication_display ILIKE '%ICI-176334%' OR 
+
+-- Enzalutamide (CRITICAL: Include MDV3100 variations)
+mpv.medication_display ILIKE '%Enzalutamide%' OR 
+mpv.medication_display ILIKE '%Xtandi%' OR 
+mpv.medication_display ILIKE '%MDV3100%' OR 
+mpv.medication_display ILIKE '%MDV 3100%' OR 
+mpv.medication_display ILIKE '%MDV-3100%' OR 
+
+-- Abiraterone (including development codes)
+mpv.medication_display ILIKE '%Abiraterone%' OR 
+mpv.medication_display ILIKE '%Zytiga%' OR 
+mpv.medication_display ILIKE '%Yonsa%' OR 
+mpv.medication_display ILIKE '%CB-7630%' OR 
+mpv.medication_display ILIKE '%CB7630%' OR 
+mpv.medication_display ILIKE '%CB 7630%' OR 
+mpv.medication_display ILIKE '%JNJ-212082%' OR 
+mpv.medication_display ILIKE '%JNJ212082%' OR 
+mpv.medication_display ILIKE '%JNJ 212082%' OR 
+mpv.medication_display ILIKE '%CB-7598%' OR 
+
+-- Additional first-generation anti-androgens
+-- Flutamide
+mpv.medication_display ILIKE '%Flutamide%' OR 
+mpv.medication_display ILIKE '%Eulexin%' OR 
+mpv.medication_display ILIKE '%SCH-13521%' OR 
+
+-- Nilutamide
+mpv.medication_display ILIKE '%Nilutamide%' OR 
+mpv.medication_display ILIKE '%Nilandron%' OR 
+mpv.medication_display ILIKE '%Anandron%' OR 
+
+-- Common ADT abbreviations that might appear
+mpv.medication_display ILIKE '%LHRH agonist%' OR 
+mpv.medication_display ILIKE '%GnRH agonist%' OR 
+mpv.medication_display ILIKE '%LHRH analog%' OR 
+mpv.medication_display ILIKE '%GnRH analog%' OR 
+mpv.medication_display ILIKE '%androgen deprivation%' OR 
+mpv.medication_display ILIKE '%antiandrogen%' OR 
+mpv.medication_display ILIKE '%anti-androgen%'
+ORDER BY 
+    mpv.authored_on;
 ```
 
 #### PSA and Testosterone Levels
-```sql
--- Extract PSA values from observations
-SELECT patient_id, effective_datetime, value_quantity_value, value_quantity_unit
-FROM fact_fhir_observations_view_v1
-WHERE observation_display ILIKE '%PSA%' 
-   OR observation_display ILIKE '%prostate specific antigen%';
 
--- Extract testosterone values
-SELECT patient_id, effective_datetime, value_quantity_value, value_quantity_unit  
+```sql
+-- Extract PSA values from observations using LOINC codes and text search
+SELECT patient_id, effective_datetime, value_quantity_value, value_quantity_unit,
+       observation_code, observation_display
 FROM fact_fhir_observations_view_v1
-WHERE observation_display ILIKE '%testosterone%';
+WHERE observation_code IN (
+    '2857-1',   -- PSA [Mass/volume] in Serum or Plasma
+    '83112-3',  -- PSA [Mass/volume] in Serum or Plasma by Immunoassay
+    '10886-0',  -- PSA Free [Mass/volume] in Serum or Plasma
+    '12841-3',  -- PSA Free/Total ratio in Serum or Plasma
+    '19195-7',  -- PSA [Units/volume] in Serum or Plasma
+    '35741-8'   -- PSA [Mass/volume] in Serum or Plasma by Detection limit <= 0.01 ng/mL
+)
+OR observation_display ILIKE '%PSA%' 
+OR observation_display ILIKE '%prostate specific antigen%';
+
+-- Extract testosterone values using LOINC codes and text search
+SELECT patient_id, effective_datetime, value_quantity_value, value_quantity_unit,
+       observation_code, observation_display
+FROM fact_fhir_observations_view_v1
+WHERE observation_code IN (
+    '2986-8',   -- Testosterone [Mass/volume] in Serum or Plasma
+    '14913-8',  -- Testosterone [Moles/volume] in Serum or Plasma  
+    '2991-8',   -- Testosterone Free [Mass/volume] in Serum or Plasma
+    '1854-9',   -- Testosterone bioavailable [Mass/volume] in Serum or Plasma
+    '49041-7',  -- Testosterone Free [Moles/volume] in Serum or Plasma
+    '58952-3'   -- Testosterone Free+Weakly bound [Mass/volume] in Serum or Plasma
+)
+OR observation_display ILIKE '%testosterone%';
 ```
 
 #### Radiographic Studies
@@ -134,11 +261,12 @@ WHERE type_display ILIKE ANY(ARRAY[
 
 ### Automated Monitoring Queries
 ```sql
--- PSA trend analysis for doubling time calculation
+-- PSA trend analysis for doubling time calculation using LOINC codes
 WITH psa_values AS (
   SELECT patient_id, effective_datetime, value_quantity_value as psa_value
   FROM fact_fhir_observations_view_v1 
-  WHERE observation_display ILIKE '%PSA%'
+  WHERE observation_code IN ('2857-1', '83112-3', '19195-7', '35741-8')
+     OR observation_display ILIKE '%PSA%'
   ORDER BY patient_id, effective_datetime
 )
 SELECT patient_id, 
@@ -147,7 +275,47 @@ SELECT patient_id,
        effective_datetime,
        DATEDIFF(day, LAG(effective_datetime) OVER (PARTITION BY patient_id ORDER BY effective_datetime), effective_datetime) as days_between
 FROM psa_values;
+
+-- Testosterone castrate level monitoring
+SELECT patient_id, effective_datetime, 
+       value_quantity_value as testosterone_level,
+       value_quantity_unit,
+       CASE 
+         WHEN value_quantity_value < 50 AND value_quantity_unit = 'ng/dL' THEN 'Castrate'
+         WHEN value_quantity_value < 1.7 AND value_quantity_unit = 'nmol/L' THEN 'Castrate'
+         ELSE 'Non-Castrate'
+       END as castration_status
+FROM fact_fhir_observations_view_v1
+WHERE observation_code IN ('2986-8', '14913-8')
+   OR observation_display ILIKE '%testosterone%';
 ```
+
+### LOINC Code Reference for Prostate Cancer Monitoring
+
+#### PSA (Prostate Specific Antigen) LOINC Codes
+| LOINC Code | Description | Common Use |
+|------------|-------------|------------|
+| **2857-1** | PSA [Mass/volume] in Serum or Plasma | Most common, general PSA |
+| **83112-3** | PSA [Mass/volume] in Serum or Plasma by Immunoassay | Method-specific |
+| **10886-0** | PSA Free [Mass/volume] in Serum or Plasma | Free PSA component |
+| **12841-3** | PSA Free/Total ratio in Serum or Plasma | Ratio calculation |
+| **19195-7** | PSA [Units/volume] in Serum or Plasma | Alternative units |
+| **35741-8** | PSA [Mass/volume] by Detection limit ≤0.01 ng/mL | Ultrasensitive PSA |
+
+#### Testosterone LOINC Codes
+| LOINC Code | Description | Clinical Relevance |
+|------------|-------------|-------------------|
+| **2986-8** | Testosterone [Mass/volume] in Serum or Plasma | Primary for castrate levels |
+| **14913-8** | Testosterone [Moles/volume] in Serum or Plasma | Alternative units (nmol/L) |
+| **2991-8** | Testosterone Free [Mass/volume] in Serum or Plasma | Free testosterone |
+| **1854-9** | Testosterone bioavailable [Mass/volume] in Serum or Plasma | Bioavailable portion |
+| **49041-7** | Testosterone Free [Moles/volume] in Serum or Plasma | Free in molar units |
+| **58952-3** | Testosterone Free+Weakly bound [Mass/volume] | Combined measurement |
+
+#### Critical Thresholds
+- **Castrate Testosterone**: <50 ng/dL or <1.7 nmol/L
+- **PSA Progression**: 25% increase + 2.0 ng/mL absolute increase
+- **PSA Doubling Time**: <10 months indicates high risk
 
 ---
 
