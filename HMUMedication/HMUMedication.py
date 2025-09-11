@@ -49,7 +49,15 @@ def transform_main_medication_data(df):
                F.col("meta").getField("versionId")
               ).otherwise(None).alias("meta_version_id"),
         F.when(F.col("meta").isNotNull(),
-               F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'")
+               # Handle meta.lastUpdated with multiple possible formats
+               F.coalesce(
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+               )
               ).otherwise(None).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
