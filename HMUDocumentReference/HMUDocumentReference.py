@@ -67,15 +67,44 @@ def transform_main_document_reference_data(df):
         F.when(F.col("type").isNotNull() & (F.size(F.col("type.coding")) > 0),
                F.col("type.coding")[0].getField("display")
               ).otherwise(None).alias("type_display"),
-        F.to_timestamp(F.col("date")).alias("date"),
+        # Handle date with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("date"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("date"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("date"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("date"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("date"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("date"), "yyyy-MM-dd")
+        ).alias("date"),
         F.when(F.col("custodian").isNotNull(),
                F.regexp_extract(F.col("custodian").getField("reference"), r"Organization/(.+)", 1)
               ).otherwise(None).alias("custodian_id"),
         F.col("description").alias("description"),
-        F.to_timestamp(F.col("context.period.start")).alias("context_period_start"),
-        F.to_timestamp(F.col("context.period.end")).alias("context_period_end"),
+        # Handle context.period.start with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("context.period.start"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("context.period.start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("context.period.start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("context.period.start"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("context.period.start"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("context_period_start"),
+        # Handle context.period.end with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("context.period.end"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("context.period.end"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("context.period.end"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("context.period.end"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("context.period.end"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("context_period_end"),
         F.col("meta.versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta.lastUpdated")).alias("meta_last_updated"),
+        # Handle meta.lastUpdated with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ]
@@ -173,18 +202,29 @@ def transform_document_reference_content(df):
         logger.warning("content column not found, returning empty DataFrame")
         return spark.createDataFrame([], schema="document_reference_id string, attachment_content_type string, attachment_url string")
 
+    # First, get the content array with index
     content_df = df.select(
         F.col("id").alias("document_reference_id"),
-        F.explode(F.col("content")).alias("content_item")
+        F.posexplode(F.col("content")).alias("content_index", "content_item")
     ).filter(
         F.col("content_item").isNotNull()
     )
     
+    # Handle both external URLs and embedded data
     content_final = content_df.select(
         F.col("document_reference_id"),
         F.col("content_item.attachment.contentType").alias("attachment_content_type"),
-        F.col("content_item.attachment.url").alias("attachment_url")
+        # Check if there's a URL field (external reference)
+        F.when(
+            F.col("content_item.attachment.url").isNotNull(),
+            F.col("content_item.attachment.url")
+        ).when(
+            # If no URL but has data field (embedded document), create reference path
+            F.col("content_item.attachment.data").isNotNull(),
+            F.concat(F.lit("ref:content["), F.col("content_index"), F.lit("].attachment.data"))
+        ).otherwise(None).alias("attachment_url")
     ).filter(
+        # Keep records that have either URL or data
         F.col("attachment_url").isNotNull()
     )
     
