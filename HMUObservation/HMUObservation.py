@@ -109,7 +109,14 @@ def transform_main_observation_data(df):
         F.col("valueCodeableConcept").getField("coding")[0].getField("code").alias("value_codeable_concept_code"),
         F.col("valueCodeableConcept").getField("coding")[0].getField("system").alias("value_codeable_concept_system"),
         F.col("valueCodeableConcept").getField("coding")[0].getField("display").alias("value_codeable_concept_display"),
-        F.to_timestamp(F.col("valueDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX").alias("value_datetime"),
+        # Handle valueDateTime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("valueDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("valueDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("valueDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("valueDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("valueDateTime"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("value_datetime"),
         F.lit(None).alias("value_boolean"),  # valueboolean field not in schema
     ])
     
@@ -161,7 +168,14 @@ def transform_main_observation_data(df):
     # Add metadata (using actual schema field names)
     select_columns.extend([
         F.col("meta").getField("versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX").alias("meta_last_updated"),
+        # Handle meta.lastUpdated with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.lit(None).alias("meta_source"),  # source field not in schema
         F.lit(None).alias("meta_profile"), # profile field not in schema
         convert_to_json_udf(F.col("meta").getField("security")).alias("meta_security"),
@@ -278,9 +292,9 @@ def transform_observation_reference_ranges(df):
     """Transform observation reference ranges"""
     logger.info("Transforming observation reference ranges...")
     
-    # Check if referencerange column exists (using actual CSV field name)
-    if "referencerange" not in df.columns:
-        logger.warning("referencerange column not found in data, returning empty DataFrame")
+    # Check if referenceRange column exists (using actual field name with camelCase)
+    if "referenceRange" not in df.columns:
+        logger.warning("referenceRange column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
             F.lit(0.0).alias("range_low_value"),
@@ -293,27 +307,91 @@ def transform_observation_reference_ranges(df):
             F.lit("").alias("range_text")
         ).filter(F.lit(False))
     
-    # Explode the referencerange array
+    # Explode the referenceRange array
     ranges_df = df.select(
         F.col("id").alias("observation_id"),
-        F.explode(F.col("referencerange")).alias("range_item")
+        F.explode(F.col("referenceRange")).alias("range_item")
     ).filter(
         F.col("range_item").isNotNull()
     )
     
-    # Extract range details - based on actual schema, only text field is available
-    ranges_final = ranges_df.select(
-        F.col("observation_id"),
-        F.lit(None).alias("range_low_value"),  # low field not in schema
-        F.lit(None).alias("range_low_unit"),   # low field not in schema
-        F.lit(None).alias("range_high_value"), # high field not in schema
-        F.lit(None).alias("range_high_unit"),  # high field not in schema
-        F.lit(None).alias("range_type_code"),  # type field not in schema
-        F.lit(None).alias("range_type_system"), # type field not in schema
-        F.lit(None).alias("range_type_display"), # type field not in schema
-        F.col("range_item.text").alias("range_text")
-    ).filter(
-        F.col("range_text").isNotNull()
+    # Debug: Check the schema of range_item to understand its structure
+    if ranges_df.count() > 0:
+        logger.info("Reference range item schema:")
+        ranges_df.select("range_item").printSchema()
+        logger.info("Sample reference range data:")
+        ranges_df.select("range_item").show(1, truncate=False)
+    
+    # Try multiple approaches to extract data based on possible structures
+    try:
+        # Approach 1: Try the nested structure with low/high as complex types
+        ranges_final = ranges_df.select(
+            F.col("observation_id"),
+            # Try different paths for low value
+            F.coalesce(
+                F.col("range_item.low.value.double"),
+                F.col("range_item.low.value.int"),
+                F.col("range_item.low.value"),
+                F.col("range_item.low")
+            ).cast(DecimalType(15,4)).alias("range_low_value"),
+            F.coalesce(
+                F.col("range_item.low.unit"),
+                F.lit(None)
+            ).alias("range_low_unit"),
+            # Try different paths for high value
+            F.coalesce(
+                F.col("range_item.high.value.double"),
+                F.col("range_item.high.value.int"),
+                F.col("range_item.high.value"),
+                F.col("range_item.high")
+            ).cast(DecimalType(15,4)).alias("range_high_value"),
+            F.coalesce(
+                F.col("range_item.high.unit"),
+                F.lit(None)
+            ).alias("range_high_unit"),
+            # Extract type if it exists
+            F.coalesce(
+                F.when(F.col("range_item.type.coding").isNotNull() & 
+                       (F.size(F.col("range_item.type.coding")) > 0),
+                       F.col("range_item.type.coding")[0].getField("code")),
+                F.col("range_item.type.code"),
+                F.col("range_item.type")
+            ).alias("range_type_code"),
+            F.coalesce(
+                F.when(F.col("range_item.type.coding").isNotNull() & 
+                       (F.size(F.col("range_item.type.coding")) > 0),
+                       F.col("range_item.type.coding")[0].getField("system")),
+                F.col("range_item.type.system")
+            ).alias("range_type_system"),
+            F.coalesce(
+                F.when(F.col("range_item.type.coding").isNotNull() & 
+                       (F.size(F.col("range_item.type.coding")) > 0),
+                       F.col("range_item.type.coding")[0].getField("display")),
+                F.col("range_item.type.display"),
+                F.col("range_item.type.text")
+            ).alias("range_type_display"),
+            F.col("range_item.text").alias("range_text")
+        )
+    except Exception as e:
+        logger.warning(f"Could not extract reference ranges using nested structure: {str(e)}")
+        # Fallback: Just extract text field if available
+        ranges_final = ranges_df.select(
+            F.col("observation_id"),
+            F.lit(None).cast(DecimalType(15,4)).alias("range_low_value"),
+            F.lit(None).alias("range_low_unit"),
+            F.lit(None).cast(DecimalType(15,4)).alias("range_high_value"),
+            F.lit(None).alias("range_high_unit"),
+            F.lit(None).alias("range_type_code"),
+            F.lit(None).alias("range_type_system"),
+            F.lit(None).alias("range_type_display"),
+            F.col("range_item.text").alias("range_text")
+        )
+    
+    # Filter to keep only records with some data
+    ranges_final = ranges_final.filter(
+        F.col("range_text").isNotNull() | 
+        F.col("range_low_value").isNotNull() | 
+        F.col("range_high_value").isNotNull()
     )
     
     return ranges_final
@@ -465,6 +543,52 @@ def transform_observation_performers(df):
     )
     
     return performers_final
+
+def transform_observation_codes(df):
+    """Transform observation codes (multiple codes per observation from code.coding array)"""
+    logger.info("Transforming observation codes...")
+    
+    # Check if code column exists
+    if "code" not in df.columns:
+        logger.warning("code column not found in data, returning empty DataFrame")
+        return df.select(
+            F.col("id").alias("observation_id"),
+            F.lit("").alias("code_code"),
+            F.lit("").alias("code_system"),
+            F.lit("").alias("code_display"),
+            F.lit("").alias("code_text")
+        ).filter(F.lit(False))
+    
+    # First extract the text from code level
+    codes_with_text = df.select(
+        F.col("id").alias("observation_id"),
+        F.col("code.text").alias("code_text"),
+        F.col("code.coding").alias("coding_array")
+    ).filter(
+        F.col("code").isNotNull()
+    )
+    
+    # Explode the coding array
+    codes_df = codes_with_text.select(
+        F.col("observation_id"),
+        F.col("code_text"),
+        F.explode(F.col("coding_array")).alias("coding_item")
+    ).filter(
+        F.col("coding_item").isNotNull()
+    )
+    
+    # Extract code details
+    codes_final = codes_df.select(
+        F.col("observation_id"),
+        F.col("coding_item.code").alias("code_code"),
+        F.col("coding_item.system").alias("code_system"),
+        F.col("coding_item.display").alias("code_display"),
+        F.col("code_text")
+    ).filter(
+        F.col("code_code").isNotNull()
+    )
+    
+    return codes_final
 
 def transform_observation_members(df):
     """Transform observation members"""
@@ -666,6 +790,18 @@ def create_observation_members_table_sql():
     ) SORTKEY (observation_id, member_observation_id)
     """
 
+def create_observation_codes_table_sql():
+    """Generate SQL for creating observation_codes table"""
+    return """
+    CREATE TABLE IF NOT EXISTS public.observation_codes (
+        observation_id VARCHAR(255),
+        code_code VARCHAR(50),
+        code_system VARCHAR(255),
+        code_display VARCHAR(255),
+        code_text VARCHAR(500)
+    ) SORTKEY (observation_id, code_code)
+    """
+
 def create_observation_derived_from_table_sql():
     """Generate SQL for creating observation_derived_from table"""
     return """
@@ -720,7 +856,7 @@ def main():
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
-        logger.info(f"🎯 Target: Redshift (9 tables)")
+        logger.info(f"🎯 Target: Redshift (10 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
         logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
         
@@ -744,9 +880,18 @@ def main():
         available_columns = observation_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
-        # Use all available columns (don't filter based on specific columns)
-        logger.info(f"✅ Using all {len(available_columns)} available columns")
-        observation_df = observation_df_raw
+        # TESTING MODE: Sample data for quick testing
+        # Comment out or set to False for production runs
+        USE_SAMPLE = False  # Set to False for full data processing
+        SAMPLE_SIZE = 1000
+        
+        if USE_SAMPLE:
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+            observation_df = observation_df_raw.limit(SAMPLE_SIZE)
+        else:
+            logger.info(f"✅ Using all {len(available_columns)} available columns")
+            observation_df = observation_df_raw
         
         logger.info("✅ Successfully read data using AWS Glue Data Catalog")
         
@@ -795,6 +940,10 @@ def main():
         logger.info("🔄 STEP 3: TRANSFORMING MULTI-VALUED DATA")
         logger.info("=" * 50)
         
+        observation_codes_df = transform_observation_codes(observation_df)
+        codes_count = observation_codes_df.count()
+        logger.info(f"✅ Transformed {codes_count:,} observation code records")
+        
         observation_categories_df = transform_observation_categories(observation_df)
         categories_count = observation_categories_df.count()
         logger.info(f"✅ Transformed {categories_count:,} observation category records")
@@ -828,6 +977,10 @@ def main():
         logger.info(f"✅ Transformed {derived_from_count:,} derived from records")
         
         # Debug: Show samples of multi-valued data if available
+        if codes_count > 0:
+            logger.info("Sample of observation codes data:")
+            observation_codes_df.show(3, truncate=False)
+        
         if categories_count > 0:
             logger.info("Sample of observation categories data:")
             observation_categories_df.show(3, truncate=False)
@@ -916,6 +1069,15 @@ def main():
         main_dynamic_frame = DynamicFrame.fromDF(main_flat_df, glueContext, "main_observation_dynamic_frame")
         
         # Convert other DataFrames with type casting
+        codes_flat_df = observation_codes_df.select(
+            F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("code_code").cast(StringType()).alias("code_code"),
+            F.col("code_system").cast(StringType()).alias("code_system"),
+            F.col("code_display").cast(StringType()).alias("code_display"),
+            F.col("code_text").cast(StringType()).alias("code_text")
+        )
+        codes_dynamic_frame = DynamicFrame.fromDF(codes_flat_df, glueContext, "codes_dynamic_frame")
+        
         categories_flat_df = observation_categories_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
             F.col("category_code").cast(StringType()).alias("category_code"),
@@ -1048,6 +1210,16 @@ def main():
             ]
         )
         
+        codes_resolved_frame = codes_dynamic_frame.resolveChoice(
+            specs=[
+                ("observation_id", "cast:string"),
+                ("code_code", "cast:string"),
+                ("code_system", "cast:string"),
+                ("code_display", "cast:string"),
+                ("code_text", "cast:string")
+            ]
+        )
+        
         categories_resolved_frame = categories_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
@@ -1146,6 +1318,7 @@ def main():
             return
         
         # Validate other tables
+        codes_final_count = codes_resolved_frame.toDF().count()
         categories_final_count = categories_resolved_frame.toDF().count()
         interpretations_final_count = interpretations_resolved_frame.toDF().count()
         reference_ranges_final_count = reference_ranges_resolved_frame.toDF().count()
@@ -1155,13 +1328,16 @@ def main():
         members_final_count = members_resolved_frame.toDF().count()
         derived_from_final_count = derived_from_resolved_frame.toDF().count()
         
-        logger.info(f"Final counts - Categories: {categories_final_count}, Interpretations: {interpretations_final_count}, Reference Ranges: {reference_ranges_final_count}, Components: {components_final_count}, Notes: {notes_final_count}, Performers: {performers_final_count}, Members: {members_final_count}, Derived From: {derived_from_final_count}")
+        logger.info(f"Final counts - Codes: {codes_final_count}, Categories: {categories_final_count}, Interpretations: {interpretations_final_count}, Reference Ranges: {reference_ranges_final_count}, Components: {components_final_count}, Notes: {notes_final_count}, Performers: {performers_final_count}, Members: {members_final_count}, Derived From: {derived_from_final_count}")
         
         # Debug: Show final sample data being written
         logger.info("Final sample data being written to Redshift (main observations):")
         main_final_df.show(3, truncate=False)
         
         # Show sample data for other tables as well
+        logger.info("Final sample data for observation codes:")
+        codes_resolved_frame.toDF().show(3, truncate=False)
+        
         logger.info("Final sample data for observation categories:")
         categories_resolved_frame.toDF().show(3, truncate=False)
         
@@ -1199,6 +1375,11 @@ def main():
         observations_table_sql = create_redshift_tables_sql()
         write_to_redshift(main_resolved_frame, "observations", observations_table_sql)
         logger.info("✅ Main observations table created and written successfully")
+        
+        logger.info("📝 Creating observation codes table...")
+        codes_table_sql = create_observation_codes_table_sql()
+        write_to_redshift(codes_resolved_frame, "observation_codes", codes_table_sql)
+        logger.info("✅ Observation codes table created and written successfully")
         
         logger.info("📝 Creating observation categories table...")
         categories_table_sql = create_observation_categories_table_sql()
@@ -1252,6 +1433,7 @@ def main():
         
         logger.info("\n📋 TABLES WRITTEN TO REDSHIFT:")
         logger.info("  ✅ public.observations (main observation data)")
+        logger.info("  ✅ public.observation_codes (observation codes)")
         logger.info("  ✅ public.observation_categories (observation categories)")
         logger.info("  ✅ public.observation_interpretations (observation interpretations)")
         logger.info("  ✅ public.observation_reference_ranges (reference ranges)")
@@ -1264,6 +1446,7 @@ def main():
         logger.info("\n📊 FINAL ETL STATISTICS:")
         logger.info(f"  📥 Total raw records processed: {total_records:,}")
         logger.info(f"  🔬 Main observation records: {main_count:,}")
+        logger.info(f"  🔢 Code records: {codes_count:,}")
         logger.info(f"  🏷️  Category records: {categories_count:,}")
         logger.info(f"  📊 Interpretation records: {interpretations_count:,}")
         logger.info(f"  📏 Reference range records: {reference_ranges_count:,}")
@@ -1274,11 +1457,15 @@ def main():
         logger.info(f"  📋 Derived from records: {derived_from_count:,}")
         
         # Calculate data expansion ratio
-        total_output_records = main_count + categories_count + interpretations_count + reference_ranges_count + components_count + notes_count + performers_count + members_count + derived_from_count
+        total_output_records = main_count + codes_count + categories_count + interpretations_count + reference_ranges_count + components_count + notes_count + performers_count + members_count + derived_from_count
         expansion_ratio = total_output_records / total_records if total_records > 0 else 0
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
         logger.info("\n" + "=" * 80)
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
         
