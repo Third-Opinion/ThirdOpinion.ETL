@@ -711,8 +711,8 @@ def main():
         # TESTING MODE: Sample data for quick testing
         # Set to True to process only a sample of records
 
-        USE_SAMPLE = True  # Set to True for testing with limited data
-        SAMPLE_SIZE = 100
+        USE_SAMPLE = False  # Set to True for testing with limited data
+        SAMPLE_SIZE = 1000
 
         if USE_SAMPLE:
             logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
