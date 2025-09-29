@@ -94,9 +94,18 @@ def transform_main_observation_data(df):
               ).otherwise(None).alias("specimen_id"),
         F.col("status"),
         F.col("code").getField("text").alias("observation_text"),
-        F.lit(None).alias("primary_code"),    # coding is null in sample data
-        F.lit(None).alias("primary_system"),  # coding is null in sample data
-        F.lit(None).alias("primary_display"), # coding is null in sample data
+        F.when(F.col("code").getField("coding").isNotNull() &
+               (F.size(F.col("code").getField("coding")) > 0),
+               F.col("code").getField("coding")[0].getField("code")
+              ).otherwise(None).alias("primary_code"),
+        F.when(F.col("code").getField("coding").isNotNull() &
+               (F.size(F.col("code").getField("coding")) > 0),
+               F.col("code").getField("coding")[0].getField("system")
+              ).otherwise(None).alias("primary_system"),
+        F.when(F.col("code").getField("coding").isNotNull() &
+               (F.size(F.col("code").getField("coding")) > 0),
+               F.col("code").getField("coding")[0].getField("display")
+              ).otherwise(None).alias("primary_display")
     ]
     
     # Add value fields - handle different value types (using actual schema field names)

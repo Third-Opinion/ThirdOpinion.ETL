@@ -44,7 +44,15 @@ def transform_main_practitioner_data(df):
                F.col("meta").getField("versionId")
               ).otherwise(None).alias("meta_version_id"),
         F.when(F.col("meta").isNotNull(),
-               F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'")
+               # Handle meta.lastUpdated with multiple possible formats
+               F.coalesce(
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+               )
               ).otherwise(None).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
@@ -219,6 +227,43 @@ def main():
         )
         
         practitioner_df = practitioner_dynamic_frame.toDF()
+
+        
+        # TESTING MODE: Sample data for quick testing
+
+        
+        # Set to True to process only a sample of records
+
+        
+        USE_SAMPLE = False  # Set to True for testing with limited data
+
+        
+        SAMPLE_SIZE = 1000
+
+        
+        
+
+        
+        if USE_SAMPLE:
+
+        
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+
+        
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+
+        
+            practitioner_df = practitioner_df.limit(SAMPLE_SIZE)
+
+        
+        else:
+
+        
+            logger.info("✅ Processing full dataset")
+
+        
+            practitioner_df = practitioner_df
+
         total_records = practitioner_df.count()
         logger.info(f"📊 Read {total_records:,} raw practitioner records")
 
@@ -259,6 +304,10 @@ def main():
         write_to_redshift(addresses_resolved_frame, "practitioner_addresses", create_practitioner_addresses_table_sql())
         
         end_time = datetime.now()
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info(f"🎉 ETL PROCESS COMPLETED SUCCESSFULLY in {end_time - start_time}")
         
     except Exception as e:

@@ -213,7 +213,7 @@ declare -a VIEWS=(
     "fact_fhir_diagnostic_reports_view_v1.sql:fact_fhir_diagnostic_reports_view_v1" # only v1 exists
     "fact_fhir_document_references_view_v1.sql:fact_fhir_document_references_view_v1" # only v1 exists
     "fact_fhir_medication_requests_view_v1.sql:fact_fhir_medication_requests_view_v1" # only v1 exists
-    "fact_fhir_observations_view_v1.sql:fact_fhir_observations_view_v1"             # only v1 exists
+    "fact_fhir_observations_view_v2.sql:fact_fhir_observations_view_v2"             # only v1 exists
     "fact_fhir_practitioners_view_v1.sql:fact_fhir_practitioners_view_v1"           # only v1 exists
     "fact_fhir_procedures_view_v1.sql:fact_fhir_procedures_view_v1"                 # only v1 exists
 )
@@ -270,7 +270,7 @@ echo -e "${RED}Failed: $FAIL_COUNT views${NC}"
 echo "====================================================================="
 
 # Optional: Refresh all views
-if [ $SUCCESS_COUNT -gt 0 ]; then
+if [ true ]; then
     read -p "Do you want to refresh all materialized views now? (y/n): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then

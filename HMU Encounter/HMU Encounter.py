@@ -115,8 +115,22 @@ def transform_main_encounter_data(df):
         F.lit("Encounter").alias("resourcetype"),  # Always "Encounter" for encounter records
         F.col("class").getField("code").alias("class_code"),
         F.col("class").getField("system").alias("class_display"),
-        F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("start_time"),
-        F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("end_time"),
+        # Handle period.start with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("start_time"),
+        # Handle period.end with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("end_time"),
     ]
     
     # Add service_provider_id handling - extract from serviceprovider field
@@ -213,8 +227,22 @@ def transform_encounter_participants(df):
                F.regexp_extract(F.col("individual_data").getField("reference"), r"Practitioner/(.+)", 1)
               ).otherwise(None).alias("participant_id"),
         F.lit(None).alias("participant_display"),  # display field not available in individual_data structure
-        F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("period_start"),
-        F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("period_end")
+        # Handle period_data.start with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("period_start"),
+        # Handle period_data.end with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("period_end")
     ).filter(
         F.col("participant_type").isNotNull() & F.col("participant_id").isNotNull()
     )
@@ -496,6 +524,31 @@ def main():
         
         # Convert to DataFrame first to check available columns
         encounter_df_raw = encounter_dynamic_frame.toDF()
+
+        # TESTING MODE: Sample data for quick testing
+
+        # Set to True to process only a sample of records
+
+        USE_SAMPLE = False  # Set to True for testing with limited data
+
+        SAMPLE_SIZE = 1000
+
+        
+
+        if USE_SAMPLE:
+
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+
+            encounter_df = encounter_df_raw.limit(SAMPLE_SIZE)
+
+        else:
+
+            logger.info("✅ Processing full dataset")
+
+            encounter_df = encounter_df_raw
+
         available_columns = encounter_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
@@ -857,6 +910,11 @@ def main():
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
         logger.info("\n" + "=" * 80)
+        
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
         

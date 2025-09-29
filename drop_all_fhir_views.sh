@@ -42,6 +42,7 @@ VIEWS=(
     "fact_fhir_procedures_view_v1"
     "fact_fhir_practitioners_view_v1"
     "fact_fhir_observations_view_v1"
+     "fact_fhir_observations_view_v2"
     "fact_fhir_medication_requests_view_v1"
     "fact_fhir_document_references_view_v1"
     "fact_fhir_diagnostic_reports_view_v1"

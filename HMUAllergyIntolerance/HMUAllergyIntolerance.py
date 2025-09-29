@@ -1,5 +1,6 @@
 from datetime import datetime
 import sys
+import time
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
@@ -72,8 +73,7 @@ def transform_main_allergy_intolerance_data(df):
                F.col("verificationStatus").getField("coding").getItem(0).getField("code")
               ).otherwise(None).alias("verification_status_code"),
 
-        # Type, Category, Criticality
-        F.col("type").alias("allergy_type"),
+        # Category, Criticality
         F.when(F.size(F.col("category")) > 0,
                F.col("category").getItem(0)
               ).otherwise(None).alias("category"),
@@ -199,7 +199,6 @@ def create_redshift_tables_sql():
         clinical_status_code VARCHAR(50),
         verification_status VARCHAR(50),
         verification_status_code VARCHAR(50),
-        allergy_type VARCHAR(50),
         category VARCHAR(50),
         criticality VARCHAR(50),
         code_text VARCHAR(500),
@@ -237,23 +236,60 @@ def create_allergy_extensions_table_sql():
 def write_to_redshift(dynamic_frame, table_name, preactions=""):
     logger.info(f"Writing {table_name} to Redshift...")
     logger.info(f"🔧 Preactions SQL for {table_name}:\\n{preactions}")
-    try:
-        glueContext.write_dynamic_frame.from_options(
-            frame=dynamic_frame,
-            connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": S3_TEMP_DIR,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION,
-                "preactions": preactions
-            },
-            transformation_ctx=f"write_{table_name}_to_redshift"
-        )
-        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
-    except Exception as e:
-        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
-        raise e
+
+    # Implement retry logic with exponential backoff
+    max_retries = 3
+    retry_delay = 30  # Start with 30 seconds
+
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Attempt {attempt + 1} of {max_retries} to connect to Redshift...")
+
+            glueContext.write_dynamic_frame.from_options(
+                frame=dynamic_frame,
+                connection_type="redshift",
+                connection_options={
+                    "redshiftTmpDir": S3_TEMP_DIR,
+                    "useConnectionProperties": "true",
+                    "dbtable": f"public.{table_name}",
+                    "connectionName": REDSHIFT_CONNECTION,
+                    "preactions": preactions,
+                    # Add connection timeout parameters
+                    "extracopyoptions": "TIMEFORMAT 'auto' COMPUPDATE OFF STATUPDATE ON",
+                    "tempformat": "AVRO",
+                    "hashfield": "",
+                    "hashexpression": "",
+                    "hashpartitions": "",
+                    # Additional JDBC parameters for timeout handling
+                    "aws_iam_role": "",  # Will use connection's IAM role
+                    "autopushdown": "true",
+                    "autopushdown.s3_result_cache": "true"
+                },
+                transformation_ctx=f"write_{table_name}_to_redshift",
+                format_options={
+                    "compression": "gzip"
+                }
+            )
+            logger.info(f"✅ Successfully wrote {table_name} to Redshift on attempt {attempt + 1}")
+            return  # Success, exit the function
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"❌ Attempt {attempt + 1} failed to write {table_name} to Redshift: {error_msg}")
+
+            # Check if this is a connection timeout error
+            if "SocketTimeoutException" in error_msg or "connection attempt failed" in error_msg.lower():
+                if attempt < max_retries - 1:
+                    logger.info(f"⏳ Waiting {retry_delay} seconds before retry...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"❌ All {max_retries} attempts failed. Giving up.")
+                    raise e
+            else:
+                # For non-timeout errors, don't retry
+                logger.error(f"❌ Non-recoverable error occurred. Not retrying.")
+                raise e
 
 def main():
     start_time = datetime.now()

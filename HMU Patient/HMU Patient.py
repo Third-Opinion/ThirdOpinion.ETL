@@ -2,6 +2,7 @@ from datetime import datetime
 import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
+from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
@@ -13,24 +14,40 @@ import logging
 
 # Set up logging
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
-# Initialize Glue context
-args = getResolvedOptions(sys.argv, ['JOB_NAME'])
-sc = SparkContext()
+args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+catalog_nm = "glue_catalog"
+
+s3_bucket = "s3://7df690fd40c734f8937daf02f39b2ec3-457560472834-group/datalake/hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view/"
+ahl_database = "hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view"
+tableCatalogId = "457560472834"  # AHL service account
+s3_output_bucket = "s3://healthlake-glue-output-2025"
+
+
+spark = (SparkSession.builder
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+    .config(f"spark.sql.catalog.{catalog_nm}", "org.apache.iceberg.spark.SparkCatalog")
+    .config(f"spark.sql.catalog.{catalog_nm}.warehouse", s3_bucket)
+    .config(f"spark.sql.catalog.{catalog_nm}.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
+    .config(f"spark.sql.catalog.{catalog_nm}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+    .config("spark.sql.catalog.glue_catalog.glue.lakeformation-enabled", "true")
+    .config("spark.sql.catalog.glue_catalog.glue.id", tableCatalogId)
+    .getOrCreate())
+sc = spark.sparkContext
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
-job.init(args['JOB_NAME'], args)
+job.init(args["JOB_NAME"], args)
 
-# Configuration
-DATABASE_NAME = "hmu-healthlake-database"
+# Configuration - Updated to use S3/Iceberg instead of Glue Catalog
+DATABASE_NAME = ahl_database  # Using AHL Iceberg database
 TABLE_NAME = "patient"
 REDSHIFT_CONNECTION = "Redshift connection"
 S3_TEMP_DIR = "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
 
-# Note: We now read all available columns from the Glue Catalog
-# instead of filtering to specific columns
+# Note: We now read data from S3 using Iceberg catalog instead of Glue Catalog
+# This provides better performance and direct access to S3 data
 
 def extract_organization_id_from_reference(reference_field):
     """Extract organization ID from FHIR reference format"""
@@ -77,7 +94,8 @@ def safe_get_field(df, column_name, field_name=None):
             return F.col(column_name).getField(field_name)
         else:
             return F.col(column_name)
-    except:
+    except Exception as e:
+        logger.warning(f"Column {column_name} or field {field_name} not found: {str(e)}")
         return F.lit(None)
 
 def convert_to_json_string(field):
@@ -88,8 +106,9 @@ def convert_to_json_string(field):
         if isinstance(field, str):
             return field
         else:
-            return json.dumps(field)
-    except:
+            return json.dumps(field, ensure_ascii=False, default=str)
+    except (TypeError, ValueError) as e:
+        logger.warning(f"JSON serialization failed for field: {str(e)}")
         return str(field)
 
 # Define UDF globally so it can be used in all transformation functions
@@ -110,8 +129,15 @@ def transform_main_patient_data(df):
         F.col("gender").alias("gender"),
         F.to_date(F.col("birthDate"), "yyyy-MM-dd").alias("birth_date"),
         F.when(F.col("deceasedDateTime").isNotNull(), True).otherwise(False).alias("deceased"),
-        F.to_timestamp(F.col("deceasedDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("deceased_date"),
-        F.lit("Patient").alias("resourcetype"),  # Always "Patient" for patient records
+        # Handle deceasedDateTime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("deceasedDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("deceasedDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("deceasedDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("deceasedDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("deceasedDateTime"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("deceased_date"),
+    F.lit("Patient").alias("resourcetype"),  # Always "Patient" for patient records
         F.lit(None).alias("photos"),  # photo field not available in schema
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
@@ -153,7 +179,14 @@ def transform_main_patient_data(df):
     # Add meta data handling
     select_columns.extend([
         F.col("meta").getField("versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("meta_last_updated"),
+        # Handle meta.lastUpdated datetime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.lit(None).alias("meta_source"),  # source field not available in meta struct
         convert_to_json_udf(F.col("meta").getField("security")).alias("meta_security"),
         F.lit(None).alias("meta_tag"),  # tag field not available in meta struct
@@ -616,6 +649,10 @@ def write_to_redshift(dynamic_frame, table_name, preactions=""):
         preactions = f"DELETE FROM public.{table_name};"
     
     try:
+        # Validate dynamic frame before writing
+        record_count = dynamic_frame.count()
+        logger.info(f"Writing {record_count} records to {table_name}")
+
         glueContext.write_dynamic_frame.from_options(
             frame=dynamic_frame,
             connection_type="redshift",
@@ -628,14 +665,16 @@ def write_to_redshift(dynamic_frame, table_name, preactions=""):
             },
             transformation_ctx=f"write_{table_name}_to_redshift"
         )
-        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
+        logger.info(f"✅ Successfully wrote {record_count} records to {table_name} in Redshift")
     except Exception as e:
         logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
-        raise e
+        logger.error(f"Error type: {type(e).__name__}")
+        raise
 
 def main():
     """Main ETL process"""
     start_time = datetime.now()
+
     try:
         logger.info("=" * 80)
         logger.info("🚀 STARTING ENHANCED FHIR PATIENT ETL PROCESS")
@@ -645,22 +684,46 @@ def main():
         logger.info(f"🎯 Target: Redshift (8 tables)")
         logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
         
-        # Step 1: Read data from HealthLake using AWS Glue Data Catalog
+        # Step 1: Read data from S3 using Iceberg catalog
         logger.info("\n" + "=" * 50)
-        logger.info("📥 STEP 1: READING DATA FROM GLUE CATALOG")
+        logger.info("📥 STEP 1: READING DATA FROM S3 ICEBERG CATALOG")
         logger.info("=" * 50)
         logger.info(f"Database: {DATABASE_NAME}")
         logger.info(f"Table: {TABLE_NAME}")
+        logger.info(f"Catalog: {catalog_nm}")
         
-        # Use the AWS Glue Data Catalog to read patient data (all columns)
-        patient_dynamic_frame = glueContext.create_dynamic_frame.from_catalog(
-            database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_patient_node"
-        )
+        # Use Iceberg to read patient data from S3
+        table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
+        logger.info(f"Reading from table: {table_name_full}")
+
+        patient_df_raw = spark.table(table_name_full)
         
-        # Convert to DataFrame first to check available columns
-        patient_df_raw = patient_dynamic_frame.toDF()
+        print("=== PATIENT DATA PREVIEW (Iceberg) ===")
+        patient_df_raw.show(5, truncate=False)  # Show 5 rows without truncating
+        print(f"Total records: {patient_df_raw.count()}")
+        print("Available columns:", patient_df_raw.columns)
+        print("Schema:")
+        patient_df_raw.printSchema()
+
+        # Convert to DynamicFrame for compatibility with existing code
+        # patient_dynamic_frame = DynamicFrame.fromDF(patient_df_raw, glueContext, "patient_dynamic_frame")
+
+        # TESTING MODE: Sample data for quick testing
+        # Set to True to process only a sample of records
+
+        USE_SAMPLE = False  # Set to True for testing with limited data
+        SAMPLE_SIZE = 1000
+
+        if USE_SAMPLE:
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+            patient_df = patient_df_raw.limit(SAMPLE_SIZE)
+
+        else:
+            logger.info("✅ Processing full dataset")
+            patient_df = patient_df_raw
+            
+     
         available_columns = patient_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
@@ -668,7 +731,7 @@ def main():
         logger.info(f"✅ Using all {len(available_columns)} available columns")
         patient_df = patient_df_raw
         
-        logger.info("✅ Successfully read data using AWS Glue Data Catalog")
+        logger.info("✅ Successfully read data using S3 Iceberg Catalog")
         
         total_records = patient_df.count()
         logger.info(f"📊 Read {total_records:,} raw patient records")
@@ -681,16 +744,20 @@ def main():
             logger.info("Raw data schema:")
             patient_df.printSchema()
             
-            # Check for NULL values in key fields
-            null_checks = {
-                "id": patient_df.filter(F.col("id").isNull()).count(),
-                "active": patient_df.filter(F.col("active").isNull()).count(),
-                "gender": patient_df.filter(F.col("gender").isNull()).count(),
-                "birthdate": patient_df.filter(F.col("birthdate").isNull()).count()
-            }
-            
+            # Check for NULL values in key fields using efficient aggregation
+            from pyspark.sql.functions import sum as spark_sum, when
+
+            null_check_df = patient_df.agg(
+                spark_sum(when(F.col("id").isNull(), 1).otherwise(0)).alias("id_nulls"),
+                spark_sum(when(F.col("active").isNull(), 1).otherwise(0)).alias("active_nulls"),
+                spark_sum(when(F.col("gender").isNull(), 1).otherwise(0)).alias("gender_nulls"),
+                spark_sum(when(F.col("birthDate").isNull(), 1).otherwise(0)).alias("birthdate_nulls")
+            ).collect()[0]
+
             logger.info("NULL value analysis in key fields:")
-            for field, null_count in null_checks.items():
+            for field, alias in [("id", "id_nulls"), ("active", "active_nulls"),
+                               ("gender", "gender_nulls"), ("birthDate", "birthdate_nulls")]:
+                null_count = null_check_df[alias] or 0
                 percentage = (null_count / total_records) * 100 if total_records > 0 else 0
                 logger.info(f"  {field}: {null_count:,} NULLs ({percentage:.1f}%)")
         else:
@@ -901,7 +968,7 @@ def main():
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 5: RESOLVING CHOICE TYPES")
         logger.info("=" * 50)
-        logger.info("Resolving choice types for Redshift compatibility...")
+        logger.info("Resolving choice types for Redshift compatibility with Glue 4 optimizations...")
         
         main_resolved_frame = main_dynamic_frame.resolveChoice(
             specs=[
@@ -1140,6 +1207,11 @@ def main():
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
         logger.info("\n" + "=" * 80)
+        
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
         
@@ -1152,8 +1224,9 @@ def main():
         logger.error(f"⏰ Job failed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.error(f"⏱️  Processing time before failure: {processing_time}")
         logger.error(f"🚨 Error: {str(e)}")
+        logger.error(f"🚨 Error type: {type(e).__name__}")
         logger.error("=" * 80)
-        raise e
+        raise
 
 if __name__ == "__main__":
     main()

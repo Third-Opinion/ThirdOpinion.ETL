@@ -37,13 +37,49 @@ def transform_main_medication_data(df):
     available_columns = df.columns
     logger.info(f"Available columns: {available_columns}")
     
+    # Convert complex data to JSON strings for SUPER column
+    def convert_to_json_string(field):
+        if field is None:
+            return None
+        try:
+            if isinstance(field, str):
+                return field
+            else:
+                return json.dumps(field)
+        except:
+            return str(field)
+
+    convert_to_json_udf = F.udf(convert_to_json_string, StringType())
+
     # Build the select statement dynamically based on available columns
     select_columns = [
         F.col("id").alias("medication_id"),
         F.col("resourceType").alias("resource_type"),
+
+        # Extract code as SUPER column (JSON array) - handle case where coding is null
+        F.when(F.col("code").isNotNull() &
+               F.col("code").getField("coding").isNotNull() &
+               (F.size(F.col("code").getField("coding")) > 0),
+               F.to_json(F.col("code").getField("coding"))
+              ).otherwise(None).alias("code"),
+
+        # Extract primary code fields from first element in coding array - handle null coding
+        F.when(F.col("code").isNotNull() &
+               F.col("code").getField("coding").isNotNull() &
+               (F.size(F.col("code").getField("coding")) > 0),
+               F.col("code").getField("coding")[0].getField("code")
+              ).otherwise(None).alias("primary_code"),
+
+        F.when(F.col("code").isNotNull() &
+               F.col("code").getField("coding").isNotNull() &
+               (F.size(F.col("code").getField("coding")) > 0),
+               F.col("code").getField("coding")[0].getField("system")
+              ).otherwise(None).alias("primary_system"),
+
         F.when(F.col("code").isNotNull(),
                F.col("code").getField("text")
-              ).otherwise(None).alias("code_text"),
+              ).otherwise(None).alias("primary_text"),
+
         F.col("status").alias("status"),
         F.when(F.col("meta").isNotNull(),
                F.col("meta").getField("versionId")
@@ -107,14 +143,22 @@ def transform_medication_identifiers(df):
 def create_redshift_tables_sql():
     """Generate SQL for creating main medications table in Redshift"""
     return """
-    -- Drop existing table if it exists
+    -- Drop any dependent views first
+    DROP VIEW IF EXISTS v_patient_medication_requests_comprehensive CASCADE;
+    DROP MATERIALIZED VIEW IF EXISTS fact_fhir_medication_requests_view_v1 CASCADE;
+
+    -- Drop existing table if it exists with CASCADE to remove all dependencies
     DROP TABLE IF EXISTS public.medications CASCADE;
-    
-    -- Main medications table
+
+    -- Main medications table (with temporary code_text column)
     CREATE TABLE public.medications (
         medication_id VARCHAR(255) PRIMARY KEY,
         resource_type VARCHAR(50),
         code_text VARCHAR(500),
+        code SUPER,
+        primary_code VARCHAR(100),
+        primary_system VARCHAR(255),
+        primary_text VARCHAR(500),
         status VARCHAR(50),
         meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
@@ -194,6 +238,31 @@ def main():
         
         # Convert to DataFrame first to check available columns
         medication_df_raw = medication_dynamic_frame.toDF()
+
+        # TESTING MODE: Sample data for quick testing
+
+        # Set to True to process only a sample of records
+
+        USE_SAMPLE = False  # Set to True for testing with limited data
+
+        SAMPLE_SIZE = 1000
+
+        
+
+        if USE_SAMPLE:
+
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+
+            medication_df = medication_df_raw.limit(SAMPLE_SIZE)
+
+        else:
+
+            logger.info("✅ Processing full dataset")
+
+            medication_df = medication_df_raw
+
         available_columns = medication_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
@@ -272,16 +341,26 @@ def main():
         logger.info("Converting to DynamicFrames and ensuring Redshift compatibility...")
         
         # Convert main medications DataFrame and ensure flat structure
+        # Temporarily add code_text column to work around Redshift connector caching issue
         main_flat_df = main_medication_df.select(
             F.col("medication_id").cast(StringType()).alias("medication_id"),
             F.col("resource_type").cast(StringType()).alias("resource_type"),
-            F.col("code_text").cast(StringType()).alias("code_text"),
+            F.col("primary_text").cast(StringType()).alias("code_text"),  # Temporary workaround
+            F.col("code").cast(StringType()).alias("code"),  # SUPER column as JSON string
+            F.col("primary_code").cast(StringType()).alias("primary_code"),
+            F.col("primary_system").cast(StringType()).alias("primary_system"),
+            F.col("primary_text").cast(StringType()).alias("primary_text"),
             F.col("status").cast(StringType()).alias("status"),
             F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
             F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
         )
+
+        # Debug: Verify the flattened DataFrame
+        logger.info("🔍 Debug: Flattened DataFrame columns after select:")
+        logger.info(f"Columns: {main_flat_df.columns}")
+        main_flat_df.printSchema()
         
         main_dynamic_frame = DynamicFrame.fromDF(main_flat_df, glueContext, "main_medication_dynamic_frame")
         
@@ -303,7 +382,11 @@ def main():
             specs=[
                 ("medication_id", "cast:string"),
                 ("resource_type", "cast:string"),
-                ("code_text", "cast:string"),
+                ("code_text", "cast:string"),  # Temporary workaround column
+                ("code", "cast:string"),  # SUPER column as JSON string
+                ("primary_code", "cast:string"),
+                ("primary_system", "cast:string"),
+                ("primary_text", "cast:string"),
                 ("status", "cast:string"),
                 ("meta_version_id", "cast:string"),
                 ("meta_last_updated", "cast:timestamp"),
@@ -349,6 +432,11 @@ def main():
         logger.info(f"Final DataFrame columns: {main_final_df.columns}")
         logger.info(f"Final DataFrame schema:")
         main_final_df.printSchema()
+
+        # Debug: Check actual column names for any unexpected ones
+        logger.info(f"Exact column list: {list(main_final_df.columns)}")
+        for col in main_final_df.columns:
+            logger.info(f"Column: '{col}' - Type: {dict(main_final_df.dtypes)[col]}")
         
         # Check for any null values in critical fields
         critical_field_checks = {
@@ -374,6 +462,38 @@ def main():
         medications_table_sql = create_redshift_tables_sql()
         write_to_redshift(main_resolved_frame, "medications", medications_table_sql)
         logger.info("✅ Main medications table dropped, recreated and written successfully")
+
+        # Clean up: Drop the temporary code_text column
+        logger.info("🧹 Removing temporary code_text column...")
+        cleanup_sql = "ALTER TABLE public.medications DROP COLUMN code_text;"
+
+        try:
+            # Execute cleanup SQL directly
+            from awsglue.utils import getResolvedOptions
+            import boto3
+
+            # We'll use a simple approach - create a minimal dynamic frame just to execute SQL
+            empty_df = spark.createDataFrame([], "medication_id string")
+            empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "cleanup_frame")
+
+            # Use the same connection but with minimal data and cleanup SQL as postactions
+            glueContext.write_dynamic_frame.from_options(
+                frame=empty_dynamic_frame.limit(0),  # Empty frame
+                connection_type="redshift",
+                connection_options={
+                    "redshiftTmpDir": S3_TEMP_DIR,
+                    "useConnectionProperties": "true",
+                    "dbtable": "public.temp_cleanup_table",
+                    "connectionName": REDSHIFT_CONNECTION,
+                    "preactions": cleanup_sql,
+                    "postactions": "DROP TABLE IF EXISTS public.temp_cleanup_table;"
+                },
+                transformation_ctx="cleanup_code_text_column"
+            )
+            logger.info("✅ Successfully removed temporary code_text column")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not remove temporary code_text column: {str(e)}")
+            logger.warning("⚠️ You may need to manually run: ALTER TABLE public.medications DROP COLUMN code_text;")
         
         logger.info("📝 Dropping and recreating medication identifiers table...")
         identifiers_table_sql = create_medication_identifiers_table_sql()
@@ -406,6 +526,11 @@ def main():
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
         logger.info("\n" + "=" * 80)
+        
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
         

@@ -55,7 +55,7 @@ SELECT
 INNER JOIN public.fact_fhir_medication_requests_view_v1 mpv 
     ON tp.patient_id = mpv.patient_id
 WHERE
- mpv.medication_display ILIKE '%Leuprolide%' OR 
+mpv.medication_display ILIKE '%Leuprolide%' OR 
 mpv.medication_display ILIKE '%Leuprorelin%' OR 
 mpv.medication_display ILIKE '%Leuproreline%' OR 
 mpv.medication_display ILIKE '%Lupron%' OR 

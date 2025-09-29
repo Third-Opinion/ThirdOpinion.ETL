@@ -569,6 +569,31 @@ def main():
         
         # Convert to DataFrame first to check available columns
         diagnostic_report_df_raw = diagnostic_report_dynamic_frame.toDF()
+
+        # TESTING MODE: Sample data for quick testing
+
+        # Set to True to process only a sample of records
+
+        USE_SAMPLE = False  # Set to True for testing with limited data
+
+        SAMPLE_SIZE = 1000
+
+        
+
+        if USE_SAMPLE:
+
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+
+            diagnostic_report_df = diagnostic_report_df_raw.limit(SAMPLE_SIZE)
+
+        else:
+
+            logger.info("✅ Processing full dataset")
+
+            diagnostic_report_df = diagnostic_report_df_raw
+
         available_columns = diagnostic_report_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
@@ -981,6 +1006,11 @@ def main():
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
         logger.info("\n" + "=" * 80)
+        
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
         

@@ -32,7 +32,11 @@
 -- 
 -- OUTPUT COLUMNS:
 -- - All core medication request fields from medication_requests table
--- - Medication details from medications table
+-- - Medication details from medications table including SUPER code column
+-- - medication_code: SUPER column with full JSON coding array
+-- - medication_primary_code: Primary medication code from first coding entry
+-- - medication_primary_system: Primary medication coding system
+-- - medication_primary_text: Primary medication text description
 -- - dosage_instructions: JSON array of dosage instructions with timing and routes
 -- - categories: JSON array of medication request categories
 -- - notes: JSON array of clinical notes
@@ -165,14 +169,18 @@ SELECT
     mr.meta_last_updated,                -- Last updated timestamp
     
     -- ETL Audit Fields
-    mr.created_at,
-    mr.updated_at,
+    mr.created_at AS etl_created_at,
+    mr.updated_at AS etl_updated_at,
     
     -- ============================================
     -- MEDICATION DETAILS
     -- ============================================
-    m.code_text AS medication_name,      -- Medication name from medications table
+    m.primary_text AS medication_name,   -- Medication name from medications table
     m.status AS medication_status,       -- Medication status
+    m.code AS medication_code,           -- SUPER column with full coding array
+    m.primary_code AS medication_primary_code,     -- Primary medication code
+    m.primary_system AS medication_primary_system, -- Primary medication coding system
+    m.primary_text AS medication_primary_text,     -- Primary medication text description
     
     -- ============================================
     -- DOSAGE INSTRUCTIONS (FROM CTE)
@@ -213,15 +221,8 @@ SELECT
         WHEN mr.status IN ('active', 'on-hold', 'unknown') 
         THEN TRUE
         ELSE FALSE
-    END AS is_active_request,
+    END AS is_active_request
     
-    -- Determine if medication is PRN (as needed)
-    CASE 
-        WHEN ad.dosage_instructions::VARCHAR LIKE '%"asNeeded":true%'
-        THEN TRUE
-        ELSE FALSE
-    END AS is_prn_medication
-
 FROM public.medication_requests mr
     LEFT JOIN public.medications m ON mr.medication_id = m.medication_id
     LEFT JOIN dosage_counts dc ON mr.medication_request_id = dc.medication_request_id

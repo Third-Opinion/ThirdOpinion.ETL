@@ -191,8 +191,8 @@ SELECT
     e.appointment_id,
     e.parent_encounter_id,
     e.meta_data,
-    e.created_at,
-    e.updated_at,
+    e.created_at AS etl_created_at,
+    e.updated_at AS etl_updated_at,
     
     -- ============================================
     -- IDENTIFIERS (FROM CTE)

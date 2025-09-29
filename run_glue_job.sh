@@ -171,13 +171,59 @@ show_status_summary() {
     echo
 }
 
+# Function to get mapped folder name for a job
+# Returns the mapped folder name or empty string if no mapping exists
+get_mapped_folder() {
+    local job_name="$1"
+    
+    # Define mappings using a case statement for compatibility
+    case "$job_name" in
+        "HMU Observation")
+            echo "HMUObservation"
+            ;;
+        "HMU Practitioner")
+            echo "HMUPractitioner"
+            ;;
+        "HMU Procedure")
+            echo "HMUProcedure"
+            ;;
+        "HMU DocumentReference")
+            echo "HMUDocumentReference"
+            ;;
+        "HMU MedicationDispense")
+            echo "HMUMedicationDispense"
+            ;;
+        "HMU MyJob")
+            echo "HMUMyJob"
+            ;;
+        # Jobs that map to themselves (folder name matches job name)
+        "HMU Patient"|"HMU Encounter"|"HMU Condition"|"HMU MedicationRequest")
+            echo "$job_name"
+            ;;
+        *)
+            # No mapping found
+            echo ""
+            ;;
+    esac
+}
+
 # Function to find Python file for job
 find_job_python_file() {
     local job_name=$1
     local python_file=""
+    local mapped_folder=""
     
-    # Try exact folder match first
-    if [[ -d "$job_name" ]]; then
+    # Check if there's a mapping for this job name
+    mapped_folder=$(get_mapped_folder "$job_name")
+    if [[ -n "$mapped_folder" ]]; then
+        echo -e "${BLUE}Using mapped folder: $mapped_folder${NC}" >&2
+        if [[ -d "$mapped_folder" ]]; then
+            python_file=$(find "$mapped_folder" -name "*.py" | head -1)
+        fi
+    fi
+    
+    # If not found via mapping, try exact folder match
+    if [[ -z "$python_file" ]] && [[ -d "$job_name" ]]; then
         python_file=$(find "$job_name" -name "*.py" | head -1)
     fi
     

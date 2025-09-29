@@ -148,8 +148,8 @@ SELECT
     pr.meta_last_updated,            -- Last updated timestamp
     
     -- ETL Audit Fields
-    pr.created_at,
-    pr.updated_at,
+    pr.created_at AS etl_created_at,
+    pr.updated_at AS etl_updated_at,
     
     -- ============================================
     -- PRACTITIONER NAME PROCESSING (ADAPTED FROM PATIENT VIEW)

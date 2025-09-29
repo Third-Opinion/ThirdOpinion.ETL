@@ -47,7 +47,7 @@ SELECT
         WHEN observation_code = '34611-4' THEN 'PSA Urine'
         ELSE 'PSA (Text Match)'
     END AS test_type
-FROM fact_fhir_observations_view_v1
+FROM fact_fhir_observations_view_v2
 WHERE observation_code IN (
     '2857-1',  -- PSA total [Mass/volume] in Serum or Plasma
     '10886-0', -- PSA free [Mass/volume] in Serum or Plasma  
@@ -78,7 +78,7 @@ SELECT
         WHEN observation_code = '6891-6' THEN 'Testosterone Free/Total Ratio'
         ELSE 'Testosterone (Text Match)'
     END AS test_type
-FROM fact_fhir_observations_view_v1
+FROM fact_fhir_observations_view_v2
 WHERE observation_code IN (
     '2986-8',  -- Testosterone total [Mass/volume] in Serum or Plasma
     '2991-8',  -- Testosterone free [Mass/volume] in Serum or Plasma
@@ -138,7 +138,7 @@ WITH latest_psa AS (
         observation_code as psa_code,
         observation_display as psa_display,
         ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY effective_datetime DESC) as rn
-    FROM fact_fhir_observations_view_v1
+    FROM fact_fhir_observations_view_v2
     WHERE observation_code IN ('2857-1', '10886-0', '35741-8', '34611-4')
        OR observation_display ILIKE '%PSA%'
        OR observation_display ILIKE '%prostate specific antigen%'
@@ -152,7 +152,7 @@ latest_testosterone AS (
         observation_code as testosterone_code,
         observation_display as testosterone_display,
         ROW_NUMBER() OVER (PARTITION BY patient_id ORDER BY effective_datetime DESC) as rn
-    FROM fact_fhir_observations_view_v1
+    FROM fact_fhir_observations_view_v2
     WHERE observation_code IN ('2986-8', '2991-8', '49041-7', '6891-6')
        OR observation_display ILIKE '%testosterone%'
 )
@@ -189,7 +189,7 @@ WITH psa_results AS (
         MAX(CASE WHEN observation_code = '10886-0' THEN value_quantity_value END) as latest_psa_free,
         MAX(effective_datetime) as latest_psa_date,
         COUNT(DISTINCT observation_id) as psa_test_count
-    FROM fact_fhir_observations_view_v1
+    FROM fact_fhir_observations_view_v2
     WHERE observation_code IN ('2857-1', '10886-0', '35741-8', '34611-4')
        OR observation_display ILIKE '%PSA%'
        OR observation_display ILIKE '%prostate specific antigen%'
@@ -202,7 +202,7 @@ testosterone_results AS (
         MAX(CASE WHEN observation_code = '2991-8' THEN value_quantity_value END) as latest_testosterone_free,
         MAX(effective_datetime) as latest_testosterone_date,
         COUNT(DISTINCT observation_id) as testosterone_test_count
-    FROM fact_fhir_observations_view_v1
+    FROM fact_fhir_observations_view_v2
     WHERE observation_code IN ('2986-8', '2991-8', '49041-7', '6891-6')
        OR observation_display ILIKE '%testosterone%'
     GROUP BY patient_id
@@ -279,7 +279,7 @@ SELECT
         LAG(effective_datetime) OVER (PARTITION BY patient_id ORDER BY effective_datetime),
         effective_datetime
     ) as days_between_tests
-FROM fact_fhir_observations_view_v1
+FROM fact_fhir_observations_view_v2
 WHERE observation_code = '2857-1'  -- PSA Total only for trending
    OR (observation_display ILIKE '%PSA%' AND observation_display NOT ILIKE '%free%')
 ORDER BY patient_id, effective_datetime;
@@ -310,7 +310,7 @@ testosterone_levels AS (
             WHEN o.effective_datetime >= t.first_trt_prescription THEN 'Post-TRT'
             ELSE 'No TRT'
         END AS trt_status
-    FROM fact_fhir_observations_view_v1 o
+    FROM fact_fhir_observations_view_v2 o
     LEFT JOIN trt_start t ON o.patient_id = t.patient_id
     WHERE o.observation_code = '2986-8'  -- Testosterone Total
        OR o.observation_display ILIKE '%testosterone%total%'

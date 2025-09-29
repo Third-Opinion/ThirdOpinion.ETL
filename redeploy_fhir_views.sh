@@ -28,7 +28,7 @@ REGION="us-east-2"
 VIEW_NAMES=(
     "fact_fhir_patients_view_v2"
     "fact_fhir_encounters_view_v2"
-    "fact_fhir_observations_view_v1"
+    "fact_fhir_observations_view_v2"
     "fact_fhir_practitioners_view_v1"
     "fact_fhir_document_references_view_v1"
     "fact_fhir_medication_requests_view_v1"
@@ -59,6 +59,7 @@ execute_sql() {
     local statement_id=$(aws redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
+        --secret-arn "$SECRET_ARN" \
         --sql "$sql" \
         --region "$REGION" \
         --query Id \
@@ -136,7 +137,7 @@ check_view_exists() {
     local statement_id=$(aws redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
-     
+        --secret-arn "$SECRET_ARN" \
         --sql "$sql" \
         --region "$REGION" \
         --query Id \

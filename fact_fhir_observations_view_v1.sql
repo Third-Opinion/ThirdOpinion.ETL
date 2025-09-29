@@ -217,6 +217,7 @@ SELECT
     o.value_string,                      -- String value
     o.value_quantity_value,              -- Numeric value
     o.value_quantity_unit,               -- Unit of measure
+    o.value_quantity_code,               -- Unit of measure code
     o.value_quantity_system,             -- Unit system
     o.value_codeable_concept_code,       -- Coded value
     o.value_codeable_concept_system,     -- Coded value system

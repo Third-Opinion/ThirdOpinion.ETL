@@ -219,7 +219,14 @@ def transform_main_condition_data(df):
     # Add metadata information
     select_columns.extend([
         F.col("meta").getField("versionId").alias("meta_version_id"),
-        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("meta_last_updated"),
+        # Handle meta.lastUpdated with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.lit(None).alias("meta_source"),
         convert_to_json_udf(F.col("meta").getField("profile")).alias("meta_profile"),
         F.lit(None).alias("meta_security"),
@@ -768,6 +775,31 @@ def main():
         
         # Convert to DataFrame first to check available columns
         condition_df_raw = condition_dynamic_frame.toDF()
+
+        # TESTING MODE: Sample data for quick testing
+
+        # Set to True to process only a sample of records
+
+        USE_SAMPLE = False  # Set to True for testing with limited data
+
+        SAMPLE_SIZE = 1000
+
+        
+
+        if USE_SAMPLE:
+
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+
+            condition_df = condition_df_raw.limit(SAMPLE_SIZE)
+
+        else:
+
+            logger.info("✅ Processing full dataset")
+
+            condition_df = condition_df_raw
+
         available_columns = condition_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
@@ -1472,6 +1504,11 @@ def main():
         logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
         
         logger.info("\n" + "=" * 80)
+        
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
         logger.info("=" * 80)
         

@@ -344,6 +344,43 @@ def main():
         )
         
         document_reference_df_raw = document_reference_dynamic_frame.toDF()
+
+        
+        # TESTING MODE: Sample data for quick testing
+
+        
+        # Set to True to process only a sample of records
+
+        
+        USE_SAMPLE = False  # Set to True for testing with limited data
+
+        
+        SAMPLE_SIZE = 1000
+
+        
+        
+
+        
+        if USE_SAMPLE:
+
+        
+            logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
+
+        
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
+
+        
+            document_reference_df = document_reference_df_raw.limit(SAMPLE_SIZE)
+
+        
+        else:
+
+        
+            logger.info("✅ Processing full dataset")
+
+        
+            document_reference_df = document_reference_df_raw
+
         total_records = document_reference_df_raw.count()
         logger.info(f"📊 Read {total_records:,} raw document reference records")
 
@@ -406,6 +443,11 @@ def main():
 
         end_time = datetime.now()
         logger.info("\n" + "=" * 80)
+        
+        if USE_SAMPLE:
+            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
+            logger.info("⚠️  Set USE_SAMPLE = False for production runs")
         logger.info("🎉 ETL PROCESS COMPLETED SUCCESSFULLY!")
         logger.info(f"⏱️  Total processing time: {end_time - start_time}")
         logger.info("=" * 80)

@@ -138,8 +138,8 @@ SELECT
     p.meta_tag,
     
     -- ETL Audit fields
-    p.created_at,
-    p.updated_at,
+    p.created_at AS etl_created_at,
+    p.updated_at AS etl_updated_at,
     
     -- ============================================
     -- ENHANCED NAME PROCESSING WITH WINDOW FUNCTIONS
