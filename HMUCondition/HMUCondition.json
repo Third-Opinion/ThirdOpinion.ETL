@@ -1,5 +1,5 @@
 {
-  "name": "HMUMedicationDispense",
+  "name": "HMUCondition",
   "jobMode": "SCRIPT",
   "description": "",
   "role": "arn:aws:iam::442042533707:role/service-role/AWSGlueServiceRole",
@@ -8,7 +8,7 @@
   },
   "command": {
     "name": "glueetl",
-    "scriptLocation": "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUMedicationDispense.py",
+    "scriptLocation": "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUCondition.py",
     "pythonVersion": "3"
   },
   "defaultArguments": {
@@ -42,6 +42,6 @@
     "provider": "GITHUB",
     "repository": "ThirdOpinion.ETL",
     "branch": "master",
-    "folder": "HMUMedicationDispense"
+    "folder": "HMUCondition"
   }
 }

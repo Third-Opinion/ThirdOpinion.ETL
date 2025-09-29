@@ -24,72 +24,65 @@
 --
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW rpt_fhir_hmu_patients_v1
-BACKUP NO
-AUTO REFRESH NO
-AS
-WITH target_patients AS (
-    SELECT DISTINCT
-        c.patient_id,
+CREATE MATERIALIZED VIEW rpt_fhir_hmu_patients_v1 BACKUP NO AUTO REFRESH NO AS WITH target_patients AS (
+    SELECT
+        DISTINCT c.patient_id,
         e.last_encounter_date
-    FROM fact_fhir_conditions_view_v1 AS c
-    INNER JOIN (
-        SELECT
-            patient_id,
-            MAX(start_time) AS last_encounter_date
-        FROM fact_fhir_encounters_view_v2
-        GROUP BY patient_id
-    ) AS e ON c.patient_id = e.patient_id
-    WHERE (
-        (c.code_code IN ('C61', 'Z19.1', 'Z19.2', 'R97.21')
-         AND c.code_system = 'http://hl7.org/fhir/sid/icd-10-cm')
-    )
+    FROM
+        fact_fhir_conditions_view_v1 AS c
+        INNER JOIN (
+            SELECT
+                patient_id,
+                MAX(start_time) AS last_encounter_date
+            FROM
+                fact_fhir_encounters_view_v2
+            GROUP BY
+                patient_id
+        ) AS e ON c.patient_id = e.patient_id
+    WHERE
+        (
+            (
+                c.code_code IN ('C61', 'Z19.1', 'Z19.2', 'R97.21')
+                AND c.code_system = 'http://hl7.org/fhir/sid/icd-10-cm'
+            )
+        )
         AND e.last_encounter_date >= '2024-01-01'
 )
 SELECT
     -- PATIENT IDENTIFICATION
     p.patient_id,
     tp.last_encounter_date,
-
     -- DEMOGRAPHICS
     p.birth_date,
     p.gender,
-
     -- NAME INFORMATION (JSON)
     p.names,
-
     -- CONTACT INFORMATION
     p.primary_city,
     p.primary_state,
     p.all_addresses,
     p.address_count,
-
     -- STATUS AND METADATA
     p.active,
     p.deceased,
     p.deceased_date,
     p.managing_organization_id,
-
     -- CLINICAL METRICS
     p.total_encounter_count,
     p.encounters_last_year,
     p.total_condition_count,
     p.active_condition_count,
-
     -- METADATA
     p.meta_version_id,
     p.meta_last_updated,
     p.meta_source,
-   
-
     -- DERIVED FIELDS (from patients view)
     p.current_age,
-
     -- TIME SINCE LAST ENCOUNTER
     DATEDIFF(day, tp.last_encounter_date, CURRENT_DATE) AS days_since_last_encounter
-
-FROM target_patients tp
-INNER JOIN fact_fhir_patients_view_v2 p ON tp.patient_id = p.patient_id;
+FROM
+    target_patients tp
+    INNER JOIN fact_fhir_patients_view_v2 p ON tp.patient_id = p.patient_id;
 
 -- ===================================================================
 -- USAGE NOTES

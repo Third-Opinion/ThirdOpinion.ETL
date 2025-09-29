@@ -1,14 +1,14 @@
 {
-  "name" : "HMU MedicationRequest",
+  "name" : "HMUPatient",
   "jobMode" : "SCRIPT",
   "description" : "",
-  "role" : "arn:aws:iam::442042533707:role/Admin-TestingGlue-Leo",
+  "role" : "arn:aws:iam::442042533707:role/service-role/AWSGlueServiceRole",
   "executionProperty" : {
     "maxConcurrentRuns" : 1
   },
   "command" : {
     "name" : "glueetl",
-    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMU MedicationRequest.py",
+    "scriptLocation" : "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUPatient.py",
     "pythonVersion" : "3"
   },
   "defaultArguments" : {
@@ -16,9 +16,12 @@
     "--enable-spark-ui" : "true",
     "--spark-event-logs-path" : "s3://aws-glue-assets-442042533707-us-east-2/sparkHistoryLogs/",
     "--enable-job-insights" : "true",
+    "--enable-debug-logging" : "true",
     "--enable-observability-metrics" : "true",
     "--enable-glue-datacatalog" : "true",
+    "--enable-continuous-cloudwatch-log" : "true",
     "--job-bookmark-option" : "job-bookmark-disable",
+    "--datalake-formats" : "iceberg",
     "--job-language" : "python",
     "--TempDir" : "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
   },
@@ -29,7 +32,7 @@
   "allocatedCapacity" : 10,
   "timeout" : 480,
   "maxCapacity" : 10.0,
-  "glueVersion" : "5.0",
+  "glueVersion" : "4.0",
   "numberOfWorkers" : 10,
   "workerType" : "G.1X",
   "executionClass" : "STANDARD",
@@ -37,6 +40,6 @@
     "provider" : "GITHUB",
     "repository" : "ThirdOpinion.ETL",
     "branch" : "master",
-    "folder" : "HMU MedicationRequest"
+    "folder" : "HMUPatient"
   }
 }
