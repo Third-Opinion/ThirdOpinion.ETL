@@ -146,7 +146,7 @@ def transform_main_observation_data(df):
     # Add value fields - handle different value types (using actual schema field names)
     select_columns.extend([
         F.col("valueString").alias("value_string"),
-        F.col("valueQuantity").getField("value").getField("double").alias("value_quantity_value"),
+        F.col("valueQuantity").getField("value").alias("value_quantity_value"),
         F.col("valueQuantity").getField("unit").alias("value_quantity_unit"),
         F.col("valueQuantity").getField("system").alias("value_quantity_system"),
         F.col("valueCodeableConcept").getField("text").alias("value_codeable_concept_text"),
@@ -917,13 +917,9 @@ def main():
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
-                database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_observation_node"
-        )
         
         # Convert to DataFrame first to check available columns
-        observation_df_raw = observation_dynamic_frame.toDF()
+        observation_df_raw = df_raw
         available_columns = observation_df_raw.columns
         logger.info(f"📋 Available columns in source: {available_columns}")
         
@@ -1162,11 +1158,7 @@ def main():
             F.col("component_display").cast(StringType()).alias("component_display"),
             F.col("component_text").cast(StringType()).alias("component_text"),
             F.col("component_value_string").cast(StringType()).alias("component_value_string"),
-            F.when(F.col("component_value_quantity_value").getField("double").isNotNull(),
-                   F.col("component_value_quantity_value").getField("double")
-                  ).when(F.col("component_value_quantity_value").getField("int").isNotNull(),
-                         F.col("component_value_quantity_value").getField("int")
-                        ).otherwise(None).cast(DecimalType(15,4)).alias("component_value_quantity_value"),
+            F.col("component_value_quantity_value").cast(DecimalType(15,4)).alias("component_value_quantity_value"),
             F.col("component_value_quantity_unit").cast(StringType()).alias("component_value_quantity_unit"),
             F.col("component_value_codeable_concept_code").cast(StringType()).alias("component_value_codeable_concept_code"),
             F.col("component_value_codeable_concept_system").cast(StringType()).alias("component_value_codeable_concept_system"),
@@ -1528,7 +1520,6 @@ def main():
         logger.error("=" * 80)
         raise e
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     main()
     job.commit()

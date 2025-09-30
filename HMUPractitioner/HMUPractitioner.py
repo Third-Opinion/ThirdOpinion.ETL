@@ -259,12 +259,8 @@ def main():
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
-            database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_practitioner_node"
-        )
         
-        practitioner_df = practitioner_dynamic_frame.toDF()
+        practitioner_df = df_raw
 
         
         # TESTING MODE: Sample data for quick testing
@@ -352,7 +348,6 @@ def main():
         logger.error(f"❌ ETL PROCESS FAILED: {str(e)}")
         raise e
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     main()
     job.commit()

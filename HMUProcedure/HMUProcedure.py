@@ -234,12 +234,8 @@ def main():
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
-            database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_procedure_node"
-        )
         
-        procedure_df = procedure_dynamic_frame.toDF()
+        procedure_df = df_raw
 
         
         # TESTING MODE: Sample data for quick testing

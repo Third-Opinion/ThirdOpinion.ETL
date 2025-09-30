@@ -121,6 +121,7 @@ def extract_practitioner_id_from_reference(reference_field):
                 return reference_field.split("/")[-1]
     return None
 
+
 def safe_get_field(df, column_name, field_name=None):
     """Safely get a field from a column, handling cases where column might not exist"""
     try:
@@ -174,9 +175,7 @@ def transform_main_condition_data(df):
         F.when(F.col("clinicalStatus").isNotNull() & (F.size(F.col("clinicalStatus").getField("coding")) > 0),
                F.col("clinicalStatus").getField("coding")[0].getField("system")
               ).otherwise(None).alias("clinical_status_system"),
-        F.when(F.col("clinicalStatus").isNotNull() & (F.size(F.col("clinicalStatus").getField("coding")) > 0),
-               F.col("clinicalStatus").getField("coding")[0].getField("display")
-              ).otherwise(None).alias("clinical_status_display"),
+        F.lit(None).alias("clinical_status_display"),
     ])
     
     # Add verification status information
@@ -187,9 +186,7 @@ def transform_main_condition_data(df):
         F.when(F.col("verificationStatus").isNotNull() & (F.size(F.col("verificationStatus").getField("coding")) > 0),
                F.col("verificationStatus").getField("coding")[0].getField("system")
               ).otherwise(None).alias("verification_status_system"),
-        F.when(F.col("verificationStatus").isNotNull() & (F.size(F.col("verificationStatus").getField("coding")) > 0),
-               F.col("verificationStatus").getField("coding")[0].getField("display")
-              ).otherwise(None).alias("verification_status_display"),
+        F.lit(None).alias("verification_status_display"),
     ])
     
     # Add condition text information
@@ -209,9 +206,7 @@ def transform_main_condition_data(df):
             F.when(F.col("severity").isNotNull(),
                    F.col("severity").getField("coding")[0].getField("system")
                   ).otherwise(None).alias("severity_system"),
-            F.when(F.col("severity").isNotNull(),
-                   F.col("severity").getField("coding")[0].getField("display")
-                  ).otherwise(None).alias("severity_display"),
+            F.lit(None).alias("severity_display"),
         ])
     else:
         # Column doesn't exist, use null values
@@ -440,20 +435,26 @@ def transform_condition_stages(df):
         F.col("stage_item").isNotNull()
     )
     
-    # Extract stage details
+    # Extract stage details - handle cases where fields might be References instead of CodeableConcepts
     stages_final = stages_df.select(
         F.col("condition_id"),
-        F.col("stage_item.summary").getField("coding")[0].getField("code").alias("stage_summary_code"),
-        F.col("stage_item.summary").getField("coding")[0].getField("system").alias("stage_summary_system"),
-        F.col("stage_item.summary").getField("coding")[0].getField("display").alias("stage_summary_display"),
-        F.col("stage_item.assessment").getField("coding")[0].getField("code").alias("stage_assessment_code"),
-        F.col("stage_item.assessment").getField("coding")[0].getField("system").alias("stage_assessment_system"),
-        F.col("stage_item.assessment").getField("coding")[0].getField("display").alias("stage_assessment_display"),
-        F.col("stage_item.type").getField("coding")[0].getField("code").alias("stage_type_code"),
-        F.col("stage_item.type").getField("coding")[0].getField("system").alias("stage_type_system"),
-        F.col("stage_item.type").getField("coding")[0].getField("display").alias("stage_type_display")
+        F.when(F.col("stage_item.summary").isNotNull(),
+               F.col("stage_item.summary").getField("display")).otherwise(None).alias("stage_summary_code"),
+        F.lit(None).alias("stage_summary_system"),
+        F.when(F.col("stage_item.summary").isNotNull(),
+               F.col("stage_item.summary").getField("display")).otherwise(None).alias("stage_summary_display"),
+        F.when(F.col("stage_item.assessment").isNotNull(),
+               F.col("stage_item.assessment").getField("reference")).otherwise(None).alias("stage_assessment_code"),
+        F.lit(None).alias("stage_assessment_system"),
+        F.when(F.col("stage_item.assessment").isNotNull(),
+               F.col("stage_item.assessment").getField("display")).otherwise(None).alias("stage_assessment_display"),
+        F.when(F.col("stage_item.type").isNotNull(),
+               F.col("stage_item.type").getField("display")).otherwise(None).alias("stage_type_code"),
+        F.lit(None).alias("stage_type_system"),
+        F.when(F.col("stage_item.type").isNotNull(),
+               F.col("stage_item.type").getField("display")).otherwise(None).alias("stage_type_display")
     ).filter(
-        F.col("stage_summary_code").isNotNull()
+        F.col("stage_summary_code").isNotNull() | F.col("stage_assessment_code").isNotNull() | F.col("stage_type_code").isNotNull()
     )
     
     return stages_final
@@ -827,13 +828,9 @@ def main():
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
-                database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_condition_node"
-        )
-        
+
         # Convert to DataFrame first to check available columns
-        condition_df_raw = condition_dynamic_frame.toDF()
+        condition_df_raw = df_raw
 
         # TESTING MODE: Sample data for quick testing
 
@@ -1583,7 +1580,6 @@ def main():
         logger.error("=" * 80)
         raise e
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     main()
     job.commit()

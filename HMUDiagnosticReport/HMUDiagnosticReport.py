@@ -600,13 +600,9 @@ def main():
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
-            database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_diagnostic_report_node"
-        )
         
         # Convert to DataFrame first to check available columns
-        diagnostic_report_df_raw = diagnostic_report_dynamic_frame.toDF()
+        diagnostic_report_df_raw = df_raw
 
         # TESTING MODE: Sample data for quick testing
 
@@ -1064,7 +1060,6 @@ def main():
         logger.error("=" * 80)
         raise e
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     main()
     job.commit()

@@ -58,18 +58,40 @@ deploy_job() {
 
     log_info "Processing $actual_job_name from $json_file"
 
+    # Copy Python script to S3
+    local python_file="${job_dir}/${actual_job_name}.py"
+    if [ -f "$python_file" ]; then
+        local s3_location=$(jq -r '.Command.ScriptLocation' "$json_file")
+        if [ "$s3_location" != "null" ] && [ ! -z "$s3_location" ]; then
+            log_info "Uploading Python script to $s3_location"
+            if aws s3 cp "$python_file" "$s3_location" --profile "$AWS_PROFILE" --region "$AWS_REGION"; then
+                log_info "✅ Successfully uploaded script to S3"
+            else
+                log_error "Failed to upload script to S3"
+                return 1
+            fi
+        fi
+    else
+        log_warning "Python file not found: $python_file"
+    fi
+
     # Check if job exists
     if job_exists "$actual_job_name"; then
         log_info "Job $actual_job_name exists. Updating..."
+        # Create temporary file without Name field
+        local temp_file="/tmp/${actual_job_name}_update.json"
+        jq 'del(.Name)' "$json_file" > "$temp_file"
         # Update existing job
         if aws glue update-job \
             --job-name "$actual_job_name" \
-            --job-update "$(cat "$json_file")" \
+            --job-update "file://$temp_file" \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION"; then
             log_info "✅ Successfully updated $actual_job_name"
+            rm -f "$temp_file"
         else
             log_error "Failed to update $actual_job_name"
+            rm -f "$temp_file"
             return 1
         fi
     else

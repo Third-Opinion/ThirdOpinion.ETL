@@ -44,8 +44,67 @@ for job in $jobs; do
     version=$(echo "$details" | jq -r '.Version')
     timeout=$(echo "$details" | jq -r '.Timeout')
 
-    echo -e "  ${GREEN}✅${NC} $job"
-    echo -e "      Workers: $workers x $worker_type | Glue: v$version | Timeout: ${timeout}min"
+    # Get latest job run status
+    latest_run=$(aws glue get-job-runs --job-name "$job" --profile "$AWS_PROFILE" --region "$AWS_REGION" --max-results 1 --query "JobRuns[0].{JobRunState: JobRunState, StartedOn: StartedOn, CompletedOn: CompletedOn, ErrorMessage: ErrorMessage}" --output json 2>/dev/null || echo '{}')
+
+    if [ "$latest_run" != "{}" ] && [ "$latest_run" != "null" ]; then
+        job_state=$(echo "$latest_run" | jq -r '.JobRunState // "UNKNOWN"')
+        started_on=$(echo "$latest_run" | jq -r '.StartedOn // "Never"')
+        completed_on=$(echo "$latest_run" | jq -r '.CompletedOn // "N/A"')
+        error_message=$(echo "$latest_run" | jq -r '.ErrorMessage // ""')
+
+        # Format dates if they exist
+        if [ "$started_on" != "Never" ] && [ "$started_on" != "null" ]; then
+            started_on=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$(echo "$started_on" | cut -d'.' -f1)" "+%m/%d %H:%M" 2>/dev/null || echo "$started_on")
+        fi
+
+        # Choose status color and icon
+        case "$job_state" in
+            "SUCCEEDED")
+                status_color="$GREEN"
+                status_icon="✅"
+                ;;
+            "RUNNING")
+                status_color="$BLUE"
+                status_icon="🔄"
+                ;;
+            "FAILED")
+                status_color="$RED"
+                status_icon="❌"
+                ;;
+            "TIMEOUT")
+                status_color="$YELLOW"
+                status_icon="⏰"
+                ;;
+            "STOPPED")
+                status_color="$YELLOW"
+                status_icon="⏹️"
+                ;;
+            *)
+                status_color="$NC"
+                status_icon="❓"
+                ;;
+        esac
+
+        echo -e "  ${GREEN}📦${NC} $job"
+        echo -e "      Config: $workers x $worker_type | Glue: v$version | Timeout: ${timeout}min"
+        echo -e "      Status: ${status_color}${status_icon} $job_state${NC} | Started: $started_on"
+
+        # Show error if present
+        if [ -n "$error_message" ] && [ "$error_message" != "null" ] && [ "$error_message" != "" ]; then
+            # Truncate long error messages
+            if [ ${#error_message} -gt 100 ]; then
+                error_message="${error_message:0:100}..."
+            fi
+            echo -e "      ${RED}Error: $error_message${NC}"
+        fi
+    else
+        echo -e "  ${GREEN}📦${NC} $job"
+        echo -e "      Config: $workers x $worker_type | Glue: v$version | Timeout: ${timeout}min"
+        echo -e "      Status: ${YELLOW}Never run${NC}"
+    fi
+
+    echo
 
     ((job_count++))
 done
@@ -54,6 +113,43 @@ echo
 echo -e "${BLUE}===================================================${NC}"
 echo -e "${GREEN}✨ VERIFICATION COMPLETE${NC}"
 echo -e "${GREEN}Total jobs deployed: $job_count${NC}"
+
+# Count job statuses
+succeeded_count=0
+failed_count=0
+running_count=0
+never_run_count=0
+other_count=0
+
+for job in $jobs; do
+    latest_run=$(aws glue get-job-runs --job-name "$job" --profile "$AWS_PROFILE" --region "$AWS_REGION" --max-results 1 --query "JobRuns[0].JobRunState" --output text 2>/dev/null || echo "NEVER_RUN")
+
+    case "$latest_run" in
+        "SUCCEEDED")
+            ((succeeded_count++))
+            ;;
+        "FAILED")
+            ((failed_count++))
+            ;;
+        "RUNNING")
+            ((running_count++))
+            ;;
+        "NEVER_RUN"|"None")
+            ((never_run_count++))
+            ;;
+        *)
+            ((other_count++))
+            ;;
+    esac
+done
+
+echo
+echo -e "${BLUE}📊 Job Status Summary:${NC}"
+[ $succeeded_count -gt 0 ] && echo -e "  ${GREEN}✅ Succeeded: $succeeded_count${NC}"
+[ $failed_count -gt 0 ] && echo -e "  ${RED}❌ Failed: $failed_count${NC}"
+[ $running_count -gt 0 ] && echo -e "  ${BLUE}🔄 Running: $running_count${NC}"
+[ $never_run_count -gt 0 ] && echo -e "  ${YELLOW}⭕ Never run: $never_run_count${NC}"
+[ $other_count -gt 0 ] && echo -e "  ${YELLOW}❓ Other: $other_count${NC}"
 echo
 
 # Check for expected jobs
