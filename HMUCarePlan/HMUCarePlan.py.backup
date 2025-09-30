@@ -2,67 +2,32 @@ from datetime import datetime
 import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
-from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType
+from pyspark.sql.types import StringType, TimestampType, BooleanType, DecimalType, IntegerType
 import json
 import logging
 
 # Set up logging
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
-args = getResolvedOptions(sys.argv, ["JOB_NAME"])
-catalog_nm = "glue_catalog"
-
-s3_bucket = "s3://7df690fd40c734f8937daf02f39b2ec3-457560472834-group/datalake/hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view/"
-ahl_database = "hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view"
-tableCatalogId = "457560472834"  # AHL service account
-s3_output_bucket = "s3://healthlake-glue-output-2025"
-
-spark = (SparkSession.builder
-    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-    .config(f"spark.sql.catalog.{catalog_nm}", "org.apache.iceberg.spark.SparkCatalog")
-    .config(f"spark.sql.catalog.{catalog_nm}.warehouse", s3_bucket)
-    .config(f"spark.sql.catalog.{catalog_nm}.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
-    .config(f"spark.sql.catalog.{catalog_nm}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
-    .config("spark.sql.catalog.glue_catalog.glue.lakeformation-enabled", "true")
-    .config("spark.sql.catalog.glue_catalog.glue.id", tableCatalogId)
-    .getOrCreate())
-sc = spark.sparkContext
+# Initialize Glue context
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
-job.init(args["JOB_NAME"], args)
+job.init(args['JOB_NAME'], args)
 
-# Configuration - Updated to use S3/Iceberg instead of Glue Catalog
-DATABASE_NAME = ahl_database  # Using AHL Iceberg database
+# Configuration
+DATABASE_NAME = "hmu-healthlake-database"
 TABLE_NAME = "careplan"
 REDSHIFT_CONNECTION = "Redshift connection"
 S3_TEMP_DIR = "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
-
-# Note: We now read data from S3 using Iceberg catalog instead of Glue Catalog
-# This provides better performance and direct access to S3 data
-
-def convert_to_json_string(field):
-    """Convert complex data to JSON strings to avoid nested structures"""
-    if field is None:
-        return None
-    try:
-        if isinstance(field, str):
-            return field
-        else:
-            return json.dumps(field, ensure_ascii=False, default=str)
-    except (TypeError, ValueError) as e:
-        logger.warning(f"JSON serialization failed for field: {str(e)}")
-        return str(field)
-
-# Define UDF globally so it can be used in all transformation functions
-convert_to_json_udf = F.udf(convert_to_json_string, StringType())
 
 def extract_id_from_reference(reference_field, resource_type):
     """Extract ID from FHIR reference format"""
@@ -350,12 +315,9 @@ def main():
         logger.info("🚀 STARTING FHIR CARE PLAN ETL PROCESS")
         logger.info("=" * 80)
         
-        # Step 1: Read data from S3 using Iceberg catalog
+        # Step 1: Read data from Glue Catalog
         logger.info("📥 STEP 1: READING DATA FROM GLUE CATALOG")
-        # Use Iceberg to read data from S3
-        table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
-        logger.info(f"Reading from table: {table_name_full}")
-        df_raw = spark.table(table_name_full)
+        care_plan_dynamic_frame = glueContext.create_dynamic_frame.from_catalog(
             database=DATABASE_NAME, 
             table_name=TABLE_NAME, 
             transformation_ctx="AWSGlueDataCatalog_care_plan_node"
@@ -503,7 +465,6 @@ def main():
         logger.error(f"🚨 Error: {str(e)}")
         raise e
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     main()
     job.commit()

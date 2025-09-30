@@ -1,6 +1,6 @@
 # Task ID: 6
 # Title: Create fact_fhir_medication_requests_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for medication requests with dosage and category aggregation
@@ -9,3 +9,35 @@ Create materialized view joining medication_requests with medication_request_dos
 
 # Test Strategy:
 Validate view creation, test dosage instruction aggregation, verify medication data joins correctly, and confirm proper handling of prescription workflow statuses.
+
+# Subtasks:
+## 1. Analyze medication_requests schema and related tables [done]
+### Dependencies: None
+### Description: Examine medication_requests table structure and all related tables including medication_request_dosage_instructions, medication_request_categories, medication_request_notes, medication_request_identifiers, and medications table
+### Details:
+Document table schemas, identify primary/foreign keys, analyze data types and relationships. Review existing medication_requests data to understand dosage instruction patterns, timing complexities, and prescription workflow states. Examine medications table structure for medication details integration. Document any data quality issues or missing relationships that need handling.
+
+## 2. Design view structure with complex joins and aggregations [done]
+### Dependencies: 6.1
+### Description: Create the SQL design for joining medication_requests with 5 related tables and define aggregation strategy for dosage instructions
+### Details:
+Design LEFT JOINs for medication_request_dosage_instructions, medication_request_categories, medication_request_notes, medication_request_identifiers, and medications tables. Plan JSON aggregation structure for complex dosage instructions including timing patterns, quantity, and frequency. Define grouping strategy and handle one-to-many relationships. Include prescriber information fields, fulfillment status tracking, and category aggregation logic.
+
+## 3. Implement JSON aggregation for dosage instructions [done]
+### Dependencies: 6.2
+### Description: Develop complex JSON aggregation logic for dosage instructions with timing patterns, quantities, and administration routes
+### Details:
+Implement JSON_PARSE and JSON_STRINGIFY for dosage instruction objects. Create nested JSON structures for timing patterns (daily, weekly, PRN), dosage quantities, routes of administration, and duration. Use LISTAGG with proper delimiters for multiple dosage instructions per medication request. Handle special cases like tapered doses, split doses, and complex timing schedules. Ensure proper null handling and data type conversions.
+
+## 4. Add prescription workflow and authorization handling [done]
+### Dependencies: 6.3
+### Description: Implement dispense request processing, substitution preferences, prior authorization logic, and prescription workflow status tracking
+### Details:
+Add columns for dispense_request details including quantity, expected supply duration, and number of refills. Implement substitution_allowed flag and substitution reason handling. Create logic for prior_authorization status and authorization numbers. Track prescription workflow states (active, completed, cancelled, entered-in-error, draft). Include fulfillment status tracking and last dispensed date calculations. Handle special authorization requirements and controlled substance indicators.
+
+## 5. Test dosage accuracy and prescription workflow logic [done]
+### Dependencies: 6.4
+### Description: Validate dosage instruction aggregation accuracy, prescription workflow state transitions, and overall view performance
+### Details:
+Create test cases for complex dosage patterns including PRN medications, tapered doses, and multiple daily administrations. Validate JSON aggregation produces valid, parseable structures. Test prescription workflow state transitions and prior authorization handling. Verify medication details from medications table join correctly. Test performance with large datasets and optimize if needed. Validate edge cases like missing dosage instructions, null prescriber information, and incomplete fulfillment data.
+

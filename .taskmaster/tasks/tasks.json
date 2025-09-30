@@ -647,11 +647,149 @@
             "testStrategy": ""
           }
         ]
+      },
+      {
+        "id": 11,
+        "title": "Refactor all Glue jobs to work with Apache Iceberg",
+        "description": "Update all AWS Glue ETL jobs to use Apache Iceberg format following the HMUPatient.py template",
+        "details": "Refactor all AWS Glue ETL jobs to work with Apache Iceberg format, following the pattern established in HMUPatient/HMUPatient.py. Each job needs to be updated to: \n1) Read from S3 using Iceberg catalog instead of Glue Catalog\n2) Configure Spark session with Iceberg extensions\n3) Use the correct S3 bucket paths and database names for the Iceberg tables\n4) Set logging level to DEBUG for better troubleshooting\n5) Update table read operations to use spark.table() with fully qualified Iceberg table names\n6) Review and ensure naming consistency across all jobs for aliased fields and new fields\n   - Check for consistent snake_case vs camelCase usage\n   - Ensure similar transformations use the same field names across all jobs\n   - Verify consistent naming patterns for FHIR resource fields\n   - Standardize alias naming conventions for transformed columns\n   - Document any naming inconsistencies found and fix them\n7) Update shell scripts that manage Glue tasks to have the correct job names\n   - Update any deployment scripts (deploy_glue_jobs.sh, etc.)\n   - Update any monitoring or testing scripts\n   - Ensure job names in scripts match the actual Glue job names\n   - Update any batch processing or orchestration scripts\n8) Create a deployment script to recreate all Glue jobs from JSON configurations\n   - Create script to use AWS CLI to create Glue jobs from HMU*.json files\n   - All existing Glue jobs have been deleted and need to be recreated\n   - Script should iterate through all HMU*/HMU*.json files\n   - Use aws glue create-job command with proper parameters\n   - Include error handling and logging in the script\n\nThe JSON configuration files have already been updated. \n\nThe following Glue jobs need to be refactored and recreated:\n- HMUAllergyIntolerance\n- HMUCarePlan  \n- HMUCondition\n- HMUDiagnosticReport\n- HMUDocumentReference\n- HMUEncounter\n- HMUMedication\n- HMUMedicationDispense\n- HMUMedicationRequest\n- HMUObservation\n- HMUPatient\n- HMUPractitioner\n- HMUProcedure",
+        "testStrategy": "Test each refactored Glue job by running it against sample data to ensure proper Iceberg catalog reading and Redshift writing functionality",
+        "status": "done",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Refactor HMUAllergyIntolerance to use Iceberg",
+            "description": "Update HMUAllergyIntolerance.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "Update the HMUAllergyIntolerance Glue job to use Iceberg catalog with DEBUG logging",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 2,
+            "title": "Refactor HMUCarePlan to use Iceberg",
+            "description": "Update HMUCarePlan.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 3,
+            "title": "Refactor HMUCondition to use Iceberg",
+            "description": "Update HMUCondition.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 4,
+            "title": "Refactor HMUDiagnosticReport to use Iceberg",
+            "description": "Update HMUDiagnosticReport.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 5,
+            "title": "Refactor HMUDocumentReference to use Iceberg",
+            "description": "Update HMUDocumentReference.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 6,
+            "title": "Refactor HMUEncounter to use Iceberg",
+            "description": "Update HMUEncounter.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 7,
+            "title": "Refactor HMUMedication to use Iceberg",
+            "description": "Update HMUMedication.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 8,
+            "title": "Refactor HMUMedicationDispense to use Iceberg",
+            "description": "Update HMUMedicationDispense.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 9,
+            "title": "Refactor HMUMedicationRequest to use Iceberg",
+            "description": "Update HMUMedicationRequest.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 10,
+            "title": "Refactor HMUObservation to use Iceberg",
+            "description": "Update HMUObservation.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 11,
+            "title": "Refactor HMUPractitioner to use Iceberg",
+            "description": "Update HMUPractitioner.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 12,
+            "title": "Refactor HMUProcedure to use Iceberg",
+            "description": "Update HMUProcedure.py to use Iceberg catalog following HMUPatient.py template",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 13,
+            "title": "Update shell scripts with correct Glue job names",
+            "description": "Find and update all shell scripts that reference Glue job names to ensure they match the actual job names",
+            "details": "Search for all shell scripts (.sh files) in the project that reference Glue job names. Update any deployment, monitoring, testing, or orchestration scripts to use the correct job names (HMUAllergyIntolerance, HMUCarePlan, HMUCondition, etc.). Ensure consistency between scripts and actual AWS Glue job configurations.",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          },
+          {
+            "id": 14,
+            "title": "Create deployment script for Glue jobs",
+            "description": "Create a shell script to deploy all Glue jobs using HMU*.json configuration files",
+            "details": "Create deploy_glue_jobs.sh script that:\\n- Iterates through all HMU*/HMU*.json files\\n- Uses AWS CLI to create each Glue job (aws glue create-job --cli-input-json)\\n- Handles both creation and update scenarios (check if job exists first)\\n- Includes proper error handling and logging\\n- Sets correct AWS profile/region\\n- Since all jobs have been deleted, focus on creation first\\n- Should handle HMUPatient as well as the other 12 jobs",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-09-10T00:22:35.036Z",
-      "updated": "2025-09-10T02:51:28.668Z",
+      "updated": "2025-09-30T00:45:03.269Z",
       "description": "Tasks for master context"
     }
   }

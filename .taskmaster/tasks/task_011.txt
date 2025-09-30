@@ -1,0 +1,136 @@
+# Task ID: 11
+# Title: Refactor all Glue jobs to work with Apache Iceberg
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Update all AWS Glue ETL jobs to use Apache Iceberg format following the HMUPatient.py template
+# Details:
+Refactor all AWS Glue ETL jobs to work with Apache Iceberg format, following the pattern established in HMUPatient/HMUPatient.py. Each job needs to be updated to: 
+1) Read from S3 using Iceberg catalog instead of Glue Catalog
+2) Configure Spark session with Iceberg extensions
+3) Use the correct S3 bucket paths and database names for the Iceberg tables
+4) Set logging level to DEBUG for better troubleshooting
+5) Update table read operations to use spark.table() with fully qualified Iceberg table names
+6) Review and ensure naming consistency across all jobs for aliased fields and new fields
+   - Check for consistent snake_case vs camelCase usage
+   - Ensure similar transformations use the same field names across all jobs
+   - Verify consistent naming patterns for FHIR resource fields
+   - Standardize alias naming conventions for transformed columns
+   - Document any naming inconsistencies found and fix them
+7) Update shell scripts that manage Glue tasks to have the correct job names
+   - Update any deployment scripts (deploy_glue_jobs.sh, etc.)
+   - Update any monitoring or testing scripts
+   - Ensure job names in scripts match the actual Glue job names
+   - Update any batch processing or orchestration scripts
+8) Create a deployment script to recreate all Glue jobs from JSON configurations
+   - Create script to use AWS CLI to create Glue jobs from HMU*.json files
+   - All existing Glue jobs have been deleted and need to be recreated
+   - Script should iterate through all HMU*/HMU*.json files
+   - Use aws glue create-job command with proper parameters
+   - Include error handling and logging in the script
+
+The JSON configuration files have already been updated. 
+
+The following Glue jobs need to be refactored and recreated:
+- HMUAllergyIntolerance
+- HMUCarePlan  
+- HMUCondition
+- HMUDiagnosticReport
+- HMUDocumentReference
+- HMUEncounter
+- HMUMedication
+- HMUMedicationDispense
+- HMUMedicationRequest
+- HMUObservation
+- HMUPatient
+- HMUPractitioner
+- HMUProcedure
+
+# Test Strategy:
+Test each refactored Glue job by running it against sample data to ensure proper Iceberg catalog reading and Redshift writing functionality
+
+# Subtasks:
+## 1. Refactor HMUAllergyIntolerance to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUAllergyIntolerance.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+Update the HMUAllergyIntolerance Glue job to use Iceberg catalog with DEBUG logging
+
+## 2. Refactor HMUCarePlan to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUCarePlan.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 3. Refactor HMUCondition to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUCondition.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 4. Refactor HMUDiagnosticReport to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUDiagnosticReport.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 5. Refactor HMUDocumentReference to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUDocumentReference.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 6. Refactor HMUEncounter to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUEncounter.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 7. Refactor HMUMedication to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUMedication.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 8. Refactor HMUMedicationDispense to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUMedicationDispense.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 9. Refactor HMUMedicationRequest to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUMedicationRequest.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 10. Refactor HMUObservation to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUObservation.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 11. Refactor HMUPractitioner to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUPractitioner.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 12. Refactor HMUProcedure to use Iceberg [pending]
+### Dependencies: None
+### Description: Update HMUProcedure.py to use Iceberg catalog following HMUPatient.py template
+### Details:
+
+
+## 13. Update shell scripts with correct Glue job names [pending]
+### Dependencies: None
+### Description: Find and update all shell scripts that reference Glue job names to ensure they match the actual job names
+### Details:
+Search for all shell scripts (.sh files) in the project that reference Glue job names. Update any deployment, monitoring, testing, or orchestration scripts to use the correct job names (HMUAllergyIntolerance, HMUCarePlan, HMUCondition, etc.). Ensure consistency between scripts and actual AWS Glue job configurations.
+
+## 14. Create deployment script for Glue jobs [pending]
+### Dependencies: None
+### Description: Create a shell script to deploy all Glue jobs using HMU*.json configuration files
+### Details:
+Create deploy_glue_jobs.sh script that:\n- Iterates through all HMU*/HMU*.json files\n- Uses AWS CLI to create each Glue job (aws glue create-job --cli-input-json)\n- Handles both creation and update scenarios (check if job exists first)\n- Includes proper error handling and logging\n- Sets correct AWS profile/region\n- Since all jobs have been deleted, focus on creation first\n- Should handle HMUPatient as well as the other 12 jobs
+

@@ -49,8 +49,7 @@ VIEWS=(
     "fact_fhir_conditions_view_v1"
     "fact_fhir_encounters_view_v2"
     "fact_fhir_encounters_view_v1"  # Drop v1 if exists (replaced by v2)
-    "fact_fhir_patients_view_v2"
-    "fact_fhir_patients_view_v1"    # Drop v1 if exists (replaced by v2)
+    "fact_fhir_patients_view_v1"    # v1 is the current version
 )
 
 # Track statement IDs

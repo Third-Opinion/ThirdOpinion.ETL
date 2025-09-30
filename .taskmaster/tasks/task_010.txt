@@ -1,6 +1,6 @@
 # Task ID: 10
 # Title: Upgrade existing views to V2 and implement scheduled refresh infrastructure
-# Status: pending
+# Status: done
 # Dependencies: 2, 3, 4, 5, 6, 7, 8, 9
 # Priority: high
 # Description: Convert existing patient and encounter views to V2 with enhanced features, remove AUTO REFRESH, and set up scheduled refresh system
@@ -9,3 +9,47 @@ Update fact_fhir_patients_view_v1.sql to V2 with window functions, LISTAGG, and 
 
 # Test Strategy:
 Test V2 view functionality with window functions, validate scheduled refresh execution, verify Lambda function operation, confirm CloudWatch Events scheduling, and run end-to-end deployment validation script to ensure all views refresh successfully.
+
+# Subtasks:
+## 1. Analyze PRD V2 specifications for enhanced view features [done]
+### Dependencies: None
+### Description: Review PRD appendix for V2 requirements including window functions, LISTAGG usage, and subquery patterns for patients and encounters views
+### Details:
+Examine PRD specifications for fact_fhir_patients_view_v2 requirements including window functions for patient ranking, LISTAGG for aggregating identifiers and addresses, and subquery patterns for related data. Review fact_fhir_encounters_view_v2 requirements for duration calculations, participant aggregations, diagnosis/procedure counts. Document all new fields, aggregation logic, and performance considerations. Create implementation checklist for each view upgrade.
+
+## 2. Upgrade fact_fhir_patients_view_v1 to V2 with enhanced features [done]
+### Dependencies: 10.1
+### Description: Implement V2 version of patients view with window functions, LISTAGG aggregations, and complex subqueries as specified in PRD
+### Details:
+Modify fact_fhir_patients_view_v1.sql to create V2 version. Add window functions for patient ranking by last updated timestamp, implement LISTAGG for concatenating multiple identifiers and addresses into single fields, create subqueries for counting related resources (encounters, conditions, observations). Add new calculated fields like age_at_last_encounter, total_encounter_count, active_condition_count. Ensure proper NULL handling and data type conversions for SUPER fields.
+
+## 3. Upgrade fact_fhir_encounters_view_v1 to V2 with duration calculations [done]
+### Dependencies: 10.1
+### Description: Implement V2 version of encounters view with duration calculations, participant aggregations, and diagnosis/procedure counts
+### Details:
+Modify fact_fhir_encounters_view_v1.sql to create V2 version. Add duration calculation using DATEDIFF between period_start and period_end, implement participant aggregation using LISTAGG to combine all participants into JSON array, add diagnosis and procedure counts using subqueries. Include new fields for length_of_stay, participant_count, primary_diagnosis, and procedure_list. Implement proper handling of emergency vs scheduled encounters.
+
+## 4. Remove AUTO REFRESH from all 10 materialized views [done]
+### Dependencies: 10.2, 10.3
+### Description: Update all existing materialized view definitions to remove AUTO REFRESH YES clause in preparation for scheduled refresh
+### Details:
+Modify all 10 materialized view SQL files to remove AUTO REFRESH YES clause: fact_fhir_patients_view, fact_fhir_encounters_view, fact_fhir_care_plans_view, fact_fhir_conditions_view, fact_fhir_diagnostic_reports_view, fact_fhir_document_references_view, fact_fhir_medication_requests_view, fact_fhir_observations_view, fact_fhir_practitioners_view, fact_fhir_procedures_view. Replace with NO AUTO REFRESH or omit the clause entirely. Document the change in each file header.
+
+## 5. Design and implement AWS Lambda function for scheduled refresh [done]
+### Dependencies: 10.4
+### Description: Create Lambda function to execute REFRESH MATERIALIZED VIEW commands for all 10 views with error handling and logging
+### Details:
+Create Python Lambda function using boto3 to connect to Redshift via Data API. Implement refresh logic for all 10 materialized views in sequence with proper error handling and retry logic. Add CloudWatch logging for each refresh operation including start time, completion time, and row counts. Include configuration for Redshift cluster identifier, database name, and IAM role. Implement timeout handling and notification on failures via SNS.
+
+## 6. Configure CloudWatch Events rule and IAM permissions [done]
+### Dependencies: 10.5
+### Description: Set up CloudWatch Events rule for hourly execution and configure IAM roles with necessary permissions
+### Details:
+Create CloudWatch Events rule with cron expression for hourly execution (0 * * * ? *). Configure IAM role for Lambda with permissions for redshift-data:ExecuteStatement, redshift-data:DescribeStatement, redshift-data:GetStatementResult, logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents, and SNS publish permissions. Create event target linking the rule to Lambda function. Set up CloudWatch dashboard for monitoring refresh execution metrics.
+
+## 7. Create deployment scripts and test end-to-end refresh system [done]
+### Dependencies: 10.5, 10.6
+### Description: Develop AWS CLI deployment scripts and comprehensive testing suite for the scheduled refresh infrastructure
+### Details:
+Create shell script with AWS CLI commands to deploy Lambda function, create CloudWatch Events rule, and set up IAM roles. Include commands to create/update all 10 materialized views without AUTO REFRESH. Develop test script to validate Lambda execution, verify all views refresh successfully, check refresh timestamps, and validate row counts. Create rollback script for emergency scenarios. Document deployment process and create runbook for operations team.
+

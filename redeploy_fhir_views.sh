@@ -26,7 +26,7 @@ REGION="us-east-2"
 
 # View definitions - using simple arrays instead of associative
 VIEW_NAMES=(
-    "fact_fhir_patients_view_v2"
+    "fact_fhir_patients_view_v1"
     "fact_fhir_encounters_view_v2"
     "fact_fhir_observations_view_v2"
     "fact_fhir_practitioners_view_v1"

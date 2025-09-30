@@ -1,6 +1,6 @@
 # Task ID: 9
 # Title: Create fact_fhir_procedures_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for procedures with code codings and identifier aggregation
@@ -9,3 +9,29 @@ Create materialized view joining procedures with procedure_code_codings and proc
 
 # Test Strategy:
 Test view creation, validate procedure code aggregation, verify date handling for performed procedures, and ensure proper status and outcome tracking.
+
+# Subtasks:
+## 1. Analyze procedures table structure and related tables [done]
+### Dependencies: None
+### Description: Examine the procedures base table and its two related tables (procedure_code_codings and procedure_identifiers) to understand data structure, relationships, and aggregation requirements
+### Details:
+Review procedures table schema including performer fields, status columns, date fields (performed_period_start, performed_period_end), and outcome columns. Analyze procedure_code_codings table structure for code aggregation using LISTAGG. Examine procedure_identifiers table for identifier aggregation patterns. Document any JSON fields that need JSON_PARSE treatment. Identify relationships with other entities like encounters or patients.
+
+## 2. Design view structure with code and identifier aggregations [done]
+### Dependencies: 9.1
+### Description: Create the SQL design for fact_fhir_procedures_view_v1 with proper joins and aggregation logic for procedure codes and identifiers
+### Details:
+Design LEFT JOINs from procedures to procedure_code_codings and procedure_identifiers. Define LISTAGG aggregation for procedure codes with proper delimiters and ordering. Structure identifier aggregation similar to other views. Plan JSON_PARSE usage for coded elements like status_reason or outcome. Include all required fields: procedure dates, performer information, status, outcomes, and complications. Define proper GROUP BY clauses for aggregations.
+
+## 3. Implement materialized view with performer and outcome handling [done]
+### Dependencies: 9.2
+### Description: Write and execute the CREATE MATERIALIZED VIEW statement with complete aggregations, performer information extraction, and outcome/complication tracking
+### Details:
+Implement the full SQL for fact_fhir_procedures_view_v1. Use LISTAGG(DISTINCT ...) for procedure code aggregations from procedure_code_codings. Apply JSON_PARSE where needed for structured fields. Extract performer information (could be practitioner references or inline data). Handle procedure dates properly (performed_period_start/end). Include status tracking and outcome/complication fields. Ensure proper NULL handling in aggregations. Add appropriate column aliases for clarity.
+
+## 4. Test view creation and validate aggregations [done]
+### Dependencies: 9.3
+### Description: Execute comprehensive tests to verify the materialized view works correctly, focusing on code aggregation accuracy and data completeness
+### Details:
+Test materialized view creation and refresh. Validate LISTAGG aggregation produces correct procedure code lists without duplicates. Verify procedures with multiple code_codings aggregate properly. Test procedures with no related codes or identifiers (NULL handling). Validate performer information extraction and date field population. Compare row counts between base table and view. Test a sample of procedures to ensure status, outcomes, and complications are captured correctly. Document any performance considerations for the aggregations.
+

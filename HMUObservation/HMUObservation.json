@@ -1,17 +1,17 @@
 {
-  "name": "HMUObservation",
-  "jobMode": "SCRIPT",
-  "description": "",
-  "role": "arn:aws:iam::442042533707:role/service-role/AWSGlueServiceRole",
-  "executionProperty": {
-    "maxConcurrentRuns": 1
+  "Name": "HMUObservation",
+  "JobMode": "SCRIPT",
+  "Description": "",
+  "Role": "arn:aws:iam::442042533707:role/service-role/AWSGlueServiceRole",
+  "ExecutionProperty": {
+    "MaxConcurrentRuns": 1
   },
-  "command": {
-    "name": "glueetl",
-    "scriptLocation": "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUObservation.py",
-    "pythonVersion": "3"
+  "Command": {
+    "Name": "glueetl",
+    "ScriptLocation": "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUObservation.py",
+    "PythonVersion": "3"
   },
-  "defaultArguments": {
+  "DefaultArguments": {
     "--enable-metrics": "true",
     "--enable-spark-ui": "true",
     "--spark-event-logs-path": "s3://aws-glue-assets-442042533707-us-east-2/sparkHistoryLogs/",
@@ -25,23 +25,21 @@
     "--job-language": "python",
     "--TempDir": "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
   },
-  "connections": {
-    "connections": [
+  "Connections": {
+    "Connections": [
       "Redshift connection"
     ]
   },
-  "maxRetries": 0,
-  "allocatedCapacity": 10,
-  "timeout": 480,
-  "maxCapacity": 10.0,
-  "glueVersion": "4.0",
-  "numberOfWorkers": 10,
-  "workerType": "G.1X",
-  "executionClass": "STANDARD",
-  "sourceControlDetails": {
-    "provider": "GITHUB",
-    "repository": "ThirdOpinion.ETL",
-    "branch": "master",
-    "folder": "HMUObservation"
+  "MaxRetries": 0,
+  "Timeout": 480,
+  "GlueVersion": "4.0",
+  "NumberOfWorkers": 10,
+  "WorkerType": "G.1X",
+  "ExecutionClass": "STANDARD",
+  "SourceControlDetails": {
+    "Provider": "GITHUB",
+    "Repository": "ThirdOpinion.ETL",
+    "Branch": "master",
+    "Folder": "HMUObservation"
   }
 }

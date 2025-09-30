@@ -16,7 +16,7 @@
 -- SOURCE TABLES:
 -- - fact_fhir_conditions_view_v1: Condition data for filtering
 -- - fact_fhir_encounters_view_v2: Encounter data for date filtering
--- - fact_fhir_patients_view_v2: Patient demographics and details
+-- - fact_fhir_patients_view_v1: Patient demographics and details
 --
 -- REFRESH STRATEGY:
 -- - AUTO REFRESH NO: Manual refresh required via scheduled jobs
@@ -57,8 +57,16 @@ SELECT
     p.gender,
     -- NAME INFORMATION (JSON)
     p.names,
+    -- NAME INFORMATION (SEPARATE FIELDS)
+    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'text') AS name_text,
+    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'family') AS family_name,
+    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'given') AS given_names,
+    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'prefix') AS name_prefix,
+    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'suffix') AS name_suffix,
+    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'use') AS name_use,
     -- CONTACT INFORMATION
     p.primary_city,
+    p.primary_district,
     p.primary_state,
     p.all_addresses,
     p.address_count,
@@ -82,7 +90,7 @@ SELECT
     DATEDIFF(day, tp.last_encounter_date, CURRENT_DATE) AS days_since_last_encounter
 FROM
     target_patients tp
-    INNER JOIN fact_fhir_patients_view_v2 p ON tp.patient_id = p.patient_id;
+    INNER JOIN fact_fhir_patients_view_v1 p ON tp.patient_id = p.patient_id;
 
 -- ===================================================================
 -- USAGE NOTES

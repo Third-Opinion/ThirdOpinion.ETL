@@ -10,8 +10,8 @@ ISSUES_FOUND=0
 
 # SQL files to check
 SQL_FILES=(
-    "fact_fhir_patients_view_v2.sql"
-    "fact_fhir_encounters_view_v2.sql"
+    "fact_fhir_patients_view_v1.sql"
+    "fact_fhir_encounters_view_v1.sql"
     "fact_fhir_conditions_view_v1.sql"
     "fact_fhir_diagnostic_reports_view_v1.sql"
     "fact_fhir_document_references_view_v1.sql"

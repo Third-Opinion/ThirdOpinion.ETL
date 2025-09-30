@@ -1,6 +1,6 @@
 # Task ID: 8
 # Title: Create fact_fhir_practitioners_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for practitioners with names, addresses, and telecom aggregation
@@ -9,3 +9,23 @@ Create materialized view joining practitioners with practitioner_names, practiti
 
 # Test Strategy:
 Test view creation, validate name ranking logic consistency with patient view, verify address and telecom aggregation, and confirm practitioner qualification data integrity.
+
+# Subtasks:
+## 1. Analyze practitioner table structure and existing view patterns [done]
+### Dependencies: None
+### Description: Study the practitioner-related tables (practitioners, practitioner_names, practitioner_addresses, practitioner_telecoms) and review the existing patient view implementation to understand the name ranking logic that needs to be reused
+### Details:
+Examine the schema and relationships of all practitioner tables. Document the structure of practitioner_names, practitioner_addresses, and practitioner_telecoms tables. Review fact_fhir_patients_view_v1 to understand the name ranking logic implementation that should be adapted. Identify practitioner-specific fields like qualifications, specialties, and active status. Document the JSON_PARSE patterns used in existing views for structured contact data.
+
+## 2. Implement practitioner view with name ranking and aggregations [done]
+### Dependencies: 8.1
+### Description: Create the fact_fhir_practitioners_view_v1 materialized view by joining practitioner tables and implementing name ranking logic adapted from the patient view, including address and telecom aggregations
+### Details:
+Write the CREATE MATERIALIZED VIEW statement joining practitioners with practitioner_names using adapted name ranking logic from patient view. Implement LEFT JOINs with practitioner_addresses and practitioner_telecoms tables. Use JSON_PARSE for structured contact data and address information following established patterns. Apply LISTAGG for aggregating multiple addresses and telecom entries. Include practitioner-specific fields: qualifications, specialties, and active status. Ensure proper NULL handling and data type conversions.
+
+## 3. Test and validate practitioner view implementation [done]
+### Dependencies: 8.2
+### Description: Execute comprehensive testing of the fact_fhir_practitioners_view_v1 to ensure name ranking consistency with patient view and validate all aggregations work correctly
+### Details:
+Create and execute the materialized view in the database. Test name ranking logic by comparing results with similar patterns in patient view for consistency. Validate address aggregation produces correct JSON structures. Verify telecom aggregation handles multiple contact methods properly. Test edge cases: practitioners with no names, multiple addresses, or missing telecom data. Confirm practitioner qualifications and specialties are correctly included. Document query performance metrics and any optimization opportunities.
+

@@ -1,6 +1,6 @@
 # Task ID: 5
 # Title: Create fact_fhir_document_references_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for document references with content and author aggregation
@@ -9,3 +9,29 @@ Create materialized view joining document_references with document_reference_con
 
 # Test Strategy:
 Test view creation, validate content aggregation, verify author data completeness, and ensure proper handling of document security metadata.
+
+# Subtasks:
+## 1. Analyze document_references schema and related tables [done]
+### Dependencies: None
+### Description: Examine the structure of document_references table and its 4 related tables (document_reference_content, document_reference_authors, document_reference_categories, document_reference_identifiers) to understand relationships and data types
+### Details:
+Review the document_references base table schema including primary keys, foreign keys, and data types. Analyze document_reference_content for content metadata structure, document_reference_authors for author information fields, document_reference_categories for category classification, and document_reference_identifiers for identifier types. Document the cardinality relationships (one-to-many) between base table and related tables. Identify fields needed for aggregation including document status, creation date, document type, and security labels.
+
+## 2. Design view structure with joins and aggregation strategy [done]
+### Dependencies: 5.1
+### Description: Design the materialized view structure incorporating all necessary joins with the 4 related tables and plan the aggregation approach for content and author data
+### Details:
+Create the view design with LEFT OUTER JOINs from document_references to document_reference_content, document_reference_authors, document_reference_categories, and document_reference_identifiers. Plan LISTAGG strategy for multiple authors and categories with appropriate delimiters. Design JSON structure for content metadata aggregation. Define the column selection including document_reference_id as primary key, document status, creation date, document type, security labels, and aggregated fields. Ensure consistency with existing view patterns from fact_fhir_patients_view_v1 and fact_fhir_encounters_view_v1.
+
+## 3. Implement JSON aggregations and LISTAGG functions [done]
+### Dependencies: 5.2
+### Description: Develop the JSON_PARSE implementations for content structure and LISTAGG functions for author and category aggregations following established patterns
+### Details:
+Implement JSON_PARSE for document_reference_content to extract and structure content metadata as JSON objects. Create LISTAGG expressions for document_reference_authors to concatenate multiple authors with appropriate formatting (e.g., author names, roles). Implement LISTAGG for document_reference_categories to aggregate category codes and display values. Handle NULL values and empty aggregations gracefully. Apply GROUP BY clause correctly for all non-aggregated columns. Ensure proper handling of security metadata fields including confidentiality levels and access restrictions.
+
+## 4. Test view creation and validate data integrity [done]
+### Dependencies: 5.3
+### Description: Execute the materialized view creation, test content structure validation, and verify completeness of author and security metadata
+### Details:
+Execute CREATE MATERIALIZED VIEW statement in Redshift and verify successful creation. Test with sample queries to validate content aggregation produces valid JSON structures. Verify author data completeness by checking LISTAGG results include all authors per document. Test category aggregation for documents with multiple categories. Validate security metadata handling including proper representation of confidentiality levels and security labels. Check for performance with appropriate DISTKEY and SORTKEY selection. Verify handling of edge cases such as documents without authors, content, or categories. Document any data quality issues or missing relationships.
+

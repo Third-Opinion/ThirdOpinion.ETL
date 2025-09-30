@@ -8,6 +8,7 @@
 # ===================================================================
 
 # Configuration
+AWS_PROFILE="${AWS_PROFILE:-to-prd-admin}"
 CLUSTER_ID="prod-redshift-main-ue2"
 DATABASE="dev"
 SECRET_ARN="arn:aws:secretsmanager:us-east-2:442042533707:secret:redshift!prod-redshift-main-ue2-awsuser-yp5Lq4"
@@ -32,13 +33,13 @@ echo ""
 # List of views to refresh (in dependency order)
 # Only refresh latest version (v2 when available, v1 otherwise)
 VIEWS=(
-    "fact_fhir_patients_view_v2"           # v2 is latest
+    "fact_fhir_patients_view_v1"           # v1 is latest
     "fact_fhir_encounters_view_v2"         # v2 is latest
     "fact_fhir_conditions_view_v1"         # only v1 exists
     "fact_fhir_diagnostic_reports_view_v1" # only v1 exists
     "fact_fhir_document_references_view_v1" # only v1 exists
     "fact_fhir_medication_requests_view_v1" # only v1 exists
-    "fact_fhir_observations_view_v2"       # only v2 exists
+    "fact_fhir_observations_view_v1"       # only v1 exists
     "fact_fhir_practitioners_view_v1"      # only v1 exists
     "fact_fhir_procedures_view_v1"         # only v1 exists
 )
@@ -56,6 +57,7 @@ for view_name in "${VIEWS[@]}"; do
     
     # Execute the REFRESH statement
     STATEMENT_ID=$(aws redshift-data execute-statement \
+        --profile "$AWS_PROFILE" \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
         --secret-arn "$SECRET_ARN" \
@@ -92,6 +94,7 @@ for i in "${!STATEMENT_IDS[@]}"; do
     # Poll for completion
     while true; do
         STATUS=$(aws redshift-data describe-statement \
+            --profile "$AWS_PROFILE" \
             --id "$STATEMENT_ID" \
             --region "$REGION" \
             --query 'Status' \
@@ -101,6 +104,7 @@ for i in "${!STATEMENT_IDS[@]}"; do
             FINISHED)
                 # Get execution time
                 DURATION=$(aws redshift-data describe-statement \
+                    --profile "$AWS_PROFILE" \
                     --id "$STATEMENT_ID" \
                     --region "$REGION" \
                     --query 'Duration' \
@@ -119,6 +123,7 @@ for i in "${!STATEMENT_IDS[@]}"; do
             FAILED)
                 echo -e "${RED}✗ Failed${NC}"
                 ERROR_MSG=$(aws redshift-data describe-statement \
+                    --profile "$AWS_PROFILE" \
                     --id "$STATEMENT_ID" \
                     --region "$REGION" \
                     --query 'Error' \

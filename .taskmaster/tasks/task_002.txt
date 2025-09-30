@@ -1,6 +1,6 @@
 # Task ID: 2
 # Title: Create fact_fhir_care_plans_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for care plans entity following PRD specifications with scheduled refresh pattern
@@ -9,3 +9,29 @@ Create materialized view joining care_plans table with care_plan_categories, car
 
 # Test Strategy:
 Verify view creates successfully, test query performance, validate JSON structure output, and confirm data integrity through row count comparisons with source tables.
+
+# Subtasks:
+## 1. Design care plans view structure and schema [done]
+### Dependencies: None
+### Description: Analyze existing patient/encounter view patterns and design the structure for fact_fhir_care_plans_view_v1
+### Details:
+Review existing fact_fhir_patients_view_v1 and fact_fhir_encounters_view_v1 to understand JSON aggregation patterns. Design the view schema including core care_plans fields, aggregated categories, goals, identifiers, and care team information. Define the SUPER data type structure for JSON fields and establish the overall view architecture.
+
+## 2. Implement core table joins for care plans entity [done]
+### Dependencies: 2.1
+### Description: Create the base SQL joins between care_plans and its related tables
+### Details:
+Implement LEFT JOINs from care_plans table to care_plan_categories, care_plan_goals, care_plan_identifiers, and care_plan_care_teams. Establish proper join conditions and ensure all related data is captured. Include any necessary filtering for active records and proper data relationships.
+
+## 3. Develop JSON aggregation logic using JSON_PARSE and LISTAGG [done]
+### Dependencies: 2.2
+### Description: Implement the JSON aggregation patterns for categories, goals, and care team data
+### Details:
+Use JSON_PARSE and LISTAGG following established patterns from existing views to aggregate care_plan_categories, care_plan_goals, and care_plan_care_teams into JSON structures. Implement proper grouping and ensure SUPER data type compatibility for the aggregated JSON fields.
+
+## 4. Create materialized view with data sanitization and performance testing [done]
+### Dependencies: 2.3
+### Description: Complete the view creation with REGEXP_REPLACE sanitization and validate performance
+### Details:
+Create the final materialized view with REGEXP_REPLACE for data sanitization. Remove AUTO REFRESH configuration for scheduled refresh pattern. Test query performance, validate JSON structure output, and perform data integrity checks through row count comparisons with source tables. Ensure the view follows the established naming convention and performance standards.
+

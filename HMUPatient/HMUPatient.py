@@ -219,15 +219,15 @@ def transform_patient_names(df):
     names_final = names_df.select(
         F.col("patient_id"),
         F.col("name_item.use").alias("name_use"),
-        F.lit(None).alias("name_text"),  # text field not available in name struct
+        F.col("name_item.text").alias("name_text"),  # text field should be available in name struct
         F.col("name_item.family").alias("family_name"),
         convert_to_json_udf(F.col("name_item.given")).alias("given_names"),
-        F.lit(None).alias("prefix"),  # prefix field not available in name struct
+        F.col("name_item.prefix").alias("prefix"),  # prefix field should be available in name struct
         F.col("name_item.suffix").alias("suffix"),
         F.to_date(F.col("name_item.period.start"), "yyyy-MM-dd").alias("period_start"),
         F.to_date(F.col("name_item.period.end"), "yyyy-MM-dd").alias("period_end")
     ).filter(
-        F.col("family_name").isNotNull()  # removed name_text filter since field doesn't exist
+        F.col("family_name").isNotNull() | F.col("name_text").isNotNull()  # filter on either family name or text
     )
     
     return names_final
@@ -282,17 +282,17 @@ def transform_patient_addresses(df):
         F.col("patient_id"),
         F.col("address_item.use").alias("address_use"),
         F.col("address_item.type").alias("address_type"),
-        F.lit(None).alias("address_text"),  # text field not available in address struct
+        F.col("address_item.text").alias("address_text"),  # text field should be available in address struct
         convert_to_json_udf(F.col("address_item.line")).alias("address_line"),
         F.col("address_item.city").alias("city"),
-        F.lit(None).alias("district"),  # district field not available in address struct
+        F.col("address_item.district").alias("district"),  # district field should be available in address struct
         F.col("address_item.state").alias("state"),
         F.col("address_item.postalCode").alias("postal_code"),
         F.col("address_item.country").alias("country"),
         F.to_date(F.col("address_item.period.start"), "yyyy-MM-dd").alias("period_start"),
         F.to_date(F.col("address_item.period.end"), "yyyy-MM-dd").alias("period_end")
     ).filter(
-        F.col("city").isNotNull()  # removed address_text filter since field doesn't exist
+        F.col("city").isNotNull() | F.col("address_text").isNotNull()  # filter on either city or text
     )
     
     return addresses_final
@@ -345,7 +345,7 @@ def transform_patient_contacts(df):
         F.when(F.col("contact_item.relationship").isNotNull() & F.col("contact_item.relationship.coding").isNotNull() & (F.size(F.col("contact_item.relationship.coding")) > 0),
                F.col("contact_item.relationship.coding")[0].getField("display")
               ).otherwise(None).alias("contact_relationship_display"),
-        F.lit(None).alias("contact_name_text"),  # text field not available in contact name struct
+        F.col("contact_item.name.text").alias("contact_name_text"),  # text field should be available in contact name struct
         F.col("contact_item.name.family").alias("contact_name_family"),
         convert_to_json_udf(F.col("contact_item.name.given")).alias("contact_name_given"),
         F.col("contact_item.telecom.system").alias("contact_telecom_system"),
@@ -356,7 +356,7 @@ def transform_patient_contacts(df):
         F.lit(None).alias("period_start"),  # period field not available in contact struct
         F.lit(None).alias("period_end")     # period field not available in contact struct
     ).filter(
-        F.col("contact_name_family").isNotNull()  # removed contact_name_text filter since field doesn't exist
+        F.col("contact_name_family").isNotNull() | F.col("contact_name_text").isNotNull()  # filter on either family name or text
     )
     
     return contacts_final

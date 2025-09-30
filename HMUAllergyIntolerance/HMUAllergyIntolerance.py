@@ -1,310 +1,379 @@
 from datetime import datetime
 import sys
-import time
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
+from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, TimestampType, BooleanType, DecimalType, IntegerType
+from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType
 import json
 import logging
 
 # Set up logging
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
-# Initialize Glue context
-args = getResolvedOptions(sys.argv, ['JOB_NAME'])
-sc = SparkContext()
+args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+catalog_nm = "glue_catalog"
+
+s3_bucket = "s3://7df690fd40c734f8937daf02f39b2ec3-457560472834-group/datalake/hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view/"
+ahl_database = "hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view"
+tableCatalogId = "457560472834"  # AHL service account
+s3_output_bucket = "s3://healthlake-glue-output-2025"
+
+
+spark = (SparkSession.builder
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+    .config(f"spark.sql.catalog.{catalog_nm}", "org.apache.iceberg.spark.SparkCatalog")
+    .config(f"spark.sql.catalog.{catalog_nm}.warehouse", s3_bucket)
+    .config(f"spark.sql.catalog.{catalog_nm}.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
+    .config(f"spark.sql.catalog.{catalog_nm}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+    .config("spark.sql.catalog.glue_catalog.glue.lakeformation-enabled", "true")
+    .config("spark.sql.catalog.glue_catalog.glue.id", tableCatalogId)
+    .getOrCreate())
+sc = spark.sparkContext
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
-job.init(args['JOB_NAME'], args)
+job.init(args["JOB_NAME"], args)
 
-# Configuration
-DATABASE_NAME = "hmu-healthlake-database"
+# Configuration - Updated to use S3/Iceberg instead of Glue Catalog
+DATABASE_NAME = ahl_database  # Using AHL Iceberg database
 TABLE_NAME = "allergyintolerance"
 REDSHIFT_CONNECTION = "Redshift connection"
 S3_TEMP_DIR = "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
+
+# Note: We now read data from S3 using Iceberg catalog instead of Glue Catalog
+# This provides better performance and direct access to S3 data
+
+def convert_to_json_string(field):
+    """Convert complex data to JSON strings to avoid nested structures"""
+    if field is None:
+        return None
+    try:
+        if isinstance(field, str):
+            return field
+        else:
+            return json.dumps(field, ensure_ascii=False, default=str)
+    except (TypeError, ValueError) as e:
+        logger.warning(f"JSON serialization failed for field: {str(e)}")
+        return str(field)
+
+# Define UDF globally so it can be used in all transformation functions
+convert_to_json_udf = F.udf(convert_to_json_string, StringType())
 
 def transform_main_allergy_intolerance_data(df):
     """Transform the main allergy intolerance data"""
     logger.info("Transforming main allergy intolerance data...")
 
+    # Log available columns for debugging
     available_columns = df.columns
     logger.info(f"Available columns: {available_columns}")
 
+    # Build the select statement dynamically based on available columns
     select_columns = [
         F.col("id").alias("allergy_intolerance_id"),
-        F.col("resourceType").alias("resource_type"),
+        F.lit("AllergyIntolerance").alias("resourcetype"),  # Always "AllergyIntolerance" for this resource
 
-        # Clinical Status
-        F.when(F.col("clinicalStatus").isNotNull(),
-               F.when(F.col("clinicalStatus").getField("text").isNotNull(),
-                      F.col("clinicalStatus").getField("text"))
-               .otherwise(
-                   F.when(F.size(F.col("clinicalStatus").getField("coding")) > 0,
-                          F.col("clinicalStatus").getField("coding").getItem(0).getField("display"))
-                   .otherwise(None)
-               )
-              ).otherwise(None).alias("clinical_status"),
-
-        F.when(F.col("clinicalStatus").isNotNull() &
-               (F.size(F.col("clinicalStatus").getField("coding")) > 0),
-               F.col("clinicalStatus").getField("coding").getItem(0).getField("code")
+        # Clinical Status - following naming convention
+        F.when(F.col("clinicalStatus").isNotNull() & F.col("clinicalStatus.coding").isNotNull() & (F.size(F.col("clinicalStatus.coding")) > 0),
+               F.col("clinicalStatus.coding")[0].getField("code")
               ).otherwise(None).alias("clinical_status_code"),
+        F.when(F.col("clinicalStatus").isNotNull() & F.col("clinicalStatus.coding").isNotNull() & (F.size(F.col("clinicalStatus.coding")) > 0),
+               F.col("clinicalStatus.coding")[0].getField("display")
+              ).otherwise(None).alias("clinical_status_display"),
+        F.when(F.col("clinicalStatus").isNotNull() & F.col("clinicalStatus.coding").isNotNull() & (F.size(F.col("clinicalStatus.coding")) > 0),
+               F.col("clinicalStatus.coding")[0].getField("system")
+              ).otherwise(None).alias("clinical_status_system"),
 
-        # Verification Status
-        F.when(F.col("verificationStatus").isNotNull(),
-               F.when(F.col("verificationStatus").getField("text").isNotNull(),
-                      F.col("verificationStatus").getField("text"))
-               .otherwise(
-                   F.when(F.size(F.col("verificationStatus").getField("coding")) > 0,
-                          F.col("verificationStatus").getField("coding").getItem(0).getField("display"))
-                   .otherwise(None)
-               )
-              ).otherwise(None).alias("verification_status"),
-
-        F.when(F.col("verificationStatus").isNotNull() &
-               (F.size(F.col("verificationStatus").getField("coding")) > 0),
-               F.col("verificationStatus").getField("coding").getItem(0).getField("code")
+        # Verification Status - following naming convention
+        F.when(F.col("verificationStatus").isNotNull() & F.col("verificationStatus.coding").isNotNull() & (F.size(F.col("verificationStatus.coding")) > 0),
+               F.col("verificationStatus.coding")[0].getField("code")
               ).otherwise(None).alias("verification_status_code"),
+        F.when(F.col("verificationStatus").isNotNull() & F.col("verificationStatus.coding").isNotNull() & (F.size(F.col("verificationStatus.coding")) > 0),
+               F.col("verificationStatus.coding")[0].getField("display")
+              ).otherwise(None).alias("verification_status_display"),
+        F.when(F.col("verificationStatus").isNotNull() & F.col("verificationStatus.coding").isNotNull() & (F.size(F.col("verificationStatus.coding")) > 0),
+               F.col("verificationStatus.coding")[0].getField("system")
+              ).otherwise(None).alias("verification_status_system"),
 
-        # Category, Criticality
-        F.when(F.size(F.col("category")) > 0,
-               F.col("category").getItem(0)
-              ).otherwise(None).alias("category"),
+        # Type and Category
+        F.col("type").alias("type"),
+        convert_to_json_udf(F.col("category")).alias("category"),
+
+        # Criticality
         F.col("criticality").alias("criticality"),
 
-        # Code information
-        F.when(F.col("code").isNotNull(),
-               F.col("code").getField("text")
-              ).otherwise(None).alias("code_text"),
+        # Code - following naming convention
+        F.when(F.col("code").isNotNull() & F.col("code.coding").isNotNull() & (F.size(F.col("code.coding")) > 0),
+               F.col("code.coding")[0].getField("code")
+              ).otherwise(None).alias("code"),
+        F.when(F.col("code").isNotNull() & F.col("code.coding").isNotNull() & (F.size(F.col("code.coding")) > 0),
+               F.col("code.coding")[0].getField("display")
+              ).otherwise(None).alias("code_display"),
+        F.when(F.col("code").isNotNull() & F.col("code.coding").isNotNull() & (F.size(F.col("code.coding")) > 0),
+               F.col("code.coding")[0].getField("system")
+              ).otherwise(None).alias("code_system"),
+        F.col("code.text").alias("code_text"),
 
-        # Patient reference
-        F.when(F.col("patient").isNotNull(),
-               F.regexp_extract(F.col("patient").getField("reference"), "Patient/(.+)", 1)
+        # Patient Reference - following naming convention
+        F.when(F.col("patient.reference").isNotNull(),
+               F.regexp_extract(F.col("patient.reference"), r"Patient/(.+)", 1)
               ).otherwise(None).alias("patient_id"),
 
-        # Dates
-        F.to_date(F.col("recordedDate"), "yyyy-MM-dd").alias("recorded_date"),
+        # Encounter Reference - following naming convention
+        F.when(F.col("encounter.reference").isNotNull(),
+               F.regexp_extract(F.col("encounter.reference"), r"Encounter/(.+)", 1)
+              ).otherwise(None).alias("encounter_id"),
 
-        # Meta information
-        F.when(F.col("meta").isNotNull(),
-               F.col("meta").getField("versionId")
-              ).otherwise(None).alias("meta_version_id"),
+        # Timing fields - following naming convention
+        # Handle onsetDateTime with multiple possible formats
+        F.coalesce(
+            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("onset_datetime"),
+        F.col("onsetAge.value").alias("onset_age_value"),
+        F.col("onsetAge.unit").alias("onset_age_unit"),
+        F.col("onsetPeriod.start").alias("onset_period_start"),
+        F.col("onsetPeriod.end").alias("onset_period_end"),
 
-        F.when(F.col("meta").isNotNull(),
-               # Handle meta.lastUpdated with multiple possible formats
-               F.coalesce(
-                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
-                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'"),
-                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
-                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
-                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
-               )
-              ).otherwise(None).alias("meta_last_updated"),
+        # Recorded date - following naming convention
+        F.coalesce(
+            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("recorded_date"),
 
+        # Recorder Reference - following naming convention
+        F.when(F.col("recorder.reference").isNotNull(),
+               F.regexp_extract(F.col("recorder.reference"), r"Practitioner/(.+)", 1)
+              ).otherwise(None).alias("recorder_practitioner_id"),
+
+        # Asserter Reference - following naming convention
+        F.when(F.col("asserter.reference").isNotNull(),
+               F.regexp_extract(F.col("asserter.reference"), r"Practitioner/(.+)", 1)
+              ).otherwise(None).alias("asserter_practitioner_id"),
+
+        # Last occurrence - following naming convention
+        F.coalesce(
+            F.to_timestamp(F.col("lastOccurrence"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("lastOccurrence"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("lastOccurrence"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("lastOccurrence"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("lastOccurrence"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("last_occurrence"),
+
+        # Note and reactions
+        convert_to_json_udf(F.col("note")).alias("note"),
+        convert_to_json_udf(F.col("reaction")).alias("reactions"),
+
+        # Meta data handling - following naming convention
+        F.col("meta.versionId").alias("meta_version_id"),
+        F.coalesce(
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
+        F.col("meta.source").alias("meta_source"),
+        convert_to_json_udf(F.col("meta.security")).alias("meta_security"),
+        convert_to_json_udf(F.col("meta.tag")).alias("meta_tag"),
+
+        # Extensions
+        convert_to_json_udf(F.col("extension")).alias("extensions"),
+
+        # Standard audit fields
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ]
 
+    # Transform main allergy intolerance data using only available columns and flatten complex structures
     main_df = df.select(*select_columns).filter(
         F.col("allergy_intolerance_id").isNotNull()
     )
 
     return main_df
 
-def transform_allergy_intolerance_codings(df):
-    """Transform allergy intolerance codings"""
-    logger.info("Transforming allergy intolerance codings...")
+def transform_allergy_identifiers(df):
+    """Transform allergy intolerance identifiers (multiple identifiers per allergy)"""
+    logger.info("Transforming allergy intolerance identifiers...")
 
-    if "code" not in df.columns:
-        logger.warning("code column not found")
-        return spark.createDataFrame([], df.select(F.col("id").alias("allergy_intolerance_id")).schema
-                                     .add("system", StringType())
-                                     .add("code", StringType())
-                                     .add("display", StringType()))
+    # Check if identifier column exists
+    if "identifier" not in df.columns:
+        logger.warning("identifier column not found in data, returning empty DataFrame")
+        return df.select(
+            F.col("id").alias("allergy_intolerance_id"),
+            F.lit("").alias("identifier_use"),
+            F.lit("").alias("identifier_type_code"),
+            F.lit("").alias("identifier_type_display"),
+            F.lit("").alias("identifier_system"),
+            F.lit("").alias("identifier_value"),
+            F.lit(None).cast(DateType()).alias("identifier_period_start"),
+            F.lit(None).cast(DateType()).alias("identifier_period_end")
+        ).filter(F.lit(False))
 
-    codings_df = df.select(
+    # First explode the identifier array
+    identifiers_df = df.select(
         F.col("id").alias("allergy_intolerance_id"),
-        F.col("code.coding").alias("coding_array")
+        F.explode(F.col("identifier")).alias("identifier_item")
     ).filter(
-        F.col("coding_array").isNotNull() & (F.size(F.col("coding_array")) > 0)
+        F.col("identifier_item").isNotNull()
     )
 
-    codings_exploded = codings_df.select(
+    # Extract identifier details - following naming convention
+    identifiers_final = identifiers_df.select(
         F.col("allergy_intolerance_id"),
-        F.explode(F.col("coding_array")).alias("coding_item")
-    )
-
-    codings_final = codings_exploded.select(
-        F.col("allergy_intolerance_id"),
-        F.col("coding_item.system").alias("system"),
-        F.col("coding_item.code").alias("code"),
-        F.col("coding_item.display").alias("display")
+        F.col("identifier_item.use").alias("identifier_use"),
+        F.when(F.col("identifier_item.type").isNotNull() & F.col("identifier_item.type.coding").isNotNull() & (F.size(F.col("identifier_item.type.coding")) > 0),
+               F.col("identifier_item.type.coding")[0].getField("code")
+              ).otherwise(None).alias("identifier_type_code"),
+        F.when(F.col("identifier_item.type").isNotNull() & F.col("identifier_item.type.coding").isNotNull() & (F.size(F.col("identifier_item.type.coding")) > 0),
+               F.col("identifier_item.type.coding")[0].getField("display")
+              ).otherwise(None).alias("identifier_type_display"),
+        F.col("identifier_item.system").alias("identifier_system"),
+        F.col("identifier_item.value").alias("identifier_value"),
+        F.to_date(F.col("identifier_item.period.start"), "yyyy-MM-dd").alias("identifier_period_start"),
+        F.to_date(F.col("identifier_item.period.end"), "yyyy-MM-dd").alias("identifier_period_end")
     ).filter(
-        F.col("system").isNotNull() | F.col("code").isNotNull() | F.col("display").isNotNull()
+        F.col("identifier_value").isNotNull()
     )
 
-    return codings_final
-
-def transform_allergy_intolerance_extensions(df):
-    """Transform allergy intolerance extensions"""
-    logger.info("Transforming allergy intolerance extensions...")
-
-    if "extension" not in df.columns:
-        logger.warning("extension column not found")
-        return spark.createDataFrame([], df.select(F.col("id").alias("allergy_intolerance_id")).schema
-                                     .add("extension_url", StringType())
-                                     .add("value_string", StringType())
-                                     .add("value_reference", StringType()))
-
-    extensions_df = df.select(
-        F.col("id").alias("allergy_intolerance_id"),
-        F.col("extension").alias("extension_array")
-    ).filter(
-        F.col("extension_array").isNotNull() & (F.size(F.col("extension_array")) > 0)
-    )
-
-    extensions_exploded = extensions_df.select(
-        F.col("allergy_intolerance_id"),
-        F.explode(F.col("extension_array")).alias("extension_item")
-    )
-
-    extensions_final = extensions_exploded.select(
-        F.col("allergy_intolerance_id"),
-        F.col("extension_item.url").alias("extension_url"),
-        F.col("extension_item.valueString").alias("value_string"),
-        F.when(F.col("extension_item.valueReference").isNotNull(),
-               F.col("extension_item.valueReference.reference")
-              ).otherwise(None).alias("value_reference")
-    ).filter(
-        F.col("extension_url").isNotNull()
-    )
-
-    return extensions_final
+    return identifiers_final
 
 def create_redshift_tables_sql():
+    """Generate SQL for creating main allergy intolerance table in Redshift with proper syntax"""
     return """
-    DROP TABLE IF EXISTS public.allergy_intolerances CASCADE;
-    CREATE TABLE public.allergy_intolerances (
+    -- Main allergy intolerance table
+    CREATE TABLE IF NOT EXISTS public.allergy_intolerance (
         allergy_intolerance_id VARCHAR(255) PRIMARY KEY,
-        resource_type VARCHAR(50),
-        clinical_status VARCHAR(50),
+        resourcetype VARCHAR(50),
         clinical_status_code VARCHAR(50),
-        verification_status VARCHAR(50),
+        clinical_status_display VARCHAR(255),
+        clinical_status_system VARCHAR(255),
         verification_status_code VARCHAR(50),
-        category VARCHAR(50),
+        verification_status_display VARCHAR(255),
+        verification_status_system VARCHAR(255),
+        type VARCHAR(50),
+        category TEXT,
         criticality VARCHAR(50),
+        code VARCHAR(255),
+        code_display VARCHAR(500),
+        code_system VARCHAR(255),
         code_text VARCHAR(500),
         patient_id VARCHAR(255),
-        recorded_date DATE,
+        encounter_id VARCHAR(255),
+        onset_datetime TIMESTAMP,
+        onset_age_value DECIMAL(10,2),
+        onset_age_unit VARCHAR(20),
+        onset_period_start DATE,
+        onset_period_end DATE,
+        recorded_date TIMESTAMP,
+        recorder_practitioner_id VARCHAR(255),
+        asserter_practitioner_id VARCHAR(255),
+        last_occurrence TIMESTAMP,
+        note TEXT,
+        reactions TEXT,
         meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
+        meta_source VARCHAR(255),
+        meta_security TEXT,
+        meta_tag TEXT,
+        extensions TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) SORTKEY (allergy_intolerance_id, patient_id);
+    ) DISTKEY (allergy_intolerance_id) SORTKEY (allergy_intolerance_id, recorded_date)
     """
 
-def create_allergy_codings_table_sql():
+def create_allergy_identifiers_table_sql():
+    """Generate SQL for creating allergy intolerance identifiers table"""
     return """
-    DROP TABLE IF EXISTS public.allergy_intolerance_codings CASCADE;
-    CREATE TABLE public.allergy_intolerance_codings (
+    CREATE TABLE IF NOT EXISTS public.allergy_intolerance_identifiers (
         allergy_intolerance_id VARCHAR(255),
-        \"system\" VARCHAR(255),
-        code VARCHAR(100),
-        display VARCHAR(500)
-    ) SORTKEY (allergy_intolerance_id, \"system\");
-    """
-
-def create_allergy_extensions_table_sql():
-    return """
-    DROP TABLE IF EXISTS public.allergy_intolerance_extensions CASCADE;
-    CREATE TABLE public.allergy_intolerance_extensions (
-        allergy_intolerance_id VARCHAR(255),
-        extension_url VARCHAR(500),
-        value_string TEXT,
-        value_reference VARCHAR(255)
-    ) SORTKEY (allergy_intolerance_id, extension_url);
+        identifier_use VARCHAR(50),
+        identifier_type_code VARCHAR(50),
+        identifier_type_display VARCHAR(255),
+        identifier_system VARCHAR(255),
+        identifier_value VARCHAR(255),
+        identifier_period_start DATE,
+        identifier_period_end DATE
+    ) SORTKEY (allergy_intolerance_id, identifier_system)
     """
 
 def write_to_redshift(dynamic_frame, table_name, preactions=""):
+    """Write DynamicFrame to Redshift using JDBC connection"""
     logger.info(f"Writing {table_name} to Redshift...")
-    logger.info(f"🔧 Preactions SQL for {table_name}:\\n{preactions}")
 
-    # Implement retry logic with exponential backoff
-    max_retries = 3
-    retry_delay = 30  # Start with 30 seconds
+    # Add DELETE to preactions to clear existing data while preserving table structure
+    if preactions:
+        preactions = f"DELETE FROM public.{table_name}; " + preactions
+    else:
+        preactions = f"DELETE FROM public.{table_name};"
 
-    for attempt in range(max_retries):
-        try:
-            logger.info(f"Attempt {attempt + 1} of {max_retries} to connect to Redshift...")
+    try:
+        # Validate dynamic frame before writing
+        record_count = dynamic_frame.count()
+        logger.info(f"Writing {record_count} records to {table_name}")
 
-            glueContext.write_dynamic_frame.from_options(
-                frame=dynamic_frame,
-                connection_type="redshift",
-                connection_options={
-                    "redshiftTmpDir": S3_TEMP_DIR,
-                    "useConnectionProperties": "true",
-                    "dbtable": f"public.{table_name}",
-                    "connectionName": REDSHIFT_CONNECTION,
-                    "preactions": preactions,
-                    # Add connection timeout parameters
-                    "extracopyoptions": "TIMEFORMAT 'auto' COMPUPDATE OFF STATUPDATE ON",
-                    "tempformat": "AVRO",
-                    "hashfield": "",
-                    "hashexpression": "",
-                    "hashpartitions": "",
-                    # Additional JDBC parameters for timeout handling
-                    "aws_iam_role": "",  # Will use connection's IAM role
-                    "autopushdown": "true",
-                    "autopushdown.s3_result_cache": "true"
-                },
-                transformation_ctx=f"write_{table_name}_to_redshift",
-                format_options={
-                    "compression": "gzip"
-                }
-            )
-            logger.info(f"✅ Successfully wrote {table_name} to Redshift on attempt {attempt + 1}")
-            return  # Success, exit the function
-
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"❌ Attempt {attempt + 1} failed to write {table_name} to Redshift: {error_msg}")
-
-            # Check if this is a connection timeout error
-            if "SocketTimeoutException" in error_msg or "connection attempt failed" in error_msg.lower():
-                if attempt < max_retries - 1:
-                    logger.info(f"⏳ Waiting {retry_delay} seconds before retry...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    logger.error(f"❌ All {max_retries} attempts failed. Giving up.")
-                    raise e
-            else:
-                # For non-timeout errors, don't retry
-                logger.error(f"❌ Non-recoverable error occurred. Not retrying.")
-                raise e
+        glueContext.write_dynamic_frame.from_options(
+            frame=dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": preactions
+            },
+            transformation_ctx=f"write_{table_name}_to_redshift"
+        )
+        logger.info(f"✅ Successfully wrote {record_count} records to {table_name} in Redshift")
+    except Exception as e:
+        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        raise
 
 def main():
+    """Main ETL process"""
     start_time = datetime.now()
+
     try:
-        logger.info("="*80)
-        logger.info("🚀 STARTING FHIR ALLERGY INTOLERANCE ETL PROCESS")
+        logger.info("=" * 80)
+        logger.info("🚀 STARTING ENHANCED FHIR ALLERGY INTOLERANCE ETL PROCESS")
+        logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
+        logger.info(f"🎯 Target: Redshift (2 tables)")
+        logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
 
-        allergy_dynamic_frame = glueContext.create_dynamic_frame.from_catalog(
-            database=DATABASE_NAME,
-            table_name=TABLE_NAME,
-            transformation_ctx="AWSGlueDataCatalog_allergy_intolerance_node"
-        )
+        # Step 1: Read data from S3 using Iceberg catalog
+        logger.info("\n" + "=" * 50)
+        logger.info("📥 STEP 1: READING DATA FROM S3 ICEBERG CATALOG")
+        logger.info("=" * 50)
+        logger.info(f"Database: {DATABASE_NAME}")
+        logger.info(f"Table: {TABLE_NAME}")
+        logger.info(f"Catalog: {catalog_nm}")
 
-        allergy_df = allergy_dynamic_frame.toDF()
+        # Use Iceberg to read allergy intolerance data from S3
+        table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
+        logger.info(f"Reading from table: {table_name_full}")
+
+        allergy_df_raw = spark.table(table_name_full)
+
+        print("=== ALLERGY INTOLERANCE DATA PREVIEW (Iceberg) ===")
+        allergy_df_raw.show(5, truncate=False)  # Show 5 rows without truncating
+        print(f"Total records: {allergy_df_raw.count()}")
+        print("Available columns:", allergy_df_raw.columns)
+        print("Schema:")
+        allergy_df_raw.printSchema()
 
         # TESTING MODE: Sample data for quick testing
         USE_SAMPLE = False  # Set to True for testing with limited data
@@ -313,52 +382,234 @@ def main():
         if USE_SAMPLE:
             logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
             logger.info("⚠️  Set USE_SAMPLE = False for production runs")
-            allergy_df = allergy_df.limit(SAMPLE_SIZE)
+            allergy_df = allergy_df_raw.limit(SAMPLE_SIZE)
         else:
             logger.info("✅ Processing full dataset")
+            allergy_df = allergy_df_raw
+
+        available_columns = allergy_df_raw.columns
+        logger.info(f"📋 Available columns in source: {available_columns}")
+
+        logger.info("✅ Successfully read data using S3 Iceberg Catalog")
 
         total_records = allergy_df.count()
         logger.info(f"📊 Read {total_records:,} raw allergy intolerance records")
 
-        if total_records == 0:
-            logger.warning("No records found. Exiting job.")
-            job.commit()
+        # Debug: Show sample of raw data and schema
+        if total_records > 0:
+            logger.info("\n🔍 DATA QUALITY CHECKS:")
+            logger.info("Sample of raw allergy intolerance data:")
+            allergy_df.show(3, truncate=False)
+
+            # Check for NULL values in key fields using efficient aggregation
+            from pyspark.sql.functions import sum as spark_sum, when
+
+            null_check_df = allergy_df.agg(
+                spark_sum(when(F.col("id").isNull(), 1).otherwise(0)).alias("id_nulls"),
+                spark_sum(when(F.col("clinicalStatus").isNull(), 1).otherwise(0)).alias("clinical_status_nulls"),
+                spark_sum(when(F.col("verificationStatus").isNull(), 1).otherwise(0)).alias("verification_status_nulls"),
+                spark_sum(when(F.col("patient").isNull(), 1).otherwise(0)).alias("patient_nulls")
+            ).collect()[0]
+
+            logger.info("NULL value analysis in key fields:")
+            for field, alias in [("id", "id_nulls"), ("clinicalStatus", "clinical_status_nulls"),
+                               ("verificationStatus", "verification_status_nulls"), ("patient", "patient_nulls")]:
+                null_count = null_check_df[alias] or 0
+                percentage = (null_count / total_records) * 100 if total_records > 0 else 0
+                logger.info(f"  {field}: {null_count:,} NULLs ({percentage:.1f}%)")
+        else:
+            logger.error("❌ No raw data found! Check the data source.")
             return
+
+        # Step 2: Transform main allergy intolerance data
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 2: TRANSFORMING MAIN ALLERGY INTOLERANCE DATA")
+        logger.info("=" * 50)
 
         main_allergy_df = transform_main_allergy_intolerance_data(allergy_df)
         main_count = main_allergy_df.count()
         logger.info(f"✅ Transformed {main_count:,} main allergy intolerance records")
 
-        codings_df = transform_allergy_intolerance_codings(allergy_df)
-        codings_count = codings_df.count()
-        logger.info(f"✅ Transformed {codings_count:,} allergy intolerance coding records")
+        if main_count == 0:
+            logger.error("❌ No main allergy intolerance records after transformation! Check filtering criteria.")
+            return
 
-        extensions_df = transform_allergy_intolerance_extensions(allergy_df)
-        extensions_count = extensions_df.count()
-        logger.info(f"✅ Transformed {extensions_count:,} allergy intolerance extension records")
+        # Debug: Show sample of transformed main data
+        logger.info("Sample of transformed main allergy intolerance data:")
+        main_allergy_df.show(3, truncate=False)
 
-        main_dynamic_frame = DynamicFrame.fromDF(main_allergy_df, glueContext, "main_allergy_dynamic_frame")
-        codings_dynamic_frame = DynamicFrame.fromDF(codings_df, glueContext, "codings_dynamic_frame")
-        extensions_dynamic_frame = DynamicFrame.fromDF(extensions_df, glueContext, "extensions_dynamic_frame")
+        # Step 3: Transform multi-valued data (identifiers)
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 3: TRANSFORMING MULTI-VALUED DATA")
+        logger.info("=" * 50)
 
-        main_resolved_frame = main_dynamic_frame.resolveChoice(specs=[('allergy_intolerance_id', 'cast:string')])
-        codings_resolved_frame = codings_dynamic_frame.resolveChoice(specs=[('allergy_intolerance_id', 'cast:string')])
-        extensions_resolved_frame = extensions_dynamic_frame.resolveChoice(specs=[('allergy_intolerance_id', 'cast:string')])
+        allergy_identifiers_df = transform_allergy_identifiers(allergy_df)
+        identifiers_count = allergy_identifiers_df.count()
+        logger.info(f"✅ Transformed {identifiers_count:,} identifier records")
 
-        write_to_redshift(main_resolved_frame, "allergy_intolerances", create_redshift_tables_sql())
-        write_to_redshift(codings_resolved_frame, "allergy_intolerance_codings", create_allergy_codings_table_sql())
-        write_to_redshift(extensions_resolved_frame, "allergy_intolerance_extensions", create_allergy_extensions_table_sql())
+        # Debug: Show samples of multi-valued data if available
+        if identifiers_count > 0:
+            logger.info("Sample of allergy identifiers data:")
+            allergy_identifiers_df.show(3, truncate=False)
 
+        # Step 4: Convert to DynamicFrames and ensure data is flat for Redshift compatibility
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 4: CONVERTING TO DYNAMICFRAMES")
+        logger.info("=" * 50)
+        logger.info("Converting to DynamicFrames and ensuring Redshift compatibility...")
+
+        # Convert main allergy DataFrame and ensure flat structure
+        main_flat_df = main_allergy_df.select(
+            F.col("allergy_intolerance_id").cast(StringType()),
+            F.col("resourcetype").cast(StringType()),
+            F.col("clinical_status_code").cast(StringType()),
+            F.col("clinical_status_display").cast(StringType()),
+            F.col("clinical_status_system").cast(StringType()),
+            F.col("verification_status_code").cast(StringType()),
+            F.col("verification_status_display").cast(StringType()),
+            F.col("verification_status_system").cast(StringType()),
+            F.col("type").cast(StringType()),
+            F.col("category").cast(StringType()),
+            F.col("criticality").cast(StringType()),
+            F.col("code").cast(StringType()),
+            F.col("code_display").cast(StringType()),
+            F.col("code_system").cast(StringType()),
+            F.col("code_text").cast(StringType()),
+            F.col("patient_id").cast(StringType()),
+            F.col("encounter_id").cast(StringType()),
+            F.col("onset_datetime").cast(TimestampType()),
+            F.col("onset_age_value").cast("decimal(10,2)"),
+            F.col("onset_age_unit").cast(StringType()),
+            F.col("onset_period_start").cast(DateType()),
+            F.col("onset_period_end").cast(DateType()),
+            F.col("recorded_date").cast(TimestampType()),
+            F.col("recorder_practitioner_id").cast(StringType()),
+            F.col("asserter_practitioner_id").cast(StringType()),
+            F.col("last_occurrence").cast(TimestampType()),
+            F.col("note").cast(StringType()),
+            F.col("reactions").cast(StringType()),
+            F.col("meta_version_id").cast(StringType()),
+            F.col("meta_last_updated").cast(TimestampType()),
+            F.col("meta_source").cast(StringType()),
+            F.col("meta_security").cast(StringType()),
+            F.col("meta_tag").cast(StringType()),
+            F.col("extensions").cast(StringType()),
+            F.col("created_at").cast(TimestampType()),
+            F.col("updated_at").cast(TimestampType())
+        )
+
+        main_dynamic_frame = DynamicFrame.fromDF(main_flat_df, glueContext, "main_allergy_dynamic_frame")
+
+        # Convert identifiers DataFrame with type casting
+        identifiers_flat_df = allergy_identifiers_df.select(
+            F.col("allergy_intolerance_id").cast(StringType()),
+            F.col("identifier_use").cast(StringType()),
+            F.col("identifier_type_code").cast(StringType()),
+            F.col("identifier_type_display").cast(StringType()),
+            F.col("identifier_system").cast(StringType()),
+            F.col("identifier_value").cast(StringType()),
+            F.col("identifier_period_start").cast(DateType()),
+            F.col("identifier_period_end").cast(DateType())
+        )
+        identifiers_dynamic_frame = DynamicFrame.fromDF(identifiers_flat_df, glueContext, "identifiers_dynamic_frame")
+
+        # Step 5: Resolve any remaining choice types to ensure Redshift compatibility
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 5: RESOLVING CHOICE TYPES")
+        logger.info("=" * 50)
+        logger.info("Resolving choice types for Redshift compatibility with Glue 4 optimizations...")
+
+        main_resolved_frame = main_dynamic_frame.resolveChoice(specs=[("*", "cast:string")])
+        identifiers_resolved_frame = identifiers_dynamic_frame.resolveChoice(specs=[("*", "cast:string")])
+
+        # Step 6: Final validation before writing
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 6: FINAL VALIDATION")
+        logger.info("=" * 50)
+        logger.info("Performing final validation before writing to Redshift...")
+
+        # Validate main allergy intolerance data
+        main_final_df = main_resolved_frame.toDF()
+        main_final_count = main_final_df.count()
+        logger.info(f"Final main allergy intolerance count: {main_final_count}")
+
+        if main_final_count == 0:
+            logger.error("No main allergy intolerance records to write to Redshift! Stopping the process.")
+            return
+
+        # Validate other tables
+        identifiers_final_count = identifiers_resolved_frame.toDF().count()
+
+        logger.info(f"Final counts - Identifiers: {identifiers_final_count}")
+
+        # Debug: Show final sample data being written
+        logger.info("Final sample data being written to Redshift (main allergy intolerance):")
+        main_final_df.show(3, truncate=False)
+
+        # Step 7: Create tables and write to Redshift
+        logger.info("\n" + "=" * 50)
+        logger.info("💾 STEP 7: WRITING DATA TO REDSHIFT")
+        logger.info("=" * 50)
+        logger.info(f"🔗 Using connection: {REDSHIFT_CONNECTION}")
+        logger.info(f"📁 S3 temp directory: {S3_TEMP_DIR}")
+
+        # Create all tables individually
+        logger.info("📝 Creating main allergy intolerance table...")
+        allergy_table_sql = create_redshift_tables_sql()
+        write_to_redshift(main_resolved_frame, "allergy_intolerance", allergy_table_sql)
+        logger.info("✅ Main allergy intolerance table created and written successfully")
+
+        logger.info("📝 Creating allergy intolerance identifiers table...")
+        identifiers_table_sql = create_allergy_identifiers_table_sql()
+        write_to_redshift(identifiers_resolved_frame, "allergy_intolerance_identifiers", identifiers_table_sql)
+        logger.info("✅ Allergy intolerance identifiers table created and written successfully")
+
+        # Calculate processing time
         end_time = datetime.now()
+        processing_time = end_time - start_time
+
+        logger.info("\n" + "=" * 80)
+        logger.info("🎉 ETL PROCESS COMPLETED SUCCESSFULLY!")
+        logger.info("=" * 80)
+        logger.info(f"⏰ Job completed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"⏱️  Total processing time: {processing_time}")
+        logger.info(f"📊 Processing rate: {total_records / processing_time.total_seconds():.2f} records/second")
+
+        logger.info("\n📋 TABLES WRITTEN TO REDSHIFT:")
+        logger.info("  ✅ public.allergy_intolerance (main allergy data)")
+        logger.info("  ✅ public.allergy_intolerance_identifiers (allergy identifiers)")
+
+        logger.info("\n📊 FINAL ETL STATISTICS:")
+        logger.info(f"  📥 Total raw records processed: {total_records:,}")
+        logger.info(f"  🏥 Main allergy intolerance records: {main_count:,}")
+        logger.info(f"  🆔 Identifier records: {identifiers_count:,}")
+
+        # Calculate data expansion ratio
+        total_output_records = main_count + identifiers_count
+        expansion_ratio = total_output_records / total_records if total_records > 0 else 0
+        logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
+
+        logger.info("\n" + "=" * 80)
+
         if USE_SAMPLE:
             logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
             logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
             logger.info("⚠️  Set USE_SAMPLE = False for production runs")
-        logger.info(f"🎉 ETL PROCESS COMPLETED SUCCESSFULLY in {end_time - start_time}")
+        logger.info("✅ ETL JOB COMPLETED SUCCESSFULLY")
+        logger.info("=" * 80)
 
     except Exception as e:
-        logger.error(f"❌ ETL PROCESS FAILED: {str(e)}")
-        raise e
+        end_time = datetime.now()
+        processing_time = end_time - start_time
+        logger.error("\n" + "=" * 80)
+        logger.error("❌ ETL PROCESS FAILED!")
+        logger.error("=" * 80)
+        logger.error(f"⏰ Job failed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.error(f"⏱️  Processing time before failure: {processing_time}")
+        logger.error(f"🚨 Error: {str(e)}")
+        logger.error(f"🚨 Error type: {type(e).__name__}")
+        logger.error("=" * 80)
+        raise
 
 if __name__ == "__main__":
     main()

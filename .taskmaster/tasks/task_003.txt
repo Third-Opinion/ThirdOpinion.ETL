@@ -1,6 +1,6 @@
 # Task ID: 3
 # Title: Create fact_fhir_conditions_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for conditions entity with comprehensive condition data aggregation
@@ -9,3 +9,35 @@ Create materialized view joining conditions table with condition_body_sites, con
 
 # Test Strategy:
 Test view creation, validate condition code aggregation, verify clinical status handling, and ensure proper null handling for optional condition attributes.
+
+# Subtasks:
+## 1. Analyze conditions table schema and relationships [done]
+### Dependencies: None
+### Description: Thoroughly examine the conditions main table structure (40+ columns) and map relationships with 7 related tables
+### Details:
+Review the conditions table schema focusing on key columns like clinical_status, verification_status, onset/abatement dates, and severity. Document relationships with condition_body_sites, condition_categories, condition_codes, condition_evidence, condition_extensions, condition_notes, and condition_stages tables. Identify primary/foreign key relationships, cardinality, and data types. Create a comprehensive mapping document showing how data flows between tables and which columns will be needed for the materialized view.
+
+## 2. Design view structure following existing patterns [done]
+### Dependencies: 3.1
+### Description: Create the view structure based on existing fact_fhir patterns from encounters and patients views
+### Details:
+Study fact_fhir_encounters_view_v1 and fact_fhir_patients_view_v1 to understand the established patterns for column naming, data aggregation, and JSON structure. Design the fact_fhir_conditions_view_v1 structure with appropriate column selection from the main conditions table. Plan the JOIN strategy for all 7 related tables, determining LEFT vs INNER joins based on data requirements. Define the output columns including aggregated fields for codes, body sites, categories, and evidence.
+
+## 3. Implement JSON aggregations for condition categories and codes [done]
+### Dependencies: 3.2
+### Description: Develop complex JSON aggregation logic for multiple condition-related data points using LISTAGG and JSON_PARSE
+### Details:
+Implement LISTAGG aggregations for condition_codes (including system, code, display), condition_body_sites, condition_categories, and condition_evidence. Use JSON_PARSE for nested structures like clinical_status, verification_status, and onset/abatement complex types. Create proper GROUP BY clauses and handle NULL values appropriately. Ensure JSON output is properly formatted and follows the same patterns as other views. Handle multiple codes per condition and proper concatenation with appropriate delimiters.
+
+## 4. Add data quality checks and sanitization [done]
+### Dependencies: 3.3
+### Description: Implement comprehensive data validation and sanitization logic for complex condition hierarchies
+### Details:
+Add NULL handling for all optional attributes including onset/abatement dates, severity, and stage information. Implement data type conversions where necessary, especially for date fields and coded elements. Add validation for clinical_status and verification_status values against FHIR specifications. Create sanitization logic for text fields in notes and evidence descriptions. Ensure proper handling of edge cases like conditions without codes or body sites. Add CASE statements for conditional logic where needed.
+
+## 5. Test and validate the view [done]
+### Dependencies: 3.4
+### Description: Execute comprehensive testing of the materialized view including data accuracy and performance
+### Details:
+Create and execute the CREATE MATERIALIZED VIEW statement in Redshift. Run validation queries to verify condition code aggregation is working correctly. Test clinical status and verification status handling with various data scenarios. Validate proper NULL handling for optional condition attributes. Check JSON aggregation output for correctness and proper formatting. Compare row counts between source tables and view results. Test performance with sample queries and verify indexes are properly utilized. Document any data quality issues or anomalies found during testing.
+

@@ -175,9 +175,50 @@ show_status_summary() {
 # Returns the mapped folder name or empty string if no mapping exists
 get_mapped_folder() {
     local job_name="$1"
-    
+
     # Define mappings using a case statement for compatibility
+    # New job names follow HMU* pattern without spaces
     case "$job_name" in
+        "HMUObservation")
+            echo "HMUObservation"
+            ;;
+        "HMUPractitioner")
+            echo "HMUPractitioner"
+            ;;
+        "HMUProcedure")
+            echo "HMUProcedure"
+            ;;
+        "HMUDocumentReference")
+            echo "HMUDocumentReference"
+            ;;
+        "HMUMedicationDispense")
+            echo "HMUMedicationDispense"
+            ;;
+        "HMUMedicationRequest")
+            echo "HMUMedicationRequest"
+            ;;
+        "HMUMedication")
+            echo "HMUMedication"
+            ;;
+        "HMUPatient")
+            echo "HMUPatient"
+            ;;
+        "HMUEncounter")
+            echo "HMUEncounter"
+            ;;
+        "HMUCondition")
+            echo "HMUCondition"
+            ;;
+        "HMUCarePlan")
+            echo "HMUCarePlan"
+            ;;
+        "HMUDiagnosticReport")
+            echo "HMUDiagnosticReport"
+            ;;
+        "HMUAllergyIntolerance")
+            echo "HMUAllergyIntolerance"
+            ;;
+        # Legacy mappings for backward compatibility
         "HMU Observation")
             echo "HMUObservation"
             ;;
@@ -193,16 +234,13 @@ get_mapped_folder() {
         "HMU MedicationDispense")
             echo "HMUMedicationDispense"
             ;;
-        "HMU MyJob")
-            echo "HMUMyJob"
-            ;;
-        # Jobs that map to themselves (folder name matches job name)
         "HMU Patient"|"HMU Encounter"|"HMU Condition"|"HMU MedicationRequest")
-            echo "$job_name"
+            # Convert space-separated names to camelCase format
+            echo "${job_name// /}"
             ;;
         *)
-            # No mapping found
-            echo ""
+            # No mapping found, try direct folder match
+            echo "$job_name"
             ;;
     esac
 }

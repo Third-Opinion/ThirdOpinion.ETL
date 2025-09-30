@@ -34,7 +34,7 @@ echo ""
 # Array of SQL files to execute (in order)
 # Only create latest version (v2 when available, v1 otherwise)
 SQL_FILES=(
-    "fact_fhir_patients_view_v2.sql"           # v2 available, skip v1
+    "fact_fhir_patients_view_v1.sql"           # v1 is current version
     "fact_fhir_encounters_view_v2.sql"         # v2 available, skip v1
     "fact_fhir_conditions_view_v1.sql"         # only v1 exists
     "fact_fhir_diagnostic_reports_view_v1.sql" # only v1 exists

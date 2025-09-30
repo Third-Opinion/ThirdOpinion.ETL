@@ -1,6 +1,6 @@
 # Task ID: 4
 # Title: Create fact_fhir_diagnostic_reports_view_v1 materialized view
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: medium
 # Description: Implement materialized view for diagnostic reports with results and performer aggregation
@@ -9,3 +9,35 @@ Create materialized view joining diagnostic_reports with diagnostic_report_resul
 
 # Test Strategy:
 Validate view creation, test results aggregation accuracy, verify performer data integrity, and confirm proper handling of media and presented forms.
+
+# Subtasks:
+## 1. Analyze diagnostic_reports schema and related tables [done]
+### Dependencies: None
+### Description: Study the diagnostic_reports table structure and all 6 related tables to understand data relationships and aggregation requirements
+### Details:
+Examine diagnostic_reports base table schema including columns, data types, and constraints. Analyze related tables: diagnostic_report_results (result values and references), diagnostic_report_performers (practitioner/organization references), diagnostic_report_categories (category codings), diagnostic_report_media (attachments and images), diagnostic_report_presented_forms (report documents), and diagnostic_report_based_on (source orders/requests). Document foreign key relationships, cardinality, and identify required aggregation patterns for each related table.
+
+## 2. Design view structure with result and performer aggregations [done]
+### Dependencies: 4.1
+### Description: Create the view design following existing patterns, defining column structure and aggregation strategies for results and performers
+### Details:
+Design view columns including: diagnostic_report_id, status, issued_date, effective_period_start/end, conclusion text, and aggregated fields. Plan JSON structure for results array containing observation references, values, and interpretation codes. Design performer aggregation to include practitioner/organization details with roles. Define category aggregation strategy using LISTAGG. Structure media and presented_forms handling with proper null checks. Document column naming conventions consistent with existing views.
+
+## 3. Implement core view with JSON aggregations [done]
+### Dependencies: 4.2
+### Description: Write the SQL for the materialized view implementing JSON_PARSE for results and categories with proper joins
+### Details:
+Implement CREATE MATERIALIZED VIEW statement with base diagnostic_reports table. Add LEFT JOINs for all 6 related tables using appropriate foreign keys. Implement JSON_PARSE aggregation for results array including observation_reference, value_quantity, value_codeable_concept, and interpretation. Create performer JSON aggregation with practitioner/organization references and display names. Use LISTAGG for categories with proper delimiters. Implement media attachment handling with content_type and url fields. Add presented_forms aggregation for report documents.
+
+## 4. Add data sanitization and performance optimizations [done]
+### Dependencies: 4.3
+### Description: Implement data cleaning, null handling, and performance optimizations following established patterns
+### Details:
+Add TRIM and NULLIF functions for text fields to handle empty strings and whitespace. Implement proper NULL handling for all aggregated fields using COALESCE. Add WHERE clauses to filter out invalid or test data if needed. Create appropriate indexes on foreign key columns in source tables. Add SORTKEY and DISTKEY specifications for optimal query performance. Implement date formatting consistency for issued_date and effective_period fields. Add proper error handling for JSON_PARSE operations.
+
+## 5. Test view with sample data and validate aggregations [done]
+### Dependencies: 4.4
+### Description: Execute comprehensive tests to verify view functionality, data accuracy, and performance
+### Details:
+Create test queries to validate view creation without errors. Test results aggregation by comparing JSON array contents with source diagnostic_report_results records. Verify performer information completeness and accuracy against diagnostic_report_performers. Validate category aggregation using sample reports with multiple categories. Test media and presented_forms handling including null cases. Measure query performance with different data volumes. Verify all status values are properly represented. Test edge cases like reports without results or performers.
+

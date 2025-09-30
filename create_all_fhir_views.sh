@@ -8,6 +8,7 @@
 # ===================================================================
 
 # Configuration
+AWS_PROFILE="${AWS_PROFILE:-to-prd-admin}"
 CLUSTER_ID="prod-redshift-main-ue2"
 DATABASE="dev"
 SECRET_ARN="arn:aws:secretsmanager:us-east-2:442042533707:secret:redshift!prod-redshift-main-ue2-awsuser-yp5Lq4"
@@ -23,7 +24,7 @@ NC='\033[0m' # No Color
 get_record_count() {
     local view_name=$1
     
-    STATEMENT_ID=$(aws redshift-data execute-statement \
+    STATEMENT_ID=$(aws --profile "$AWS_PROFILE" redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
         --secret-arn "$SECRET_ARN" \
@@ -39,7 +40,7 @@ get_record_count() {
     
     # Wait for completion
     while true; do
-        STATUS=$(aws redshift-data describe-statement \
+        STATUS=$(aws --profile "$AWS_PROFILE" redshift-data describe-statement \
             --id "$STATEMENT_ID" \
             --region "$REGION" \
             --query 'Status' \
@@ -55,7 +56,7 @@ get_record_count() {
     done
     
     # Get the result
-    COUNT=$(aws redshift-data get-statement-result \
+    COUNT=$(aws --profile "$AWS_PROFILE" redshift-data get-statement-result \
         --id "$STATEMENT_ID" \
         --region "$REGION" \
         --query 'Records[0][0].longValue' \
@@ -82,7 +83,7 @@ execute_sql_file() {
     fi
     
     # Execute the SQL
-    STATEMENT_ID=$(aws redshift-data execute-statement \
+    STATEMENT_ID=$(aws --profile "$AWS_PROFILE" redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
         --secret-arn "$SECRET_ARN" \
@@ -100,7 +101,7 @@ execute_sql_file() {
     
     # Wait for the statement to complete
     while true; do
-        STATUS=$(aws redshift-data describe-statement \
+        STATUS=$(aws --profile "$AWS_PROFILE" redshift-data describe-statement \
             --id "$STATEMENT_ID" \
             --region "$REGION" \
             --query 'Status' \
@@ -116,7 +117,7 @@ execute_sql_file() {
                 break
                 ;;
             FAILED)
-                ERROR_MSG=$(aws redshift-data describe-statement \
+                ERROR_MSG=$(aws --profile "$AWS_PROFILE" redshift-data describe-statement \
                     --id "$STATEMENT_ID" \
                     --region "$REGION" \
                     --query 'Error' \
@@ -155,7 +156,7 @@ execute_sql_file() {
 check_view_exists() {
     local view_name=$1
     
-    STATEMENT_ID=$(aws redshift-data execute-statement \
+    STATEMENT_ID=$(aws --profile "$AWS_PROFILE" redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
         --secret-arn "$SECRET_ARN" \
@@ -166,7 +167,7 @@ check_view_exists() {
     
     # Wait for completion
     while true; do
-        STATUS=$(aws redshift-data describe-statement \
+        STATUS=$(aws --profile "$AWS_PROFILE" redshift-data describe-statement \
             --id "$STATEMENT_ID" \
             --region "$REGION" \
             --query 'Status' \
@@ -181,7 +182,7 @@ check_view_exists() {
     done
     
     # Get the result
-    COUNT=$(aws redshift-data get-statement-result \
+    COUNT=$(aws --profile "$AWS_PROFILE" redshift-data get-statement-result \
         --id "$STATEMENT_ID" \
         --region "$REGION" \
         --query 'Records[0][0].longValue' \
@@ -207,7 +208,7 @@ echo ""
 # Array of views to create (in dependency order)
 # Only create latest version (v2 when available, v1 otherwise)
 declare -a VIEWS=(
-    "fact_fhir_patients_view_v2.sql:fact_fhir_patients_view_v2"                     # v2 is latest
+    "fact_fhir_patients_view_v1.sql:fact_fhir_patients_view_v1"                     # v1 is latest
     "fact_fhir_encounters_view_v2.sql:fact_fhir_encounters_view_v2"                 # v2 is latest
     "fact_fhir_conditions_view_v1.sql:fact_fhir_conditions_view_v1"                 # only v1 exists
     "fact_fhir_diagnostic_reports_view_v1.sql:fact_fhir_diagnostic_reports_view_v1" # only v1 exists
@@ -280,7 +281,7 @@ if [ true ]; then
             IFS=':' read -r SQL_FILE VIEW_NAME <<< "${VIEWS[$i]}"
             
             echo "Refreshing: $VIEW_NAME"
-            aws redshift-data execute-statement \
+            aws --profile "$AWS_PROFILE" redshift-data execute-statement \
                 --cluster-identifier "$CLUSTER_ID" \
                 --database "$DATABASE" \
                 --secret-arn "$SECRET_ARN" \
