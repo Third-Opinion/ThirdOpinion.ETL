@@ -1,13 +1,17 @@
 #!/bin/bash
 
 # ===================================================================
-# REDEPLOY FHIR VIEWS SCRIPT
+# REDEPLOY FHIR VIEWS SCRIPT - V1 VIEWS & REPORTING
 # ===================================================================
 # This script allows you to redeploy FHIR materialized views by:
 # 1. Dropping the existing view
 # 2. Creating the new view from SQL file
 # 3. Waiting for completion
 # 4. Optionally refreshing the view with data
+#
+# Updated to support:
+# - All fact_fhir_*_view_v1 views (standardized on v1)
+# - New rpt_* reporting views for analytics and dashboards
 # ===================================================================
 
 # Color codes for output
@@ -25,10 +29,11 @@ SECRET_ARN="arn:aws:secretsmanager:us-east-2:442042533707:secret:redshift!prod-r
 REGION="us-east-2"
 
 # View definitions - using simple arrays instead of associative
+# Updated to use v1 views and include rpt_* reporting views
 VIEW_NAMES=(
     "fact_fhir_patients_view_v1"
-    "fact_fhir_encounters_view_v2"
-    "fact_fhir_observations_view_v2"
+    "fact_fhir_encounters_view_v1"
+    "fact_fhir_observations_view_v1"
     "fact_fhir_practitioners_view_v1"
     "fact_fhir_document_references_view_v1"
     "fact_fhir_medication_requests_view_v1"
@@ -36,6 +41,17 @@ VIEW_NAMES=(
     "fact_fhir_procedures_view_v1"
     "fact_fhir_diagnostic_reports_view_v1"
     "fact_fhir_allergies_view_v1"
+    "fact_fhir_care_plans_view_v1"
+    "fact_fhir_medications_view_v1"
+    "rpt_fhir_hmu_patients_v1"
+    "rpt_patient_summary_view"
+    "rpt_patient_encounter_summary_view"
+    "rpt_patient_medication_summary_view"
+    "rpt_patient_condition_summary_view"
+    "rpt_provider_summary_view"
+    "rpt_encounter_metrics_view"
+    "rpt_medication_metrics_view"
+    "rpt_condition_metrics_view"
 )
 
 # Function to print colored output
@@ -251,23 +267,49 @@ display_menu() {
     print_status "     FHIR VIEW REDEPLOYMENT TOOL" "$BLUE"
     print_status "========================================" "$BLUE"
     echo
-    print_status "Available views:" "$YELLOW"
-    
+
+    # Display FACT views
+    print_status "📊 FACT Views (Data Warehouse):" "$YELLOW"
     local index=1
     for view_name in "${VIEW_NAMES[@]}"; do
-        local status="[Not Found]"
-        local color="$RED"
-        
-        if [ -f "${view_name}.sql" ]; then
-            status="[SQL Ready]"
-            color="$GREEN"
+        if [[ $view_name == fact_* ]]; then
+            local status="[Not Found]"
+            local color="$RED"
+
+            if [ -f "${view_name}.sql" ]; then
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
+
+            printf "  %2d) %-45s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
         fi
-        
-        printf "  %2d) %-45s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
         index=$((index + 1))
     done
+
     echo
+    # Display RPT views
+    print_status "📈 REPORTING Views (Analytics):" "$YELLOW"
+    index=1
+    for view_name in "${VIEW_NAMES[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            local status="[Not Found]"
+            local color="$RED"
+
+            if [ -f "${view_name}.sql" ]; then
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
+
+            printf "  %2d) %-45s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        fi
+        index=$((index + 1))
+    done
+
+    echo
+    print_status "🔧 BULK Operations:" "$YELLOW"
     print_status "  A) Redeploy ALL views" "$YELLOW"
+    print_status "  F) Redeploy FACT views only" "$YELLOW"
+    print_status "  P) Redeploy RPT views only" "$YELLOW"
     print_status "  R) Refresh ALL existing views (no drop/create)" "$YELLOW"
     print_status "  Q) Quit" "$YELLOW"
     echo
@@ -315,15 +357,52 @@ redeploy_all_views() {
     print_status "========================================" "$BLUE"
 }
 
+# Function to redeploy views by type
+redeploy_views_by_type() {
+    local view_type="$1"
+    local type_name="$2"
+
+    print_status "\n========================================" "$BLUE"
+    print_status "     REDEPLOYING $type_name VIEWS" "$BLUE"
+    print_status "========================================" "$BLUE"
+
+    local success_count=0
+    local fail_count=0
+    local skip_count=0
+
+    for view_name in "${VIEW_NAMES[@]}"; do
+        if [[ $view_name == $view_type* ]]; then
+            if [ -f "${view_name}.sql" ]; then
+                redeploy_view "$view_name"
+                if [ $? -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "⚠ Skipping $view_name (SQL file not found)" "$YELLOW"
+                skip_count=$((skip_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\n========================================" "$BLUE"
+    print_status "$type_name SUMMARY:" "$BLUE"
+    print_status "  Successful: $success_count" "$GREEN"
+    print_status "  Failed: $fail_count" "$RED"
+    print_status "  Skipped: $skip_count" "$YELLOW"
+    print_status "========================================" "$BLUE"
+}
+
 # Function to refresh all existing views
 refresh_all_views() {
     print_status "\n========================================" "$BLUE"
     print_status "     REFRESHING ALL EXISTING VIEWS" "$BLUE"
     print_status "========================================" "$BLUE"
-    
+
     local success_count=0
     local fail_count=0
-    
+
     for view_name in "${VIEW_NAMES[@]}"; do
         print_status "\nRefreshing: $view_name" "$YELLOW"
         execute_sql "REFRESH MATERIALIZED VIEW public.$view_name;" "Refreshing $view_name"
@@ -333,7 +412,7 @@ refresh_all_views() {
             fail_count=$((fail_count + 1))
         fi
     done
-    
+
     print_status "\n========================================" "$BLUE"
     print_status "REFRESH SUMMARY:" "$BLUE"
     print_status "  Successful: $success_count" "$GREEN"
@@ -361,6 +440,10 @@ main() {
     print_status "  Cluster: $CLUSTER_ID" "$NC"
     print_status "  Database: $DATABASE" "$NC"
     print_status "  Region: $REGION" "$NC"
+    echo
+    print_status "📋 View Types Supported:" "$BLUE"
+    print_status "  • fact_fhir_*_view_v1 - Core FHIR data warehouse views" "$NC"
+    print_status "  • rpt_*_view - Reporting and analytics views" "$NC"
     
     while true; do
         display_menu
@@ -378,6 +461,12 @@ main() {
                 ;;
             [Aa])
                 redeploy_all_views
+                ;;
+            [Ff])
+                redeploy_views_by_type "fact_" "FACT"
+                ;;
+            [Pp])
+                redeploy_views_by_type "rpt_" "REPORTING"
                 ;;
             [Rr])
                 refresh_all_views

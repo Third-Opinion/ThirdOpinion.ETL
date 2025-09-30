@@ -11,7 +11,7 @@
 -- 
 -- SOURCE TABLES:
 -- - public.encounters: Primary encounter data
--- - public.encounter_identifiers: External identifiers
+-- - public.encounter_identifiers: External identifiers (NOT AVAILABLE - using placeholders)
 -- - public.encounter_hospitalization: Hospitalization details
 -- - public.encounter_locations: Location information
 -- - public.encounter_participants: Care team participants
@@ -111,23 +111,19 @@ location_timeline AS (
     FROM public.encounter_locations
     GROUP BY encounter_id
 ),
+-- Note: encounter_identifiers table not created by current ETL job
+-- Using NULL placeholders for identifier fields
 identifier_counts AS (
-    SELECT 
+    SELECT
         encounter_id,
-        COUNT(DISTINCT identifier_value) AS identifier_count
-    FROM public.encounter_identifiers
-    GROUP BY encounter_id
+        0 AS identifier_count
+    FROM public.encounters
 ),
 aggregated_identifiers AS (
-    -- Aggregate identifiers separately to avoid LISTAGG/COUNT DISTINCT conflict
-    SELECT 
+    SELECT
         encounter_id,
-        LISTAGG(DISTINCT 
-            identifier_system || ':' || identifier_value,
-            ' | '
-        ) WITHIN GROUP (ORDER BY identifier_system) AS all_identifiers
-    FROM public.encounter_identifiers
-    GROUP BY encounter_id
+        NULL AS all_identifiers
+    FROM public.encounters
 ),
 aggregated_reasons AS (
     -- Aggregate reasons separately to avoid LISTAGG conflict
@@ -249,47 +245,6 @@ SELECT
         ELSE NULL 
     END AS duration_minutes,
     
-    -- Duration in hours
-    CASE 
-        WHEN e.start_time IS NOT NULL AND e.end_time IS NOT NULL 
-        THEN EXTRACT(EPOCH FROM (e.end_time - e.start_time)) / 3600
-        ELSE NULL 
-    END AS duration_hours,
-    
-    -- Length of stay in days (for inpatient)
-    CASE 
-        WHEN e.class_code = 'inpatient' AND e.start_time IS NOT NULL AND e.end_time IS NOT NULL 
-        THEN DATEDIFF(day, e.start_time, e.end_time) + 1
-        ELSE NULL 
-    END AS length_of_stay_days,
-    
-    -- Business days calculation (excluding weekends)
-    CASE 
-        WHEN e.start_time IS NOT NULL AND e.end_time IS NOT NULL 
-        THEN (DATEDIFF(day, e.start_time, e.end_time) + 1) - 
-             (DATEDIFF(week, e.start_time, e.end_time) * 2) -
-             CASE WHEN EXTRACT(DOW FROM e.start_time) = 0 THEN 1 ELSE 0 END -
-             CASE WHEN EXTRACT(DOW FROM e.end_time) = 6 THEN 1 ELSE 0 END
-        ELSE NULL 
-    END AS business_days,
-    
-    -- ============================================
-    -- ENCOUNTER CLASSIFICATION (V2 ENHANCEMENT)
-    -- ============================================
-    -- Emergency vs Scheduled
-    CASE 
-        WHEN e.class_code IN ('emergency', 'urgent') THEN 'emergency'
-        WHEN e.appointment_id IS NOT NULL THEN 'scheduled'
-        ELSE 'walk-in'
-    END AS encounter_origin,
-    
-    -- Encounter complexity score (based on diagnosis count only)
-    CASE 
-        WHEN condc.diagnosis_count >= 5 THEN 'high_complexity'
-        WHEN condc.diagnosis_count >= 3 THEN 'medium_complexity'
-        ELSE 'low_complexity'
-    END AS complexity_level,
-    
     -- Is encounter complete
     CASE 
         WHEN e.status IN ('finished', 'cancelled', 'entered-in-error') THEN TRUE
@@ -312,17 +267,7 @@ SELECT
     RANK() OVER (
         PARTITION BY e.patient_id 
         ORDER BY e.start_time DESC
-    ) AS patient_encounter_rank,
-    
-    -- Rank by length of stay for inpatient
-    CASE 
-        WHEN e.class_code = 'inpatient' 
-        THEN RANK() OVER (
-            PARTITION BY e.class_code 
-            ORDER BY DATEDIFF(day, e.start_time, e.end_time) DESC
-        )
-        ELSE NULL
-    END AS los_rank
+    ) AS patient_encounter_rank
 
 FROM public.encounters e
     LEFT JOIN identifier_counts ic ON e.encounter_id = ic.encounter_id
