@@ -104,10 +104,7 @@ def transform_main_medication_dispense_data(df):
 
         # Extract quantity value, handling nested struct
         F.when(F.col("quantity").isNotNull(),
-               F.coalesce(
-                   F.col("quantity").getField("value").getField("double"),
-                   F.col("quantity").getField("value").getField("int")
-               )
+               F.col("quantity").getField("value")
               ).otherwise(None).alias("quantity_value"),
         
         # Convert whenHandedOver to timestamp
@@ -288,10 +285,7 @@ def transform_medication_dispense_dosage_instructions(df):
                F.col("dosage_item.route.coding")[0].getField("display")
               ).otherwise(None).alias("dosage_route_display"),
         F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
-               F.coalesce(
-                   F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value").getField("double"),
-                   F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value").getField("int")
-               )
+               F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("value")
               ).otherwise(None).alias("dosage_dose_value"),
         F.when(F.col("dosage_item.doseAndRate").isNotNull() & (F.size(F.col("dosage_item.doseAndRate")) > 0),
                F.col("dosage_item.doseAndRate")[0].getField("doseQuantity").getField("unit")
@@ -446,13 +440,9 @@ def main():
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
-            database=DATABASE_NAME, 
-            table_name=TABLE_NAME, 
-            transformation_ctx="AWSGlueDataCatalog_medication_dispense_node"
-        )
         
         # Convert to DataFrame first to check available columns
-        medication_dispense_df_raw = medication_dispense_dynamic_frame.toDF()
+        medication_dispense_df_raw = df_raw
 
         # TESTING MODE: Sample data for quick testing
 
@@ -836,7 +826,6 @@ def main():
         logger.error("=" * 80)
         raise e
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     main()
     job.commit()
