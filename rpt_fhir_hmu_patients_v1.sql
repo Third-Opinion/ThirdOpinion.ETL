@@ -15,7 +15,7 @@
 --
 -- SOURCE TABLES:
 -- - fact_fhir_conditions_view_v1: Condition data for filtering
--- - fact_fhir_encounters_view_v2: Encounter data for date filtering
+-- - fact_fhir_encounters_view_v1: Encounter data for date filtering
 -- - fact_fhir_patients_view_v1: Patient demographics and details
 --
 -- REFRESH STRATEGY:
@@ -35,7 +35,7 @@ CREATE MATERIALIZED VIEW rpt_fhir_hmu_patients_v1 BACKUP NO AUTO REFRESH NO AS W
                 patient_id,
                 MAX(start_time) AS last_encounter_date
             FROM
-                fact_fhir_encounters_view_v2
+                fact_fhir_encounters_view_v1
             GROUP BY
                 patient_id
         ) AS e ON c.patient_id = e.patient_id
@@ -55,21 +55,17 @@ SELECT
     -- DEMOGRAPHICS
     p.birth_date,
     p.gender,
-    -- NAME INFORMATION (JSON)
+    -- NAME INFORMATION (DISCRETE FIELDS FROM PATIENT VIEW)
+    p.name_text,
+    p.family_name,
+    p.given_names,
+    p.prefix AS name_prefix,
+    p.suffix AS name_suffix,
+    p.name_use,
+    -- NAME INFORMATION (JSON - LEGACY COMPATIBILITY)
     p.names,
-    -- NAME INFORMATION (SEPARATE FIELDS)
-    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'text') AS name_text,
-    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'family') AS family_name,
-    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'given') AS given_names,
-    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'prefix') AS name_prefix,
-    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'suffix') AS name_suffix,
-    JSON_EXTRACT_PATH_TEXT(p.names, 'primary_name', 'use') AS name_use,
     -- CONTACT INFORMATION
-    p.primary_city,
-    p.primary_district,
-    p.primary_state,
     p.all_addresses,
-    p.address_count,
     -- STATUS AND METADATA
     p.active,
     p.deceased,

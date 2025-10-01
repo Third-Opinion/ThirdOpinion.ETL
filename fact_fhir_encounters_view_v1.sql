@@ -38,23 +38,63 @@ CREATE MATERIALIZED VIEW fact_fhir_encounters_view_v1
 BACKUP NO
 AS
 WITH condition_counts AS (
-    -- Count conditions and get primary diagnosis
-    SELECT 
+    -- Count conditions and get primary diagnosis with prioritized code system
+    SELECT
         c.encounter_id,
         COUNT(DISTINCT c.condition_id) AS diagnosis_count,
-        MIN(cc.code_code) AS primary_diagnosis_code,
-        MIN(COALESCE(cc.code_display, c.condition_text)) AS primary_diagnosis_display
+        FIRST_VALUE(cc.code_code) OVER (
+            PARTITION BY c.encounter_id
+            ORDER BY
+                CASE cc.code_system
+                    WHEN 'http://hl7.org/fhir/sid/icd-10-cm' THEN 1
+                    WHEN 'http://hl7.org/fhir/sid/icd-9-cm' THEN 2
+                    WHEN 'http://snomed.info/sct' THEN 3
+                    ELSE 4
+                END,
+                cc.code_code
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS primary_diagnosis_code,
+        FIRST_VALUE(COALESCE(cc.code_display, cc.code_text)) OVER (
+            PARTITION BY c.encounter_id
+            ORDER BY
+                CASE cc.code_system
+                    WHEN 'http://hl7.org/fhir/sid/icd-10-cm' THEN 1
+                    WHEN 'http://hl7.org/fhir/sid/icd-9-cm' THEN 2
+                    WHEN 'http://snomed.info/sct' THEN 3
+                    ELSE 4
+                END,
+                cc.code_code
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS primary_diagnosis_display,
+        FIRST_VALUE(cc.code_system) OVER (
+            PARTITION BY c.encounter_id
+            ORDER BY
+                CASE cc.code_system
+                    WHEN 'http://hl7.org/fhir/sid/icd-10-cm' THEN 1
+                    WHEN 'http://hl7.org/fhir/sid/icd-9-cm' THEN 2
+                    WHEN 'http://snomed.info/sct' THEN 3
+                    ELSE 4
+                END,
+                cc.code_code
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS primary_diagnosis_code_system
     FROM public.conditions c
         LEFT JOIN public.condition_codes cc ON c.condition_id = cc.condition_id
     WHERE c.encounter_id IS NOT NULL
-    GROUP BY c.encounter_id
+    GROUP BY c.encounter_id, cc.code_code, cc.code_display, cc.code_text, cc.code_system
 ),
 encounter_conditions AS (
-    -- Aggregate conditions linked to each encounter using conditions table
-    SELECT 
+    -- Aggregate conditions linked to each encounter using conditions table with code system shorthand
+    SELECT
         c.encounter_id,
-        LISTAGG(DISTINCT 
-            COALESCE(cc.code_code, '') || ':' || COALESCE(cc.code_display, c.condition_text, ''),
+        LISTAGG(DISTINCT
+            CASE cc.code_system
+                WHEN 'http://hl7.org/fhir/sid/icd-10-cm' THEN 'ICD10:'
+                WHEN 'http://hl7.org/fhir/sid/icd-9-cm' THEN 'ICD9:'
+                WHEN 'http://snomed.info/sct' THEN 'SNOMED:'
+                ELSE COALESCE(cc.code_system, 'UNK') || ':'
+            END ||
+            COALESCE(cc.code_code, '') || ':' || COALESCE(cc.code_display, cc.code_text, ''),
             ' | '
         ) WITHIN GROUP (ORDER BY c.onset_datetime) AS all_diagnoses
     FROM public.conditions c
@@ -64,15 +104,12 @@ encounter_conditions AS (
 ),
 participant_counts AS (
     -- Count participants
-    SELECT 
+    SELECT
         encounter_id,
         COUNT(DISTINCT participant_id) AS participant_count,
-        COUNT(DISTINCT CASE 
-            WHEN participant_type = 'primary_performer' THEN participant_id 
-        END) AS primary_performer_count,
-        MAX(CASE 
-            WHEN participant_type = 'primary_performer' THEN participant_display 
-        END) AS primary_performer_name
+        COUNT(DISTINCT CASE
+            WHEN participant_type = 'primary_performer' THEN participant_id
+        END) AS primary_performer_count
     FROM public.encounter_participants
     GROUP BY encounter_id
 ),
@@ -186,7 +223,13 @@ SELECT
     e.service_provider_id,
     e.appointment_id,
     e.parent_encounter_id,
-    e.meta_data,
+
+    -- ============================================
+    -- DISCRETE META FIELDS
+    -- ============================================
+    e.meta_version_id,
+    e.meta_last_updated,
+
     e.created_at AS etl_created_at,
     e.updated_at AS etl_updated_at,
     
@@ -215,7 +258,6 @@ SELECT
     pa.all_participants,
     pc.participant_count,
     pc.primary_performer_count,
-    pc.primary_performer_name,
     
     -- ============================================
     -- REASONS (FROM CTE)
@@ -234,15 +276,16 @@ SELECT
     condc.diagnosis_count,
     condc.primary_diagnosis_code,
     condc.primary_diagnosis_display,
+    condc.primary_diagnosis_code_system,
     
     -- ============================================
     -- DURATION CALCULATIONS (V2 ENHANCEMENTS)
     -- ============================================
-    -- Basic duration in minutes
-    CASE 
-        WHEN e.start_time IS NOT NULL AND e.end_time IS NOT NULL 
-        THEN EXTRACT(EPOCH FROM (e.end_time - e.start_time)) / 60
-        ELSE NULL 
+    -- Basic duration in minutes (rounded to whole minutes)
+    CASE
+        WHEN e.start_time IS NOT NULL AND e.end_time IS NOT NULL
+        THEN ROUND(EXTRACT(EPOCH FROM (e.end_time - e.start_time)) / 60)
+        ELSE NULL
     END AS duration_minutes,
     
     -- Is encounter complete

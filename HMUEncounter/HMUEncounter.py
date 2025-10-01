@@ -172,11 +172,25 @@ def transform_main_encounter_data(df):
               ).otherwise(None).alias("service_provider_id")
     )
     
-    # Add remaining columns
+    # Add remaining columns with discrete meta fields
     select_columns.extend([
         F.lit(None).alias("appointment_id"),  # Not available in schema
         F.lit(None).alias("parent_encounter_id"),
-        convert_to_json_udf(F.col("meta")).alias("meta_data"),  # Convert to JSON string
+        # Extract discrete meta fields
+        F.when(F.col("meta").isNotNull(),
+               F.col("meta").getField("versionId")
+              ).otherwise(None).alias("meta_version_id"),
+        F.when(F.col("meta").isNotNull(),
+               # Handle meta.lastUpdated with multiple possible formats
+               F.coalesce(
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+               )
+              ).otherwise(None).alias("meta_last_updated"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ])
@@ -420,7 +434,8 @@ def create_redshift_tables_sql():
         service_provider_id VARCHAR(255),
         appointment_id VARCHAR(255),
         parent_encounter_id VARCHAR(255),
-        meta_data TEXT,
+        meta_version_id VARCHAR(50),
+        meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) DISTKEY (patient_id) SORTKEY (patient_id, start_time)
@@ -700,7 +715,8 @@ def main():
             F.col("service_provider_id").cast(StringType()).alias("service_provider_id"),
             F.col("appointment_id").cast(StringType()).alias("appointment_id"),
             F.col("parent_encounter_id").cast(StringType()).alias("parent_encounter_id"),
-            F.col("meta_data").cast(StringType()).alias("meta_data"),
+            F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
         )
@@ -770,7 +786,8 @@ def main():
                 ("service_provider_id", "cast:string"),
                 ("appointment_id", "cast:string"),
                 ("parent_encounter_id", "cast:string"),
-                ("meta_data", "cast:string"),
+                ("meta_version_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("created_at", "cast:timestamp"),
                 ("updated_at", "cast:timestamp")
             ]

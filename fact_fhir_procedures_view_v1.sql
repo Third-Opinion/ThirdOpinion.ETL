@@ -144,14 +144,6 @@ SELECT
         ELSE NULL 
     END AS procedure_age_days,
     
-    -- Determine if procedure was performed recently (within 30 days)
-    CASE 
-        WHEN p.performed_date_time IS NOT NULL 
-        AND DATEDIFF(day, p.performed_date_time, CURRENT_DATE) <= 30
-        THEN TRUE
-        ELSE FALSE
-    END AS is_recent_procedure,
-    
     -- Determine if procedure is completed
     CASE 
         WHEN p.status = 'completed' 
@@ -194,7 +186,7 @@ FROM public.procedures p
     LEFT JOIN identifier_counts ic ON p.procedure_id = ic.procedure_id
     LEFT JOIN aggregated_identifiers ai ON p.procedure_id = ai.procedure_id
 
-WHERE p.status NOT IN ('not-done', 'cancelled', 'stopped', 'aborted');
+WHERE p.status NOT IN ('not-done', 'cancelled');
 
 -- ===================================================================
 -- REFRESH CONFIGURATION

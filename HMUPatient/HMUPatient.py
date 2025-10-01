@@ -221,7 +221,9 @@ def transform_patient_names(df):
         F.col("name_item.use").alias("name_use"),
         F.col("name_item.text").alias("name_text"),  # text field should be available in name struct
         F.col("name_item.family").alias("family_name"),
-        convert_to_json_udf(F.col("name_item.given")).alias("given_names"),
+        F.when(F.col("name_item.given").isNotNull() & (F.size(F.col("name_item.given")) > 0),
+               F.array_join(F.col("name_item.given"), " ")
+              ).otherwise(None).alias("given_names"),
         F.col("name_item.prefix").alias("prefix"),  # prefix field should be available in name struct
         F.col("name_item.suffix").alias("suffix"),
         F.to_date(F.col("name_item.period.start"), "yyyy-MM-dd").alias("period_start"),

@@ -129,7 +129,6 @@ aggregated_forms AS (
             '[' || LISTAGG(
                 '{' ||
                 '"content_type":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(drpf.content_type, '[\r\n\t]', ''), '"', ''), '') || '",' ||
-                '"url":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(drpf.url, '[\r\n\t]', ''), '"', ''), '') || '",' ||
                 '"title":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(drpf.title, '[\r\n\t]', ''), '"', ''), '') || '",' ||
                 '"data":"' || COALESCE(REGEXP_REPLACE(REGEXP_REPLACE(drpf.data, '[\r\n\t]', ''), '"', ''), '') || '"' ||
                 '}',
@@ -161,9 +160,7 @@ SELECT
     
     -- Report Dates
     dr.effective_datetime,                -- When the observation was made
-    dr.effective_date_time,               -- Duplicate column (legacy)
     dr.issued_datetime,                   -- When the report was issued
-    dr.issued,                            -- Duplicate column (legacy)
     
     -- Report Code Information
     dr.code_text,                         -- Human-readable report name
@@ -176,7 +173,6 @@ SELECT
     dr.encounter_id,                      -- Associated encounter (if any)
     
     -- Metadata
-    dr.meta_data,                         -- FHIR metadata as JSON string
     dr.meta_version_id,                   -- Version identifier
     dr.meta_last_updated,                 -- Last update timestamp
     dr.extensions,                        -- FHIR extensions as JSON string

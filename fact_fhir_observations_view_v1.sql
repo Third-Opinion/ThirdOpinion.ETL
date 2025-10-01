@@ -249,6 +249,8 @@ SELECT
     o.method_code,
     o.method_display,
     o.method_text,
+    o.meta_version_id,
+    o.meta_last_updated,
 
     -- COMPUTED FIELDS
     CASE

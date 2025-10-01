@@ -1,0 +1,719 @@
+
+# Example 1: AI Device Resource
+
+{
+    "resourceType": "Device",
+    "id": "to.io-trial-eligibility-ai-v1",
+    "identifier": [
+        {
+            "system": "https://thirdopinion.io/ai-models",
+            "value": "trial-eligibility-v1.0"
+        }
+    ],
+    "status": "active",
+    "manufacturer": "ThirdOpinion.io AI Lab",
+    "deviceName": [
+        {
+            "name": "Trial Eligibility AI",
+            "type": "trail-match-ai"
+        }
+    ],
+    "type": {
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "706689003",
+                "display": "Artificial intelligence algorithm"
+            }
+        ]
+    },
+    "version": [
+        {
+            "type": {
+                "text": "Software Version"
+            },
+            "value": "1.0.0"
+        }
+    ],
+    "property": [ #ALLOW ADDING ARBITRARY PROPERTIES#
+    ]
+}
+# Example 2: ADT Therapy Detection Observation
+{
+    "resourceType": "Observation",
+    "id": "to.io-adt-status-obs-a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "identifier": [
+        {
+            "system": "https://thirdopinion.io/ai-inference",
+            "value": "to.ai-inference-1"
+        }
+    ],
+    "meta": {
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST"
+            }
+        ]
+    },
+    "status": "final",
+    "category": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "therapy",
+                    "display": "Therapy"
+                }
+            ]
+        }
+    ],
+    "code": {
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "413712001",
+                "display": "Androgen deprivation therapy"
+            }
+        ],
+        "text": "ADT Therapy Status"
+    },
+    "subject": {
+        "reference": "Patient/example"
+    },
+    "effectiveDateTime": "2025-09-30T10:30:00Z",
+    "performer": [
+        {
+            "reference": "Device/to.io-trial-eligibility-ai-v1"
+        }
+    ],
+    "valueCodeableConcept": {
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "385654001",
+                "display": "Active"
+            }
+        ],
+        "text": "Receiving ADT"
+    },
+    "derivedFrom": [
+        {
+            "reference": "MedicationStatement/adt-med-001",
+            "display": "Active MedicationStatement indicating ADT use"
+        },
+        {
+            "reference": "MedicationRequest/adt-prescription-001",
+            "display": "Current ADT prescription"
+        },
+        {
+            "reference": "DocumentReference/clinic-note-002",
+            "display": "Clinical note documenting ADT adherence"
+        },
+        {
+            "reference": "Encounter/clinic-visit-001"
+        }
+    ],
+    "method": {
+        "coding": [
+            {
+                "system": "https://thirdopinion.io/criteria",
+                "code": "adt-therapy-1234455-v1.0", 
+        "display": "ThirdOpinion.io ADT Therapy(ID:1234455) v1.2.0"
+            }
+        ],
+        "text": "ThirdOpinion.io on ADT therapy assesment"
+    },
+  "derivedFrom": [
+    {
+            "reference": "MedicationRequest/a-15454.med-192905",
+            "display": "Eligard 20mg 2025-10-11"
+        },
+       
+        {
+            "reference": "DocumentReference/a-15454.doc-34567",
+            "display": "Started Eligard Note Date: 2025-10-11"
+        }
+    ],
+    "note": [
+        {
+            "text": "AI detected active ADT therapy based on: (1) Active MedicationStatement for leuprolide depot, (2) Current prescription dated 2024-06-15, (3) Clinical note from 2024-09-15 documenting patient compliance and tolerance. Confidence: 95%"
+        }
+    ]
+}
+
+# Example 3: CSPC Assessment Observation (UPDATED)
+
+{
+    "resourceType": "Observation",
+    "id": "to.io-cspc-assessment-001",
+    "identifier": [
+        {
+        "system": "https://thirdopinion.io/ai-inference",
+        "value": "to.ai-inference-1"
+        }
+    ],
+    "meta": {
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST"
+            }
+        ]
+    },
+    "status": "final",
+    "category": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "exam",
+                    "display": "Exam"
+                }
+            ]
+        }
+    ],
+    "code": {
+        "coding": [
+            {
+                "system": "http://loinc.org",
+                "code": "21889-1",
+                "display": "Cancer disease status"
+            }
+        ],
+        "text": "Castration sensitivity status"
+    },
+    "subject": {
+        "reference": "Patient/example"
+    },
+    "focus": [
+        {
+            "reference": "Condition/prostate-cancer-primary-001",
+            "display": "Primary prostate cancer diagnosis (not AI-generated)"
+        }
+    ],
+    "effectiveDateTime": "2025-09-30T10:30:00Z",
+    "performer": [
+        {
+            "reference": "Device/to.io-trial-eligibility-ai-v2"
+        }
+    ],
+    "valueCodeableConcept": {
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "1197209002",
+                "display": "Castration-sensitive"
+            },
+            {
+                "system": "http://hl7.org/fhir/sid/icd-10-cm",
+                "code": "Z19.1",
+                "display": "Hormone sensitive malignancy status"
+            }
+        ],
+        "text": "Castration-Sensitive (CSPC)"
+    },
+    "interpretation": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                    "code": "N",
+                    "display": "Normal"
+                }
+            ],
+            "text": "Disease responding to ADT, hormone-sensitive"
+        }
+    ],
+    "derivedFrom": [
+        {
+            "reference": "Observation/testosterone-level-001",
+            "display": "Testosterone 15 ng/dL (castrate level)"
+        },
+        {
+            "reference": "Observation/psa-response-001",
+            "display": "PSA decreased 80% on ADT"
+        },
+        {
+            "reference": "Observation/to.io-adt-status-obs-001",
+            "display": "Active ADT therapy"
+        },
+        {
+            "reference": "DocumentReference/oncology-note-001"
+        }
+    ],
+
+    "method": {
+        "coding": [
+            {
+                "system": "https://thirdopinion.io/criteria",
+                "code": "cspc-assesment-1234455-v1.0",
+                "display": "ThirdOpinion.io CSPC Assesment(ID:1234455) v1.1"
+            }
+        ],
+        "text": "ThirdOpinion.io AI inference for CSPC based on hormone levels, PSA kinetics, and treatment response"
+    },
+    "note": [
+        {
+            "text": "Classification derived from testosterone <50 ng/dL during ADT with PSA decline >50%, indicating castration sensitivity. No evidence of progression despite castrate testosterone levels."
+        }
+    ]
+}
+
+# Example 4: PSA Progression with ThirdOpinion.io Criteria
+
+{
+    "resourceType": "Observation",
+    "id": "to.io-psa-progression-001",
+    "identifier": [
+        {
+            "system": "https://thirdopinion.io/ai-inference",
+            "value": "to.ai-inference-1"
+        }
+    ],
+    "meta": {
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST"
+            }
+        ]
+    },
+    "status": "final",
+    "category": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "laboratory",
+                    "display": "Laboratory"
+                }
+            ]
+        }
+    ],
+    "code": {
+        "coding": [
+            {
+                "system": "http://loinc.org",
+                "code": "97509-4",
+                "display": "Cancer disease progression"
+            }
+        ],
+        "text": "PSA progression assessment per ThirdOpinion.io criteria"
+    },
+    "subject": {
+        "reference": "Patient/example"
+    },
+    "focus": [
+        {
+            "reference": "Condition/to.io-prostate-cancer-cspc-001"
+        }
+    ],
+    "effectiveDateTime": "2025-09-30T10:30:00Z",
+    "issued": "2025-09-30T10:35:00Z",
+    "performer": [
+        {
+            "reference": "Device/to.io-trial-eligibility-ai-v2"
+        }
+    ],
+    "valueCodeableConcept": {
+        "coding": [
+            {
+                "system": "http://snomed.info/sct",
+                "code": "277022003",
+                "display": "Progressive disease"
+            }
+        ],
+        "text": "PSA Progression per ThirdOpinion.io criteria"
+    }
+    "note": [
+        {
+            "text": "PSA progression confirmed per ThirdOpinion.io criteria: ≥30% and ≥3 ng/mL increase from nadir (5.2→11.8 ng/mL, 127% increase), with sustained elevation above threshold on two consecutive measurements 4 weeks apart. This meets criteria for biochemical progression."
+        }
+    ],
+
+"method": {
+    "coding": [
+        {
+            "system": "https://thirdopinion.io/criteria",
+            "code": "psa-progression-1234455-v1.2", 
+        "display": "ThirdOpinion.io PSA Progression Criteria ID:1234455 v1.2" 
+        }
+    ],
+    "text": "ThirdOpinion.io PSA progression criteria: ≥30% and ≥3 ng/mL increase from nadir, confirmed by second measurement ≥4 weeks later"
+ },
+    "derivedFrom": [
+        {
+            "reference": "Observation/psa-2024-07-15",
+            "display": "PSA nadir 5.2 ng/mL on 2024-07-15"
+        },
+        {
+            "reference": "Observation/psa-2024-09-01",
+            "display": "PSA 9.8 ng/mL on 2024-09-01 (first rise)"
+        },
+        {
+            "reference": "Observation/psa-2024-09-29",
+            "display": "PSA 11.8 ng/mL on 2024-09-29 (confirmatory, 4 weeks later)"
+        }
+    ],
+    "component": [
+        {
+            "code": {
+                "text": "Valid unil"
+            },
+            "valuePeriod": {
+                "end": "2025-10-28"
+            }
+        },
+        {
+            "code": {
+                "coding": [
+                    {
+                        "system": "https://thirdopinion.io/progression-criteria",
+                        "code": "threshold-met",
+                        "display": "Progression threshold met"
+                    }
+                ]
+            },
+            "valueBoolean": true
+        }
+    ]
+    ,
+    "note": [
+        {
+            "text": "PSA Analysis - Prostate Cancer Treatment Response
+Chronological PSA Values: 11/14/24: Total PSA = 85.23 ng/mL (SEVERELY ELEVATED - Reference: 0.00-4.00)
+11/14/24: Free PSA = 4.8 ng/mL (HIGH - Reference: <0.94)
+11/14/24: PSA Ratio = 0.06 (Low - concerning for malignancy)
+1/23/25: Prostate Biopsy Performed (observation_id: a-15454.resultamb-7520175)
+3/6/25: Total PSA = 96.46 ng/mL (PEAK ELEVATION - continued progression)
+4/30/25: CONFLICTING VALUES:
+
+PSA = 17.97 ng/mL (3: 53 PM) - observation_id: a-15454.resultamb-7893359
+PSA = 0.38 ng/mL (3: 55 PM) - observation_id: a-15454.resultamb-7893360
+
+
+7/24/25: Total PSA = 0.1 ng/mL (EXCELLENT RESPONSE - within normal range)
+
+PSA Progression Analysis
+Initial Disease Status:
+
+PSA Peak: 96.46 ng/mL (March 6,
+            2025)
+Clinical Pattern: Extremely aggressive prostate cancer with very high PSA levels
+Biopsy Confirmation: January 23,
+            2025
+
+Treatment Response Analysis:
+
+Treatment Initiation: Likely began between March-April 2025
+Response Quality: EXCELLENT - PSA decreased from 96.46 to 0.1 ng/mL (>99% reduction)
+Current Status: PSA well within normal range
+
+Data Quality Concern:
+⚠️ CRITICAL DATA ISSUE: Two conflicting PSA values on 4/30/25 (17.97 vs 0.38 ng/mL) taken 2 minutes apart require investigation for accuracy."
+        }
+    ]
+}
+
+# Example 5: PSA Progression with PCWG3 Criteria
+## Update using changes from Example 4
+
+
+# Example 6: RECIST 1.1 Radiographic Progression
+
+{
+    "resourceType": "Observation",
+    "id": "to.io-recist-progression-f6a7b8c9-d0e1-2345-f012-3456789cdef0",
+    "identifier": [
+    {
+        "system": "https://thirdopinion.io/ai-inference",
+        "value": "to.ai-inference-1"
+    }
+    ],
+    "meta": {
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationValue",
+                "code": "AIAST"
+            }
+        ]
+    },
+    "status": "final",
+    "category": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                    "code": "imaging",
+                    "display": "Imaging"
+                }
+            ]
+        }
+    ],
+    "code": {
+        "coding": [
+            {
+                "system": "http://loinc.org",
+                "code": "21976-6",
+                "display": "Tumor response"
+            },
+            {
+                "system": "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl",
+                "code": "C111544",
+                "display": "RECIST 1.1"
+            }
+        ],
+        "text": "RECIST 1.1 Response Assessment"
+    },
+    "subject": {
+        "reference": "Patient/example"
+    },
+    "focus": [
+        {
+            "reference": "Condition/to.io-prostate-cancer-cspc-001"
+        }
+    ],
+    "effectiveDateTime": "2025-09-25T10:00:00Z",
+    "issued": "2025-09-26T09:15:00Z",
+    "performer": [
+        {
+            "reference": "Device/to.io-trial-eligibility-ai-v2"
+        }
+    ],
+    "valueCodeableConcept": {
+        "coding": [
+            {
+                "system": "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl",
+                "code": "C35571",
+                "display": "Progressive Disease"
+            }
+        ],
+        "text": "Progressive Disease (PD) per RECIST 1.1"
+    },
+    "note": [
+        {
+            "text": "Progressive disease based on >20% increase in sum of target lesion diameters (SLD) from nadir (62→78mm, 25.8% increase, absolute increase 16mm >5mm threshold). New hepatic lesion also identified."
+        }
+    ],
+    "method": {
+        "coding": [
+            {
+                "system": "https://thirdopinion.io/criteria",
+                "code": "radiology-progression-1234455-v1.0",
+                "display": "ThirdOpinion.io RECIST 1.1 Progression Criteria ID:1234455 v1.0"
+            }
+        ],
+        "text": "ThirdOpinion.io AI Response Evaluation Criteria in Solid Tumors version 1.1"
+    },
+    "bodySite": [
+        {
+            "coding": [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "10200004",
+                    "display": "Liver structure"
+                }
+            ]
+        },
+        {
+            "coding": [
+                {
+                    "system": "http://snomed.info/sct",
+                    "code": "39607008",
+                    "display": "Lung structure"
+                }
+            ]
+        }
+    ],
+    "derivedFrom": [
+        {
+            "reference": "ImagingStudy/ct-chest-abdomen-2025-09-25",
+            "display": "CT Chest/Abdomen with contrast 2025-09-25"
+        },
+        {
+            "reference": "Observation/to.io-recist-baseline-2024-06-01",
+            "display": "RECIST baseline assessment"
+        },
+        {
+            "reference": "Observation/to.io-recist-nadir-2024-08-15",
+            "display": "RECIST nadir assessment (SLD 62mm)"
+        },
+        {
+            "reference": "DocumentReference/radiology-report-2025-09-25",
+            "display": "Radiology report by Dr. Smith"
+        }
+    ],
+    "component": [
+        {
+            "code": {
+                "text": "Sum of target lesion diameters (SLD)"
+            },
+            "valueQuantity": {
+                "value": 78,
+                "unit": "mm",
+                "system": "http://unitsofmeasure.org",
+                "code": "mm"
+            }
+        },
+        {
+            "code": {
+                "text": "SLD at nadir"
+            },
+            "valueQuantity": {
+                "value": 62,
+                "unit": "mm",
+                "system": "http://unitsofmeasure.org",
+                "code": "mm"
+            }
+        },
+        {
+            "code": {
+                "text": "Percent change from nadir"
+            },
+            "valueQuantity": {
+                "value": 25.8,
+                "unit": "%",
+                "system": "http://unitsofmeasure.org",
+                "code": "%"
+            }
+        },
+        {
+            "code": {
+                "text": "Absolute change from nadir"
+            },
+            "valueQuantity": {
+                "value": 16,
+                "unit": "mm",
+                "system": "http://unitsofmeasure.org",
+                "code": "mm"
+            }
+        },
+        {
+            "code": {
+                "text": "New lesions detected"
+            },
+            "valueBoolean": true
+        },
+        {
+            "code": {
+                "text": "New lesion location"
+            },
+            "valueCodeableConcept": {
+                "coding": [
+                    {
+                        "system": "http://snomed.info/sct",
+                        "code": "10200004",
+                        "display": "Liver structure"
+                    }
+                ]
+            }
+        }
+    ]
+,
+"note": 
+    {
+        "text": "PSA Analysis - Prostate Cancer Treatment Response
+Chronological PSA Values: 11/14/24: Total PSA = 85.23 ng/mL (SEVERELY ELEVATED - Reference: 0.00-4.00)
+11/14/24: Free PSA = 4.8 ng/mL (HIGH - Reference: <0.94)"
+    }
+}
+
+
+# Example 7: Provenance Resource for Audit Trail
+
+{
+    "resourceType": "Provenance",
+    "id": "to.io-prov-psa-progression-f6a7b8c9-d0e1-2345-f012-3456789cdef0",
+    "identifier": [
+        {
+            "system": "https://thirdopinion.io/provenance-tracking",
+            "value": "to.io-prov-1"
+        }
+    ],
+    "target": [
+        {
+            "reference": "Observation/to.io-psa-progression-001/_history/1"
+        }
+    ],
+    "occurredDateTime": "2025-09-30T10:30:00Z",
+    "recorded": "2025-09-30T10:30:15Z",
+    "policy": [
+        "https://thirdopinion.io/policies/ai-clinical-use-v1"
+    ],
+    "reason": [
+        {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+                    "code": "TREAT",
+                    "display": "treatment"
+                }
+            ],
+            "text": "Clinical trial eligibility assessment"
+        }
+    ],
+    "activity": {
+        "coding": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-DataOperation",
+                "code": "CREATE",
+                "display": "create"
+            }
+        ]
+    },
+    "agent": [
+        {
+            "type": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                        "code": "assembler",
+                        "display": "Assembler"
+                    }
+                ]
+            },
+            "who": {
+                "reference": "Device/to.io-trial-eligibility-ai-v1",
+                "display": "Prostate Cancer Trial Eligibility AI v1.0"
+            }
+        },
+        {
+            "type": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/provenance-participant-type",
+                        "code": "author",
+                        "display": "Author"
+                    }
+                ]
+            },
+            "who": {
+                "reference": "Organization/thirdopinion-ai-lab"
+            }
+        }
+    ],
+    "entity": [
+        {
+            "role": "source",
+            "what": {
+                "reference": "Observation/psa-2024-07-15",
+                "display": "PSA nadir 5.2 ng/mL"
+            }
+        },
+        {
+            "role": "source",
+            "what": {
+                "reference": "Observation/psa-2024-09-01",
+                "display": "PSA 9.8 ng/mL"
+            }
+        },
+        {
+            "role": "source",
+            "what": {
+                "reference": "Observation/psa-2024-09-29",
+                "display": "PSA 11.8 ng/mL (confirmatory)"
+            }
+        }
+    ]
+}

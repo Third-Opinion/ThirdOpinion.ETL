@@ -478,8 +478,13 @@ def transform_observation_components(df):
         F.explode(F.col("component_item.code").getField("coding")).alias("code_coding_item"),
         F.lit(None).alias("component_text"),  # text field not available in component.code structure
         F.lit(None).alias("component_value_string"),  # valueString not available in component structure
-        F.col("component_item.valueQuantity").getField("value").alias("component_value_quantity_value"),
-        F.col("component_item.valueQuantity").getField("unit").alias("component_value_quantity_unit"),
+        # Handle valueQuantity.value safely - extract decimal value directly
+        F.when(F.col("component_item.valueQuantity").isNotNull(),
+               F.col("component_item.valueQuantity").getField("value")
+              ).otherwise(None).alias("component_value_quantity_value"),
+        F.when(F.col("component_item.valueQuantity").isNotNull(),
+               F.col("component_item.valueQuantity").getField("unit")
+              ).otherwise(None).alias("component_value_quantity_unit"),
         F.col("component_item.valueCodeableConcept").alias("value_codeable_concept"),
         F.col("component_item.dataAbsentReason").alias("data_absent_reason")
     )

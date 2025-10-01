@@ -153,7 +153,21 @@ def transform_main_diagnostic_report_data(df):
         F.when(F.col("encounter").isNotNull(),
                F.regexp_extract(F.col("encounter").getField("reference"), r"Encounter/(.+)", 1)
               ).otherwise(None).alias("encounter_id"),
-        convert_to_json_udf(F.col("meta")).alias("meta_data"),
+        # Extract discrete meta fields
+        F.when(F.col("meta").isNotNull(),
+               F.col("meta").getField("versionId")
+              ).otherwise(None).alias("meta_version_id"),
+        F.when(F.col("meta").isNotNull(),
+               # Handle meta.lastUpdated with multiple possible formats
+               F.coalesce(
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                   F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+               )
+              ).otherwise(None).alias("meta_last_updated"),
         convert_to_json_udf(F.col("extension")).alias("extensions"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
@@ -447,7 +461,8 @@ def create_redshift_tables_sql():
         code_primary_display VARCHAR(255),
         patient_id VARCHAR(255),
         encounter_id VARCHAR(255),
-        meta_data TEXT,
+        meta_version_id VARCHAR(50),
+        meta_last_updated TIMESTAMP,
         extensions TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -750,7 +765,8 @@ def main():
             F.col("code_primary_display").cast(StringType()).alias("code_primary_display"),
             F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("encounter_id").cast(StringType()).alias("encounter_id"),
-            F.col("meta_data").cast(StringType()).alias("meta_data"),
+            F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("extensions").cast(StringType()).alias("extensions"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
@@ -819,7 +835,8 @@ def main():
                 ("code_primary_display", "cast:string"),
                 ("patient_id", "cast:string"),
                 ("encounter_id", "cast:string"),
-                ("meta_data", "cast:string"),
+                ("meta_version_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("extensions", "cast:string"),
                 ("created_at", "cast:timestamp"),
                 ("updated_at", "cast:timestamp")

@@ -89,11 +89,7 @@ aggregated_addresses AS (
                 WHEN 'work' THEN 2
                 ELSE 3
             END
-        ) AS all_addresses,
-        COUNT(*) AS address_count,
-        MAX(CASE WHEN address_use = 'home' THEN city END) AS primary_city,
-        MAX(CASE WHEN address_use = 'home' THEN state END) AS primary_state,
-        MAX(CASE WHEN address_use = 'home' THEN district END) AS primary_district
+        ) AS all_addresses
     FROM public.patient_addresses
     GROUP BY patient_id
 ),
@@ -150,7 +146,17 @@ SELECT
     p.updated_at AS etl_updated_at,
     
     -- ============================================
-    -- ENHANCED NAME PROCESSING WITH WINDOW FUNCTIONS
+    -- INDIVIDUAL NAME FIELDS FROM RANKED NAMES
+    -- ============================================
+    rn.name_text,
+    rn.family_name,
+    rn.given_names,
+    rn.prefix,
+    rn.suffix,
+    rn.name_use,
+
+    -- ============================================
+    -- NAMES JSON FIELD (LEGACY COMPATIBILITY)
     -- ============================================
     JSON_PARSE(
         '{"primary_name":{"use":"' ||
@@ -173,10 +179,6 @@ SELECT
     -- AGGREGATED ADDRESSES (ENHANCEMENT)
     -- ============================================
     aa.all_addresses,
-    aa.address_count,
-    aa.primary_city,
-    aa.primary_district,
-    aa.primary_state,
     
     -- ============================================
     -- ENCOUNTER METRICS (ENHANCEMENT)
@@ -224,10 +226,7 @@ SELECT
         WHEN DATEDIFF(day, em.last_encounter_date, CURRENT_DATE) <= 90 THEN 'active'
         WHEN DATEDIFF(day, em.last_encounter_date, CURRENT_DATE) <= 365 THEN 'inactive_recent'
         ELSE 'inactive_historical'
-    END AS activity_status,
-    
-    -- Ranking by last update (ENHANCEMENT)
-    DENSE_RANK() OVER (ORDER BY p.meta_last_updated DESC) AS update_recency_rank
+    END AS activity_status
 
 FROM public.patients p
     LEFT JOIN ranked_names rn ON p.patient_id = rn.patient_id AND rn.name_rank = 1

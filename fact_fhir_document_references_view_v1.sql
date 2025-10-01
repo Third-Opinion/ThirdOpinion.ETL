@@ -204,9 +204,6 @@ SELECT
         ELSE NULL 
     END AS document_age_days,
     
-    -- Count of authors (from CTE)
-    COALESCE(authc.author_count, 0) AS author_count,
-    
     -- Count of categories (from CTE)
     COALESCE(catc.category_count, 0) AS category_count,
     
