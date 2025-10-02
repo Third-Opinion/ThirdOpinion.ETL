@@ -12,9 +12,21 @@ from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, 
 import json
 import logging
 
-# Set up logging
+# Import FHIR version comparison utilities
+# FHIR version comparison utilities implemented inline below
+
+# FHIR version comparison utilities are implemented inline below
+
+# Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+# Add handler to write logs to stdout so they appear in CloudWatch
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -178,7 +190,6 @@ def transform_main_patient_data(df):
     
     # Add meta data handling
     select_columns.extend([
-        F.col("meta").getField("versionId").alias("meta_version_id"),
         # Handle meta.lastUpdated datetime with multiple possible formats
         F.coalesce(
             F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
@@ -210,6 +221,7 @@ def transform_patient_names(df):
     # First explode the name array
     names_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("name")).alias("name_item")
     ).filter(
         F.col("name_item").isNotNull()
@@ -218,6 +230,7 @@ def transform_patient_names(df):
     # Extract name details
     names_final = names_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.col("name_item.use").alias("name_use"),
         F.col("name_item.text").alias("name_text"),  # text field should be available in name struct
         F.col("name_item.family").alias("family_name"),
@@ -244,6 +257,7 @@ def transform_patient_telecoms(df):
     # First explode the telecom array
     telecoms_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("telecom")).alias("telecom_item")
     ).filter(
         F.col("telecom_item").isNotNull()
@@ -252,6 +266,7 @@ def transform_patient_telecoms(df):
     # Extract telecom details
     telecoms_final = telecoms_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.col("telecom_item.system").alias("telecom_system"),
         F.col("telecom_item.value").alias("telecom_value"),
         F.when(F.col("telecom_item.use").isNull(), "home").otherwise(F.col("telecom_item.use")).alias("telecom_use"),
@@ -274,6 +289,7 @@ def transform_patient_addresses(df):
     # First explode the address array
     addresses_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("address")).alias("address_item")
     ).filter(
         F.col("address_item").isNotNull()
@@ -282,6 +298,7 @@ def transform_patient_addresses(df):
     # Extract address details
     addresses_final = addresses_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.col("address_item.use").alias("address_use"),
         F.col("address_item.type").alias("address_type"),
         F.col("address_item.text").alias("address_text"),  # text field should be available in address struct
@@ -330,6 +347,7 @@ def transform_patient_contacts(df):
     # First explode the contact array
     contacts_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("contact")).alias("contact_item")
     ).filter(
         F.col("contact_item").isNotNull()
@@ -338,6 +356,7 @@ def transform_patient_contacts(df):
     # Extract contact details
     contacts_final = contacts_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("contact_item.relationship").isNotNull() & F.col("contact_item.relationship.coding").isNotNull() & (F.size(F.col("contact_item.relationship.coding")) > 0),
                F.col("contact_item.relationship.coding")[0].getField("code")
               ).otherwise(None).alias("contact_relationship_code"),
@@ -386,6 +405,7 @@ def transform_patient_communications(df):
     # First explode the communication array
     communications_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("communication")).alias("communication_item")
     ).filter(
         F.col("communication_item").isNotNull()
@@ -394,6 +414,7 @@ def transform_patient_communications(df):
     # Extract communication details
     communications_final = communications_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("communication_item.language").isNotNull() & F.col("communication_item.language.coding").isNotNull() & (F.size(F.col("communication_item.language.coding")) > 0),
                F.col("communication_item.language.coding")[0].getField("code")
               ).otherwise(None).alias("language_code"),
@@ -433,6 +454,7 @@ def transform_patient_practitioners(df):
     # First explode the generalPractitioner array
     practitioners_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("generalPractitioner")).alias("practitioner_item")
     ).filter(
         F.col("practitioner_item").isNotNull()
@@ -441,6 +463,7 @@ def transform_patient_practitioners(df):
     # Extract practitioner details
     practitioners_final = practitioners_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("practitioner_item.reference").rlike("^Practitioner/"),
                F.regexp_extract(F.col("practitioner_item.reference"), r"Practitioner/(.+)", 1)
               ).otherwise(None).alias("practitioner_id"),
@@ -482,6 +505,7 @@ def transform_patient_links(df):
     # First explode the link array
     links_df = df.select(
         F.col("id").alias("patient_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("link")).alias("link_item")
     ).filter(
         F.col("link_item").isNotNull()
@@ -490,6 +514,7 @@ def transform_patient_links(df):
     # Extract link details
     links_final = links_df.select(
         F.col("patient_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("link_item.other").isNotNull(),
                F.regexp_extract(F.col("link_item.other").getField("reference"), r"Patient/(.+)", 1)
               ).otherwise(None).alias("other_patient_id"),
@@ -521,7 +546,6 @@ def create_redshift_tables_sql():
         birth_order INTEGER,
         managing_organization_id VARCHAR(255),
         photos TEXT,
-        meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         meta_source VARCHAR(255),
         meta_security TEXT,
@@ -640,36 +664,198 @@ def create_patient_links_table_sql():
     """
 
 
-def write_to_redshift(dynamic_frame, table_name, preactions=""):
-    """Write DynamicFrame to Redshift using JDBC connection"""
-    logger.info(f"Writing {table_name} to Redshift...")
-    
-    # Add DELETE to preactions to clear existing data while preserving table structure
-    if preactions:
-        preactions = f"DELETE FROM public.{table_name}; " + preactions
-    else:
-        preactions = f"DELETE FROM public.{table_name};"
-    
+def get_existing_versions_from_redshift(table_name, id_column):
+    """Query Redshift to get existing entity timestamps for comparison"""
+    logger.info(f"Fetching existing timestamps from {table_name}...")
+
     try:
-        # Validate dynamic frame before writing
-        record_count = dynamic_frame.count()
-        logger.info(f"Writing {record_count} records to {table_name}")
+        # First check if table exists by trying to read it directly
+        # This prevents malformed query errors when table doesn't exist
+        existing_versions_df = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION
+            },
+            transformation_ctx=f"read_existing_versions_{table_name}"
+        )
+
+        # Convert to Spark DataFrame for easier processing
+        existing_df = existing_versions_df.toDF()
+
+        # Select only the columns we need if table exists
+        if id_column in existing_df.columns and 'meta_last_updated' in existing_df.columns:
+            existing_df = existing_df.select(id_column, 'meta_last_updated')
+        else:
+            logger.warning(f"Table {table_name} exists but missing required columns: {id_column} or meta_last_updated")
+            return {}
+
+        # Collect as dictionary: {entity_id: timestamp}
+        timestamp_map = {}
+        if existing_df.count() > 0:
+            rows = existing_df.collect()
+            for row in rows:
+                entity_id = row[id_column]
+                timestamp = row['meta_last_updated']
+                if entity_id and timestamp:
+                    timestamp_map[entity_id] = timestamp
+
+        logger.info(f"Found {len(timestamp_map)} existing entities with timestamps in {table_name}")
+        return timestamp_map
+
+    except Exception as e:
+        logger.info(f"Table {table_name} does not exist or is empty - treating all records as new")
+        logger.debug(f"Details: {str(e)}")
+        return {}
+
+def filter_dataframe_by_version(df, existing_versions, id_column):
+    """Filter DataFrame based on version comparison"""
+    logger.info("Filtering data based on version comparison...")
+
+    if not existing_versions:
+        # No existing data, all records are new
+        total_count = df.count()
+        logger.info(f"No existing versions found - treating all {total_count} records as new")
+        return df, total_count, 0
+
+    # Add a column to mark records that need processing
+    def needs_processing(entity_id, last_updated):
+        """Check if record needs processing based on timestamp comparison"""
+        if entity_id is None or last_updated is None:
+            return True  # Process records with missing IDs/timestamps
+
+        existing_timestamp = existing_versions.get(entity_id)
+        if existing_timestamp is None:
+            return True  # New entity
+
+        # Convert timestamps to comparable format if needed
+        # If timestamps are already datetime objects, direct comparison works
+        if existing_timestamp == last_updated:
+            return False  # Same timestamp, skip
+
+        # Process if incoming timestamp is newer than existing
+        # Note: This handles the case where timestamps might be different
+        # In production, you may want to add tolerance for small time differences
+        try:
+            return last_updated > existing_timestamp
+        except TypeError:
+            # If comparison fails (e.g., different types), process the record
+            return True
+
+    # Create UDF for timestamp comparison
+    from pyspark.sql.types import BooleanType
+    needs_processing_udf = F.udf(needs_processing, BooleanType())
+
+    # Add processing flag
+    df_with_flag = df.withColumn(
+        "needs_processing",
+        needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
+    )
+
+    # Split into processing needed and skipped
+    to_process_df = df_with_flag.filter(F.col("needs_processing") == True).drop("needs_processing")
+    skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
+
+    to_process_count = to_process_df.count()
+    total_count = df.count()
+
+    logger.info(f"Version comparison results:")
+    logger.info(f"  Total incoming records: {total_count}")
+    logger.info(f"  Records to process (new/updated): {to_process_count}")
+    logger.info(f"  Records to skip (same version): {skipped_count}")
+
+    return to_process_df, to_process_count, skipped_count
+
+def get_entities_to_delete(df, existing_versions, id_column):
+    """Get list of entity IDs that need their old versions deleted"""
+    logger.info("Identifying entities that need old version cleanup...")
+
+    if not existing_versions:
+        return []
+
+    # Get list of entity IDs from incoming data
+    incoming_entity_ids = set()
+    if df.count() > 0:
+        entity_rows = df.select(id_column).distinct().collect()
+        incoming_entity_ids = {row[id_column] for row in entity_rows if row[id_column]}
+
+    # Find entities that exist in both incoming data and Redshift
+    entities_to_delete = []
+    for entity_id in incoming_entity_ids:
+        if entity_id in existing_versions:
+            entities_to_delete.append(entity_id)
+
+    logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
+    return entities_to_delete
+
+def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
+    """Version-aware write to Redshift - only processes new/updated entities"""
+    logger.info(f"Writing {table_name} to Redshift with version checking...")
+
+    try:
+        # Convert dynamic frame to DataFrame for processing
+        df = dynamic_frame.toDF()
+        total_records = df.count()
+
+        if total_records == 0:
+            logger.info(f"No records to process for {table_name}")
+            return
+
+        # Step 1: Get existing versions from Redshift
+        existing_versions = get_existing_versions_from_redshift(table_name, id_column)
+
+        # Step 2: Filter incoming data based on version comparison
+        filtered_df, to_process_count, skipped_count = filter_dataframe_by_version(
+            df, existing_versions, id_column
+        )
+
+        if to_process_count == 0:
+            logger.info(f"✅ All {total_records} records in {table_name} are up to date - no changes needed")
+            return
+
+        # Step 3: Get entities that need old version cleanup
+        entities_to_delete = get_entities_to_delete(filtered_df, existing_versions, id_column)
+
+        # Step 4: Build preactions for selective deletion
+        selective_preactions = preactions
+        if entities_to_delete:
+            # Create DELETE statements for specific entity IDs
+            entity_ids_str = "', '".join(entities_to_delete)
+            delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
+
+            if selective_preactions:
+                selective_preactions = delete_clause + " " + selective_preactions
+            else:
+                selective_preactions = delete_clause
+
+            logger.info(f"Will delete {len(entities_to_delete)} existing entities before inserting updated versions")
+
+        # Step 5: Convert filtered DataFrame back to DynamicFrame
+        filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
+
+        # Step 6: Write only the new/updated records
+        logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
 
         glueContext.write_dynamic_frame.from_options(
-            frame=dynamic_frame,
+            frame=filtered_dynamic_frame,
             connection_type="redshift",
             connection_options={
                 "redshiftTmpDir": S3_TEMP_DIR,
                 "useConnectionProperties": "true",
                 "dbtable": f"public.{table_name}",
                 "connectionName": REDSHIFT_CONNECTION,
-                "preactions": preactions
+                "preactions": selective_preactions or ""
             },
-            transformation_ctx=f"write_{table_name}_to_redshift"
+            transformation_ctx=f"write_{table_name}_versioned_to_redshift"
         )
-        logger.info(f"✅ Successfully wrote {record_count} records to {table_name} in Redshift")
+
+        logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
+        logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
+
     except Exception as e:
-        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
+        logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
         raise
 
@@ -867,7 +1053,6 @@ def main():
             F.col("birth_order").cast(IntegerType()).alias("birth_order"),
             F.col("managing_organization_id").cast(StringType()).alias("managing_organization_id"),
             F.col("photos").cast(StringType()).alias("photos"),
-            F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
             F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("meta_source").cast(StringType()).alias("meta_source"),
             F.col("meta_security").cast(StringType()).alias("meta_security"),
@@ -988,7 +1173,6 @@ def main():
                 ("birth_order", "cast:int"),
                 ("managing_organization_id", "cast:string"),
                 ("photos", "cast:string"),
-                ("meta_version_id", "cast:string"),
                 ("meta_last_updated", "cast:timestamp"),
                 ("meta_source", "cast:string"),
                 ("meta_security", "cast:string"),
@@ -1129,46 +1313,46 @@ def main():
         logger.info(f"🔗 Using connection: {REDSHIFT_CONNECTION}")
         logger.info(f"📁 S3 temp directory: {S3_TEMP_DIR}")
         
-        # Create all tables individually
-        # Note: Each write_to_redshift call now includes TRUNCATE to prevent duplicates
-        logger.info("📝 Creating main patients table...")
+        # Create all tables individually with version-aware processing
+        # Note: Each write_to_redshift_versioned call only processes new/updated entities
+        logger.info("📝 Creating main patients table with version checking...")
         patients_table_sql = create_redshift_tables_sql()
-        write_to_redshift(main_resolved_frame, "patients", patients_table_sql)
+        write_to_redshift_versioned(main_resolved_frame, "patients", "patient_id", patients_table_sql)
         logger.info("✅ Main patients table created and written successfully")
-        
-        logger.info("📝 Creating patient names table...")
+
+        logger.info("📝 Creating patient names table with version checking...")
         names_table_sql = create_patient_names_table_sql()
-        write_to_redshift(names_resolved_frame, "patient_names", names_table_sql)
+        write_to_redshift_versioned(names_resolved_frame, "patient_names", "patient_id", names_table_sql)
         logger.info("✅ Patient names table created and written successfully")
-        
-        logger.info("📝 Creating patient telecoms table...")
+
+        logger.info("📝 Creating patient telecoms table with version checking...")
         telecoms_table_sql = create_patient_telecoms_table_sql()
-        write_to_redshift(telecoms_resolved_frame, "patient_telecoms", telecoms_table_sql)
+        write_to_redshift_versioned(telecoms_resolved_frame, "patient_telecoms", "patient_id", telecoms_table_sql)
         logger.info("✅ Patient telecoms table created and written successfully")
-        
-        logger.info("📝 Creating patient addresses table...")
+
+        logger.info("📝 Creating patient addresses table with version checking...")
         addresses_table_sql = create_patient_addresses_table_sql()
-        write_to_redshift(addresses_resolved_frame, "patient_addresses", addresses_table_sql)
+        write_to_redshift_versioned(addresses_resolved_frame, "patient_addresses", "patient_id", addresses_table_sql)
         logger.info("✅ Patient addresses table created and written successfully")
-        
-        logger.info("📝 Creating patient contacts table...")
+
+        logger.info("📝 Creating patient contacts table with version checking...")
         contacts_table_sql = create_patient_contacts_table_sql()
-        write_to_redshift(contacts_resolved_frame, "patient_contacts", contacts_table_sql)
+        write_to_redshift_versioned(contacts_resolved_frame, "patient_contacts", "patient_id", contacts_table_sql)
         logger.info("✅ Patient contacts table created and written successfully")
-        
-        logger.info("📝 Creating patient communications table...")
+
+        logger.info("📝 Creating patient communications table with version checking...")
         communications_table_sql = create_patient_communications_table_sql()
-        write_to_redshift(communications_resolved_frame, "patient_communications", communications_table_sql)
+        write_to_redshift_versioned(communications_resolved_frame, "patient_communications", "patient_id", communications_table_sql)
         logger.info("✅ Patient communications table created and written successfully")
-        
-        logger.info("📝 Creating patient practitioners table...")
+
+        logger.info("📝 Creating patient practitioners table with version checking...")
         practitioners_table_sql = create_patient_practitioners_table_sql()
-        write_to_redshift(practitioners_resolved_frame, "patient_practitioners", practitioners_table_sql)
+        write_to_redshift_versioned(practitioners_resolved_frame, "patient_practitioners", "patient_id", practitioners_table_sql)
         logger.info("✅ Patient practitioners table created and written successfully")
-        
-        logger.info("📝 Creating patient links table...")
+
+        logger.info("📝 Creating patient links table with version checking...")
         links_table_sql = create_patient_links_table_sql()
-        write_to_redshift(links_resolved_frame, "patient_links", links_table_sql)
+        write_to_redshift_versioned(links_resolved_frame, "patient_links", "patient_id", links_table_sql)
         logger.info("✅ Patient links table created and written successfully")
         
         # Calculate processing time

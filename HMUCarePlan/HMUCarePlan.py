@@ -12,9 +12,23 @@ from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, 
 import json
 import logging
 
-# Set up logging
+# Import FHIR version comparison utilities
+# FHIR version comparison utilities implemented inline below
+
+# Timestamp-based versioning utilities
+from pyspark.sql import DataFrame
+from typing import Set
+
+# Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+# Add handler to write logs to stdout so they appear in CloudWatch
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -64,6 +78,125 @@ def convert_to_json_string(field):
 # Define UDF globally so it can be used in all transformation functions
 convert_to_json_udf = F.udf(convert_to_json_string, StringType())
 
+def get_existing_versions_from_redshift(glue_context, table_name: str, primary_key_column: str) -> Set[str]:
+    """
+    Retrieve existing version timestamps from Redshift to identify records for deletion
+
+    Args:
+        glue_context: AWS Glue context
+        table_name: Name of the table to query
+        primary_key_column: Name of the primary key column (unused but kept for consistency)
+
+    Returns:
+        Set of existing meta_last_updated timestamps as strings
+    """
+    try:
+        # Read existing data from Redshift
+        existing_df = glue_context.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+            },
+            transformation_ctx=f"read_existing_{table_name}"
+        ).toDF()
+
+        # Extract unique meta_last_updated values
+        if existing_df.count() > 0 and "meta_last_updated" in existing_df.columns:
+            versions = existing_df.select("meta_last_updated").distinct().rdd.map(lambda row: str(row[0]) if row[0] is not None else None).filter(lambda x: x is not None).collect()
+            logger.info(f"Found {len(versions)} existing version timestamps in {table_name}")
+            return set(versions)
+        else:
+            logger.info(f"No existing data found in {table_name}")
+            return set()
+
+    except Exception as e:
+        logger.warning(f"Could not read existing data from {table_name}: {str(e)}")
+        return set()
+
+def filter_dataframe_by_version(df: DataFrame, existing_versions: Set[str]) -> DataFrame:
+    """
+    Filter DataFrame to exclude records with meta_last_updated timestamps that exist in Redshift
+
+    Args:
+        df: Source DataFrame
+        existing_versions: Set of existing meta_last_updated timestamps
+
+    Returns:
+        Filtered DataFrame containing only new/updated records
+    """
+    if not existing_versions:
+        logger.info("No existing versions found, processing all records")
+        return df
+
+    # Convert timestamps to string format for comparison
+    df_with_version_string = df.withColumn(
+        "meta_last_updated_str",
+        F.when(F.col("meta_last_updated").isNotNull(),
+               F.date_format(F.col("meta_last_updated"), "yyyy-MM-dd HH:mm:ss"))
+        .otherwise(F.lit(None))
+    )
+
+    # Filter out records that already exist (based on timestamp)
+    filtered_df = df_with_version_string.filter(
+        (~F.col("meta_last_updated_str").isin(list(existing_versions))) |
+        F.col("meta_last_updated_str").isNull()
+    ).drop("meta_last_updated_str")
+
+    original_count = df.count()
+    filtered_count = filtered_df.count()
+    logger.info(f"Filtered from {original_count} to {filtered_count} records ({original_count - filtered_count} duplicates removed)")
+
+    return filtered_df
+
+def get_entities_to_delete(glue_context, table_name: str, current_df: DataFrame, primary_key_column: str) -> Set[str]:
+    """
+    Identify entities that should be deleted (exist in Redshift but not in current dataset)
+
+    Args:
+        glue_context: AWS Glue context
+        table_name: Name of the table to check
+        current_df: Current DataFrame being processed
+        primary_key_column: Name of the primary key column
+
+    Returns:
+        Set of primary key values that should be deleted
+    """
+    try:
+        # Read existing data from Redshift
+        existing_df = glue_context.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+            },
+            transformation_ctx=f"read_existing_{table_name}_for_deletion"
+        ).toDF()
+
+        if existing_df.count() == 0:
+            logger.info(f"No existing data in {table_name} to check for deletion")
+            return set()
+
+        # Get primary keys from both datasets
+        existing_keys = set(existing_df.select(primary_key_column).rdd.map(lambda row: row[0]).collect())
+        current_keys = set(current_df.select(primary_key_column).rdd.map(lambda row: row[0]).collect())
+
+        # Find keys that exist in Redshift but not in current data
+        keys_to_delete = existing_keys - current_keys
+
+        if keys_to_delete:
+            logger.info(f"Found {len(keys_to_delete)} entities to delete from {table_name}")
+        else:
+            logger.info(f"No entities to delete from {table_name}")
+
+        return keys_to_delete
+
+    except Exception as e:
+        logger.warning(f"Could not check for entities to delete in {table_name}: {str(e)}")
+        return set()
+
 def extract_id_from_reference(reference_field, resource_type):
     """Extract ID from FHIR reference format"""
     if reference_field:
@@ -100,7 +233,6 @@ def transform_main_care_plan_data(df):
         F.col("status").alias("status"),
         F.col("intent").alias("intent"),
         F.col("title").alias("title"),
-        F.col("meta").getField("versionId").alias("meta_version_id"),
         # Handle meta.lastUpdated with multiple possible formats
         F.coalesce(
             F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
@@ -261,14 +393,12 @@ def transform_care_plan_goals(df):
 def create_care_plans_table_sql():
     """Generate SQL for creating main care_plans table in Redshift"""
     return """
-    DROP TABLE IF EXISTS public.care_plans CASCADE;
-    CREATE TABLE public.care_plans (
+    CREATE TABLE IF NOT EXISTS public.care_plans (
         care_plan_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
         status VARCHAR(50),
         intent VARCHAR(50),
         title VARCHAR(500),
-        meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -278,8 +408,7 @@ def create_care_plans_table_sql():
 def create_care_plan_identifiers_table_sql():
     """Generate SQL for creating care_plan_identifiers table"""
     return """
-    DROP TABLE IF EXISTS public.care_plan_identifiers CASCADE;
-    CREATE TABLE public.care_plan_identifiers (
+    CREATE TABLE IF NOT EXISTS public.care_plan_identifiers (
         care_plan_id VARCHAR(255),
         identifier_system VARCHAR(255),
         identifier_value VARCHAR(255)
@@ -289,8 +418,7 @@ def create_care_plan_identifiers_table_sql():
 def create_care_plan_categories_table_sql():
     """Generate SQL for creating care_plan_categories table"""
     return """
-    DROP TABLE IF EXISTS public.care_plan_categories CASCADE;
-    CREATE TABLE public.care_plan_categories (
+    CREATE TABLE IF NOT EXISTS public.care_plan_categories (
         care_plan_id VARCHAR(255),
         category_code VARCHAR(50),
         category_system VARCHAR(255),
@@ -302,8 +430,7 @@ def create_care_plan_categories_table_sql():
 def create_care_plan_care_teams_table_sql():
     """Generate SQL for creating care_plan_care_teams table"""
     return """
-    DROP TABLE IF EXISTS public.care_plan_care_teams CASCADE;
-    CREATE TABLE public.care_plan_care_teams (
+    CREATE TABLE IF NOT EXISTS public.care_plan_care_teams (
         care_plan_id VARCHAR(255),
         care_team_id VARCHAR(255)
     ) SORTKEY (care_plan_id);
@@ -312,14 +439,13 @@ def create_care_plan_care_teams_table_sql():
 def create_care_plan_goals_table_sql():
     """Generate SQL for creating care_plan_goals table"""
     return """
-    DROP TABLE IF EXISTS public.care_plan_goals CASCADE;
-    CREATE TABLE public.care_plan_goals (
+    CREATE TABLE IF NOT EXISTS public.care_plan_goals (
         care_plan_id VARCHAR(255),
         goal_id VARCHAR(255)
     ) SORTKEY (care_plan_id);
     """
 
-def write_to_redshift(dynamic_frame, table_name, preactions=""):
+def write_to_redshift_versioned(dynamic_frame, table_name, primary_key_column, preactions=""):
     """Write DynamicFrame to Redshift using JDBC connection"""
     logger.info(f"Writing {table_name} to Redshift...")
     logger.info(f"🔧 Preactions SQL for {table_name}:\n{preactions}")
@@ -432,7 +558,6 @@ def main():
                 ("status", "cast:string"),
                 ("intent", "cast:string"),
                 ("title", "cast:string"),
-                ("meta_version_id", "cast:string"),
                 ("meta_last_updated", "cast:timestamp"),
                 ("created_at", "cast:timestamp"),
                 ("updated_at", "cast:timestamp")
@@ -473,15 +598,15 @@ def main():
         
         # Step 6: Write to Redshift
         logger.info("💾 STEP 6: WRITING DATA TO REDSHIFT")
-        write_to_redshift(main_resolved_frame, "care_plans", create_care_plans_table_sql())
+        write_to_redshift_versioned(main_resolved_frame, "care_plans", "care_plan_id", create_care_plans_table_sql())
         if identifiers_count > 0:
-            write_to_redshift(identifiers_resolved_frame, "care_plan_identifiers", create_care_plan_identifiers_table_sql())
+            write_to_redshift_versioned(identifiers_resolved_frame, "care_plan_identifiers", "care_plan_id", create_care_plan_identifiers_table_sql())
         if categories_count > 0:
-            write_to_redshift(categories_resolved_frame, "care_plan_categories", create_care_plan_categories_table_sql())
+            write_to_redshift_versioned(categories_resolved_frame, "care_plan_categories", "care_plan_id", create_care_plan_categories_table_sql())
         if care_teams_count > 0:
-            write_to_redshift(care_teams_resolved_frame, "care_plan_care_teams", create_care_plan_care_teams_table_sql())
+            write_to_redshift_versioned(care_teams_resolved_frame, "care_plan_care_teams", "care_plan_id", create_care_plan_care_teams_table_sql())
         if goals_count > 0:
-            write_to_redshift(goals_resolved_frame, "care_plan_goals", create_care_plan_goals_table_sql())
+            write_to_redshift_versioned(goals_resolved_frame, "care_plan_goals", "care_plan_id", create_care_plan_goals_table_sql())
 
         end_time = datetime.now()
         logger.info("=" * 80)

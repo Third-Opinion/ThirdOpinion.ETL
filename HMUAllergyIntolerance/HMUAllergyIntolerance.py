@@ -12,9 +12,23 @@ from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, 
 import json
 import logging
 
-# Set up logging
+# Import FHIR version comparison utilities
+# FHIR version comparison utilities implemented inline below
+
+# Timestamp-based versioning utilities
+from pyspark.sql import DataFrame
+from typing import Set
+
+# Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+# Add handler to write logs to stdout so they appear in CloudWatch
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -64,6 +78,125 @@ def convert_to_json_string(field):
 
 # Define UDF globally so it can be used in all transformation functions
 convert_to_json_udf = F.udf(convert_to_json_string, StringType())
+
+def get_existing_versions_from_redshift(glue_context, table_name: str, primary_key_column: str) -> Set[str]:
+    """
+    Retrieve existing version timestamps from Redshift to identify records for deletion
+
+    Args:
+        glue_context: AWS Glue context
+        table_name: Name of the table to query
+        primary_key_column: Name of the primary key column (unused but kept for consistency)
+
+    Returns:
+        Set of existing meta_last_updated timestamps as strings
+    """
+    try:
+        # Read existing data from Redshift
+        existing_df = glue_context.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+            },
+            transformation_ctx=f"read_existing_{table_name}"
+        ).toDF()
+
+        # Extract unique meta_last_updated values
+        if existing_df.count() > 0 and "meta_last_updated" in existing_df.columns:
+            versions = existing_df.select("meta_last_updated").distinct().rdd.map(lambda row: str(row[0]) if row[0] is not None else None).filter(lambda x: x is not None).collect()
+            logger.info(f"Found {len(versions)} existing version timestamps in {table_name}")
+            return set(versions)
+        else:
+            logger.info(f"No existing data found in {table_name}")
+            return set()
+
+    except Exception as e:
+        logger.warning(f"Could not read existing data from {table_name}: {str(e)}")
+        return set()
+
+def filter_dataframe_by_version(df: DataFrame, existing_versions: Set[str]) -> DataFrame:
+    """
+    Filter DataFrame to exclude records with meta_last_updated timestamps that exist in Redshift
+
+    Args:
+        df: Source DataFrame
+        existing_versions: Set of existing meta_last_updated timestamps
+
+    Returns:
+        Filtered DataFrame containing only new/updated records
+    """
+    if not existing_versions:
+        logger.info("No existing versions found, processing all records")
+        return df
+
+    # Convert timestamps to string format for comparison
+    df_with_version_string = df.withColumn(
+        "meta_last_updated_str",
+        F.when(F.col("meta_last_updated").isNotNull(),
+               F.date_format(F.col("meta_last_updated"), "yyyy-MM-dd HH:mm:ss"))
+        .otherwise(F.lit(None))
+    )
+
+    # Filter out records that already exist (based on timestamp)
+    filtered_df = df_with_version_string.filter(
+        (~F.col("meta_last_updated_str").isin(list(existing_versions))) |
+        F.col("meta_last_updated_str").isNull()
+    ).drop("meta_last_updated_str")
+
+    original_count = df.count()
+    filtered_count = filtered_df.count()
+    logger.info(f"Filtered from {original_count} to {filtered_count} records ({original_count - filtered_count} duplicates removed)")
+
+    return filtered_df
+
+def get_entities_to_delete(glue_context, table_name: str, current_df: DataFrame, primary_key_column: str) -> Set[str]:
+    """
+    Identify entities that should be deleted (exist in Redshift but not in current dataset)
+
+    Args:
+        glue_context: AWS Glue context
+        table_name: Name of the table to check
+        current_df: Current DataFrame being processed
+        primary_key_column: Name of the primary key column
+
+    Returns:
+        Set of primary key values that should be deleted
+    """
+    try:
+        # Read existing data from Redshift
+        existing_df = glue_context.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+            },
+            transformation_ctx=f"read_existing_{table_name}_for_deletion"
+        ).toDF()
+
+        if existing_df.count() == 0:
+            logger.info(f"No existing data in {table_name} to check for deletion")
+            return set()
+
+        # Get primary keys from both datasets
+        existing_keys = set(existing_df.select(primary_key_column).rdd.map(lambda row: row[0]).collect())
+        current_keys = set(current_df.select(primary_key_column).rdd.map(lambda row: row[0]).collect())
+
+        # Find keys that exist in Redshift but not in current data
+        keys_to_delete = existing_keys - current_keys
+
+        if keys_to_delete:
+            logger.info(f"Found {len(keys_to_delete)} entities to delete from {table_name}")
+        else:
+            logger.info(f"No entities to delete from {table_name}")
+
+        return keys_to_delete
+
+    except Exception as e:
+        logger.warning(f"Could not check for entities to delete in {table_name}: {str(e)}")
+        return set()
 
 def transform_main_allergy_intolerance_data(df):
     """Transform the main allergy intolerance data"""
@@ -176,7 +309,6 @@ def transform_main_allergy_intolerance_data(df):
         convert_to_json_udf(F.col("reaction")).alias("reactions"),
 
         # Meta data handling - following naming convention
-        F.col("meta.versionId").alias("meta_version_id"),
         F.coalesce(
             F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
             F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
@@ -282,7 +414,6 @@ def create_redshift_tables_sql():
         last_occurrence TIMESTAMP,
         note TEXT,
         reactions TEXT,
-        meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         meta_source VARCHAR(255),
         meta_security TEXT,
@@ -308,7 +439,7 @@ def create_allergy_identifiers_table_sql():
     ) SORTKEY (allergy_intolerance_id, identifier_system)
     """
 
-def write_to_redshift(dynamic_frame, table_name, preactions=""):
+def write_to_redshift_versioned(dynamic_frame, table_name, primary_key_column, preactions=""):
     """Write DynamicFrame to Redshift using JDBC connection"""
     logger.info(f"Writing {table_name} to Redshift...")
 
@@ -488,7 +619,6 @@ def main():
             F.col("last_occurrence").cast(TimestampType()),
             F.col("note").cast(StringType()),
             F.col("reactions").cast(StringType()),
-            F.col("meta_version_id").cast(StringType()),
             F.col("meta_last_updated").cast(TimestampType()),
             F.col("meta_source").cast(StringType()),
             F.col("meta_security").cast(StringType()),
@@ -556,12 +686,12 @@ def main():
         # Create all tables individually
         logger.info("📝 Creating main allergy intolerance table...")
         allergy_table_sql = create_redshift_tables_sql()
-        write_to_redshift(main_resolved_frame, "allergy_intolerance", allergy_table_sql)
+        write_to_redshift_versioned(main_resolved_frame, "allergy_intolerance", "allergy_intolerance_id", allergy_table_sql)
         logger.info("✅ Main allergy intolerance table created and written successfully")
 
         logger.info("📝 Creating allergy intolerance identifiers table...")
         identifiers_table_sql = create_allergy_identifiers_table_sql()
-        write_to_redshift(identifiers_resolved_frame, "allergy_intolerance_identifiers", identifiers_table_sql)
+        write_to_redshift_versioned(identifiers_resolved_frame, "allergy_intolerance_identifiers", "allergy_intolerance_id", identifiers_table_sql)
         logger.info("✅ Allergy intolerance identifiers table created and written successfully")
 
         # Calculate processing time

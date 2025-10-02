@@ -12,9 +12,23 @@ from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, 
 import json
 import logging
 
-# Set up logging
+# Import FHIR version comparison utilities
+# FHIR version comparison utilities implemented inline below
+
+# Timestamp-based versioning utilities
+from pyspark.sql import DataFrame
+from typing import Set
+
+# Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+# Add handler to write logs to stdout so they appear in CloudWatch
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -127,6 +141,125 @@ def convert_to_json_string(field):
 # Define UDFs globally so they can be used in all transformation functions
 convert_to_json_udf = F.udf(convert_to_json_string, StringType())
 
+def get_existing_versions_from_redshift(glue_context, table_name: str, primary_key_column: str) -> Set[str]:
+    """
+    Retrieve existing version timestamps from Redshift to identify records for deletion
+
+    Args:
+        glue_context: AWS Glue context
+        table_name: Name of the table to query
+        primary_key_column: Name of the primary key column (unused but kept for consistency)
+
+    Returns:
+        Set of existing meta_last_updated timestamps as strings
+    """
+    try:
+        # Read existing data from Redshift
+        existing_df = glue_context.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+            },
+            transformation_ctx=f"read_existing_{table_name}"
+        ).toDF()
+
+        # Extract unique meta_last_updated values
+        if existing_df.count() > 0 and "meta_last_updated" in existing_df.columns:
+            versions = existing_df.select("meta_last_updated").distinct().rdd.map(lambda row: str(row[0]) if row[0] is not None else None).filter(lambda x: x is not None).collect()
+            logger.info(f"Found {len(versions)} existing version timestamps in {table_name}")
+            return set(versions)
+        else:
+            logger.info(f"No existing data found in {table_name}")
+            return set()
+
+    except Exception as e:
+        logger.warning(f"Could not read existing data from {table_name}: {str(e)}")
+        return set()
+
+def filter_dataframe_by_version(df: DataFrame, existing_versions: Set[str]) -> DataFrame:
+    """
+    Filter DataFrame to exclude records with meta_last_updated timestamps that exist in Redshift
+
+    Args:
+        df: Source DataFrame
+        existing_versions: Set of existing meta_last_updated timestamps
+
+    Returns:
+        Filtered DataFrame containing only new/updated records
+    """
+    if not existing_versions:
+        logger.info("No existing versions found, processing all records")
+        return df
+
+    # Convert timestamps to string format for comparison
+    df_with_version_string = df.withColumn(
+        "meta_last_updated_str",
+        F.when(F.col("meta_last_updated").isNotNull(),
+               F.date_format(F.col("meta_last_updated"), "yyyy-MM-dd HH:mm:ss"))
+        .otherwise(F.lit(None))
+    )
+
+    # Filter out records that already exist (based on timestamp)
+    filtered_df = df_with_version_string.filter(
+        (~F.col("meta_last_updated_str").isin(list(existing_versions))) |
+        F.col("meta_last_updated_str").isNull()
+    ).drop("meta_last_updated_str")
+
+    original_count = df.count()
+    filtered_count = filtered_df.count()
+    logger.info(f"Filtered from {original_count} to {filtered_count} records ({original_count - filtered_count} duplicates removed)")
+
+    return filtered_df
+
+def get_entities_to_delete(glue_context, table_name: str, current_df: DataFrame, primary_key_column: str) -> Set[str]:
+    """
+    Identify entities that should be deleted (exist in Redshift but not in current dataset)
+
+    Args:
+        glue_context: AWS Glue context
+        table_name: Name of the table to check
+        current_df: Current DataFrame being processed
+        primary_key_column: Name of the primary key column
+
+    Returns:
+        Set of primary key values that should be deleted
+    """
+    try:
+        # Read existing data from Redshift
+        existing_df = glue_context.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+            },
+            transformation_ctx=f"read_existing_{table_name}_for_deletion"
+        ).toDF()
+
+        if existing_df.count() == 0:
+            logger.info(f"No existing data in {table_name} to check for deletion")
+            return set()
+
+        # Get primary keys from both datasets
+        existing_keys = set(existing_df.select(primary_key_column).rdd.map(lambda row: row[0]).collect())
+        current_keys = set(current_df.select(primary_key_column).rdd.map(lambda row: row[0]).collect())
+
+        # Find keys that exist in Redshift but not in current data
+        keys_to_delete = existing_keys - current_keys
+
+        if keys_to_delete:
+            logger.info(f"Found {len(keys_to_delete)} entities to delete from {table_name}")
+        else:
+            logger.info(f"No entities to delete from {table_name}")
+
+        return keys_to_delete
+
+    except Exception as e:
+        logger.warning(f"Could not check for entities to delete in {table_name}: {str(e)}")
+        return set()
+
 def transform_main_medication_request_data(df):
     """Transform the main medication request data"""
     logger.info("Transforming main medication request data...")
@@ -161,7 +294,6 @@ def transform_main_medication_request_data(df):
             F.to_timestamp(F.col("authoredOn"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
             F.to_timestamp(F.col("authoredOn"), "yyyy-MM-dd'T'HH:mm:ss")
         ).alias("authored_on"),
-        F.col("meta").getField("versionId").alias("meta_version_id"),
         # Handle meta.lastUpdated datetime with multiple possible formats
         F.coalesce(
             F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
@@ -357,11 +489,8 @@ def transform_medication_request_categories(df):
 def create_redshift_tables_sql():
     """Generate SQL for creating main medication requests table in Redshift"""
     return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.medication_requests CASCADE;
-    
     -- Main medication requests table
-    CREATE TABLE public.medication_requests (
+    CREATE TABLE IF NOT EXISTS public.medication_requests (
         medication_request_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
         encounter_id VARCHAR(255),
@@ -371,7 +500,6 @@ def create_redshift_tables_sql():
         intent VARCHAR(50),
         reported_boolean BOOLEAN,
         authored_on TIMESTAMP,
-        meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -381,10 +509,7 @@ def create_redshift_tables_sql():
 def create_medication_request_identifiers_table_sql():
     """Generate SQL for creating medication_request_identifiers table"""
     return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.medication_request_identifiers CASCADE;
-    
-    CREATE TABLE public.medication_request_identifiers (
+    CREATE TABLE IF NOT EXISTS public.medication_request_identifiers (
         medication_request_id VARCHAR(255),
         identifier_system VARCHAR(255),
         identifier_value VARCHAR(255)
@@ -394,10 +519,7 @@ def create_medication_request_identifiers_table_sql():
 def create_medication_request_notes_table_sql():
     """Generate SQL for creating medication_request_notes table"""
     return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.medication_request_notes CASCADE;
-    
-    CREATE TABLE public.medication_request_notes (
+    CREATE TABLE IF NOT EXISTS public.medication_request_notes (
         medication_request_id VARCHAR(255),
         note_text VARCHAR(MAX)
     ) SORTKEY (medication_request_id)
@@ -406,10 +528,7 @@ def create_medication_request_notes_table_sql():
 def create_medication_request_dosage_instructions_table_sql():
     """Generate SQL for creating medication_request_dosage_instructions table"""
     return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.medication_request_dosage_instructions CASCADE;
-    
-    CREATE TABLE public.medication_request_dosage_instructions (
+    CREATE TABLE IF NOT EXISTS public.medication_request_dosage_instructions (
         medication_request_id VARCHAR(255),
         dosage_text VARCHAR(MAX),
         dosage_timing_frequency INTEGER,
@@ -429,10 +548,7 @@ def create_medication_request_dosage_instructions_table_sql():
 def create_medication_request_categories_table_sql():
     """Generate SQL for creating medication_request_categories table"""
     return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.medication_request_categories CASCADE;
-    
-    CREATE TABLE public.medication_request_categories (
+    CREATE TABLE IF NOT EXISTS public.medication_request_categories (
         medication_request_id VARCHAR(255),
         category_code VARCHAR(50),
         category_system VARCHAR(255),
@@ -441,7 +557,7 @@ def create_medication_request_categories_table_sql():
     ) SORTKEY (medication_request_id, category_code)
     """
 
-def write_to_redshift(dynamic_frame, table_name, preactions=""):
+def write_to_redshift_versioned(dynamic_frame, table_name, primary_key_column, preactions=""):
     """Write DynamicFrame to Redshift using JDBC connection"""
     logger.info(f"Writing {table_name} to Redshift...")
     
@@ -631,7 +747,6 @@ def main():
             F.col("intent").cast(StringType()).alias("intent"),
             F.col("reported_boolean").cast(BooleanType()).alias("reported_boolean"),
             F.col("authored_on").cast(TimestampType()).alias("authored_on"),
-            F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
             F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
@@ -696,7 +811,6 @@ def main():
                 ("intent", "cast:string"),
                 ("reported_boolean", "cast:boolean"),
                 ("authored_on", "cast:timestamp"),
-                ("meta_version_id", "cast:string"),
                 ("meta_last_updated", "cast:timestamp"),
                 ("created_at", "cast:timestamp"),
                 ("updated_at", "cast:timestamp")
@@ -805,27 +919,27 @@ def main():
         # Create all tables individually
         logger.info("📝 Dropping and recreating main medication requests table...")
         medication_requests_table_sql = create_redshift_tables_sql()
-        write_to_redshift(main_resolved_frame, "medication_requests", medication_requests_table_sql)
+        write_to_redshift_versioned(main_resolved_frame, "medication_requests", "medication_request_id", medication_requests_table_sql)
         logger.info("✅ Main medication requests table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating medication request identifiers table...")
         identifiers_table_sql = create_medication_request_identifiers_table_sql()
-        write_to_redshift(identifiers_resolved_frame, "medication_request_identifiers", identifiers_table_sql)
+        write_to_redshift_versioned(identifiers_resolved_frame, "medication_request_identifiers", "medication_request_id", identifiers_table_sql)
         logger.info("✅ Medication request identifiers table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating medication request notes table...")
         notes_table_sql = create_medication_request_notes_table_sql()
-        write_to_redshift(notes_resolved_frame, "medication_request_notes", notes_table_sql)
+        write_to_redshift_versioned(notes_resolved_frame, "medication_request_notes", "medication_request_id", notes_table_sql)
         logger.info("✅ Medication request notes table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating medication request dosage instructions table...")
         dosage_table_sql = create_medication_request_dosage_instructions_table_sql()
-        write_to_redshift(dosage_resolved_frame, "medication_request_dosage_instructions", dosage_table_sql)
+        write_to_redshift_versioned(dosage_resolved_frame, "medication_request_dosage_instructions", "medication_request_id", dosage_table_sql)
         logger.info("✅ Medication request dosage instructions table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating medication request categories table...")
         categories_table_sql = create_medication_request_categories_table_sql()
-        write_to_redshift(categories_resolved_frame, "medication_request_categories", categories_table_sql)
+        write_to_redshift_versioned(categories_resolved_frame, "medication_request_categories", "medication_request_id", categories_table_sql)
         logger.info("✅ Medication request categories table dropped, recreated and written successfully")
         
         # Calculate processing time

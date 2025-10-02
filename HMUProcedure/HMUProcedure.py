@@ -12,9 +12,21 @@ from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, 
 import json
 import logging
 
-# Set up logging
+# Import FHIR version comparison utilities
+# FHIR version comparison utilities implemented inline below
+
+# FHIR version comparison utilities are implemented inline below
+
+# Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+# Add handler to write logs to stdout so they appear in CloudWatch
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -64,6 +76,132 @@ def convert_to_json_string(field):
 # Define UDF globally so it can be used in all transformation functions
 convert_to_json_udf = F.udf(convert_to_json_string, StringType())
 
+def get_existing_versions_from_redshift(table_name, id_column):
+    """Query Redshift to get existing entity timestamps for comparison"""
+    logger.info(f"Fetching existing timestamps from {table_name}...")
+
+    try:
+        # First check if table exists by trying to read it directly
+        # This prevents malformed query errors when table doesn't exist
+        existing_versions_df = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION
+            },
+            transformation_ctx=f"read_existing_versions_{table_name}"
+        )
+
+        # Convert to Spark DataFrame for easier processing
+        existing_df = existing_versions_df.toDF()
+
+        # Select only the columns we need if table exists
+        if id_column in existing_df.columns and 'meta_last_updated' in existing_df.columns:
+            existing_df = existing_df.select(id_column, 'meta_last_updated')
+        else:
+            logger.warning(f"Table {table_name} exists but missing required columns: {id_column} or meta_last_updated")
+            return {}
+
+        # Collect as dictionary: {entity_id: timestamp}
+        timestamp_map = {}
+        if existing_df.count() > 0:
+            rows = existing_df.collect()
+            for row in rows:
+                entity_id = row[id_column]
+                timestamp = row['meta_last_updated']
+                if entity_id and timestamp:
+                    timestamp_map[entity_id] = timestamp
+
+        logger.info(f"Found {len(timestamp_map)} existing entities with timestamps in {table_name}")
+        return timestamp_map
+
+    except Exception as e:
+        logger.info(f"Table {table_name} does not exist or is empty - treating all records as new")
+        logger.debug(f"Details: {str(e)}")
+        return {}
+
+def filter_dataframe_by_version(df, existing_versions, id_column):
+    """Filter DataFrame based on version comparison"""
+    logger.info("Filtering data based on version comparison...")
+
+    if not existing_versions:
+        # No existing data, all records are new
+        total_count = df.count()
+        logger.info(f"No existing versions found - treating all {total_count} records as new")
+        return df, total_count, 0
+
+    # Add a column to mark records that need processing
+    def needs_processing(entity_id, last_updated):
+        """Check if record needs processing based on timestamp comparison"""
+        if entity_id is None or last_updated is None:
+            return True  # Process records with missing IDs/timestamps
+
+        existing_timestamp = existing_versions.get(entity_id)
+        if existing_timestamp is None:
+            return True  # New entity
+
+        # Convert timestamps to comparable format if needed
+        # If timestamps are already datetime objects, direct comparison works
+        if existing_timestamp == last_updated:
+            return False  # Same timestamp, skip
+
+        # Process if incoming timestamp is newer than existing
+        # Note: This handles the case where timestamps might be different
+        # In production, you may want to add tolerance for small time differences
+        try:
+            return last_updated > existing_timestamp
+        except TypeError:
+            # If comparison fails (e.g., different types), process the record
+            return True
+
+    # Create UDF for timestamp comparison
+    from pyspark.sql.types import BooleanType
+    needs_processing_udf = F.udf(needs_processing, BooleanType())
+
+    # Add processing flag
+    df_with_flag = df.withColumn(
+        "needs_processing",
+        needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
+    )
+
+    # Split into processing needed and skipped
+    to_process_df = df_with_flag.filter(F.col("needs_processing") == True).drop("needs_processing")
+    skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
+
+    to_process_count = to_process_df.count()
+    total_count = df.count()
+
+    logger.info(f"Version comparison results:")
+    logger.info(f"  Total incoming records: {total_count}")
+    logger.info(f"  Records to process (new/updated): {to_process_count}")
+    logger.info(f"  Records to skip (same version): {skipped_count}")
+
+    return to_process_df, to_process_count, skipped_count
+
+def get_entities_to_delete(df, existing_versions, id_column):
+    """Get list of entity IDs that need their old versions deleted"""
+    logger.info("Identifying entities that need old version cleanup...")
+
+    if not existing_versions:
+        return []
+
+    # Get list of entity IDs from incoming data
+    incoming_entity_ids = set()
+    if df.count() > 0:
+        entity_rows = df.select(id_column).distinct().collect()
+        incoming_entity_ids = {row[id_column] for row in entity_rows if row[id_column]}
+
+    # Find entities that exist in both incoming data and Redshift
+    entities_to_delete = []
+    for entity_id in incoming_entity_ids:
+        if entity_id in existing_versions:
+            entities_to_delete.append(entity_id)
+
+    logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
+    return entities_to_delete
+
 def transform_main_procedure_data(df):
     """Transform the main procedure data"""
     logger.info("Transforming main procedure data...")
@@ -90,9 +228,6 @@ def transform_main_procedure_data(df):
             F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd'T'HH:mm:ss"),
             F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd")
         ).alias("performed_date_time"),
-        F.when(F.col("meta").isNotNull(),
-               F.col("meta").getField("versionId")
-              ).otherwise(None).alias("meta_version_id"),
         F.when(F.col("meta").isNotNull(),
                # Handle meta.lastUpdated with multiple possible formats
                F.coalesce(
@@ -174,7 +309,6 @@ def create_redshift_tables_sql():
         patient_id VARCHAR(255) NOT NULL,
         code_text VARCHAR(500),
         performed_date_time TIMESTAMP,
-        meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -202,7 +336,7 @@ def create_procedure_code_codings_table_sql():
     ) SORTKEY (procedure_id, code_system);
     """
 
-def write_to_redshift(dynamic_frame, table_name, preactions=""):
+def write_to_redshift_versioned(dynamic_frame, table_name, procedure_id, preactions=""):
     logger.info(f"Writing {table_name} to Redshift...")
     logger.info(f"🔧 Preactions SQL for {table_name}:\\n{preactions}")
     try:
@@ -301,9 +435,9 @@ def main():
         identifiers_resolved_frame = identifiers_dynamic_frame.resolveChoice(specs=[('procedure_id', 'cast:string')])
         codings_resolved_frame = codings_dynamic_frame.resolveChoice(specs=[('procedure_id', 'cast:string')])
 
-        write_to_redshift(main_resolved_frame, "procedures", create_redshift_tables_sql())
-        write_to_redshift(identifiers_resolved_frame, "procedure_identifiers", create_procedure_identifiers_table_sql())
-        write_to_redshift(codings_resolved_frame, "procedure_code_codings", create_procedure_code_codings_table_sql())
+        write_to_redshift_versioned(main_resolved_frame, "procedures", "procedure_id", create_redshift_tables_sql())
+        write_to_redshift_versioned(identifiers_resolved_frame, "procedure_identifiers", "procedure_id", create_procedure_identifiers_table_sql())
+        write_to_redshift_versioned(codings_resolved_frame, "procedure_code_codings", "procedure_id", create_procedure_code_codings_table_sql())
         
         end_time = datetime.now()
         logger.info(f"🎉 ETL PROCESS COMPLETED SUCCESSFULLY in {end_time - start_time}")

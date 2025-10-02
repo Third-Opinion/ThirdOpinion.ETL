@@ -37,6 +37,25 @@ main() {
     log_info "S3 Bucket: $S3_BUCKET"
     echo
 
+    # Upload utility modules first
+    log_info "Uploading utility modules..."
+
+    # Upload fhir_version_utils.py if it exists
+    if [[ -f "fhir_version_utils.py" ]]; then
+        log_info "Uploading fhir_version_utils.py..."
+        if aws s3 cp "fhir_version_utils.py" "${S3_BUCKET}fhir_version_utils.py" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION"; then
+            log_info "✅ Successfully uploaded fhir_version_utils.py"
+        else
+            log_error "Failed to upload fhir_version_utils.py"
+        fi
+    else
+        log_warning "fhir_version_utils.py not found"
+    fi
+
+    echo
+
     # Upload each Python script
     for job_dir in HMU*/; do
         job_name=$(basename "$job_dir")

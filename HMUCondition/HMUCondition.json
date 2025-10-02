@@ -24,6 +24,7 @@
     "--job-bookmark-option": "job-bookmark-disable",
     "--datalake-formats": "iceberg",
     "--job-language": "python",
+    "--py-files": "s3://aws-glue-assets-442042533707-us-east-2/scripts/fhir_version_utils.py",
     "--TempDir": "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
   },
   "Connections": {

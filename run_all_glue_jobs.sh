@@ -3,13 +3,15 @@
 # ===================================================================
 # RUN ALL GLUE JOBS SCRIPT
 # ===================================================================
-# This script runs all HMU Glue jobs to populate Redshift tables
+# This script runs HMU Glue jobs to populate Redshift tables
+# By default, only runs jobs that previously failed or stopped
 # Jobs are dynamically discovered from AWS Glue
 # ===================================================================
 #
 # Usage:
-#   ./run_all_glue_jobs.sh              # Run all discovered HMU* jobs
-#   ./run_all_glue_jobs.sh --deploy     # Deploy jobs first, then run
+#   ./run_all_glue_jobs.sh              # Upload scripts & run only failed/stopped jobs
+#   ./run_all_glue_jobs.sh --force      # Upload scripts & run all jobs regardless of status
+#   ./run_all_glue_jobs.sh --deploy     # Upload scripts, deploy jobs first, then run
 #   ./run_all_glue_jobs.sh --help       # Show this help message
 #
 # ===================================================================
@@ -21,11 +23,16 @@ AWS_REGION="${AWS_REGION:-us-east-2}"
 # Parse command line arguments
 DEPLOY_FIRST=false
 SHOW_HELP=false
+FORCE_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --deploy)
             DEPLOY_FIRST=true
+            shift
+            ;;
+        --force)
+            FORCE_RUN=true
             shift
             ;;
         --help|-h)
@@ -51,10 +58,11 @@ NC='\033[0m' # No Color
 if [ "$SHOW_HELP" = true ]; then
     echo "Usage: ./run_all_glue_jobs.sh [OPTIONS]"
     echo ""
-    echo "Run all HMU* Glue jobs to populate Redshift tables."
+    echo "Upload Python scripts to S3 and run HMU* Glue jobs to populate Redshift tables."
     echo ""
     echo "Options:"
     echo "  --deploy     Deploy Glue jobs from JSON templates before running"
+    echo "  --force      Run all jobs regardless of their current state"
     echo "  --help, -h   Show this help message and exit"
     echo ""
     echo "Environment Variables:"
@@ -62,7 +70,8 @@ if [ "$SHOW_HELP" = true ]; then
     echo "  AWS_REGION   AWS region (default: us-east-2)"
     echo ""
     echo "Examples:"
-    echo "  ./run_all_glue_jobs.sh                    # Run existing jobs"
+    echo "  ./run_all_glue_jobs.sh                    # Run only failed/stopped jobs"
+    echo "  ./run_all_glue_jobs.sh --force            # Run all jobs regardless of state"
     echo "  ./run_all_glue_jobs.sh --deploy           # Deploy and run jobs"
     echo "  AWS_PROFILE=my-profile ./run_all_glue_jobs.sh  # Use different profile"
     exit 0
@@ -70,6 +79,78 @@ fi
 
 # Array to store discovered Glue jobs
 declare -a GLUE_JOBS=()
+
+# Function to upload Python scripts to S3
+upload_scripts_to_s3() {
+    echo -e "${BLUE}Uploading Python scripts to S3...${NC}"
+    echo ""
+
+    local upload_count=0
+    local failed_count=0
+
+    # Upload utility modules first
+    echo -e "${BLUE}→ Uploading utility modules...${NC}"
+
+    # Upload fhir_version_utils.py if it exists
+    if [[ -f "fhir_version_utils.py" ]]; then
+        echo "  Uploading fhir_version_utils.py..."
+        if aws s3 cp "fhir_version_utils.py" "s3://aws-glue-assets-442042533707-us-east-2/scripts/fhir_version_utils.py" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" &>/dev/null; then
+            echo -e "${GREEN}  ✓ Successfully uploaded fhir_version_utils.py${NC}"
+            ((upload_count++))
+        else
+            echo -e "${RED}  ✗ Failed to upload fhir_version_utils.py${NC}"
+            ((failed_count++))
+        fi
+    else
+        echo -e "${YELLOW}  ! fhir_version_utils.py not found${NC}"
+    fi
+
+    echo ""
+
+    # Upload each Python script
+    for job_dir in HMU*/; do
+        job_name=$(basename "$job_dir")
+        py_file="${job_dir}${job_name}.py"
+
+        # Skip if Python file doesn't exist
+        if [[ ! -f "$py_file" ]]; then
+            echo -e "${YELLOW}  ! $job_name: Python file not found${NC}"
+            continue
+        fi
+
+        # Upload to S3
+        echo -e "${BLUE}→ Uploading $job_name.py...${NC}"
+        if aws s3 cp "$py_file" "s3://aws-glue-assets-442042533707-us-east-2/scripts/${job_name}.py" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" &>/dev/null; then
+            echo -e "${GREEN}  ✓ Successfully uploaded $job_name.py${NC}"
+            ((upload_count++))
+        else
+            echo -e "${RED}  ✗ Failed to upload $job_name.py${NC}"
+            ((failed_count++))
+        fi
+    done
+
+    echo ""
+    echo -e "${BLUE}====================================================================="
+    echo "SCRIPT UPLOAD SUMMARY"
+    echo "====================================================================="
+    echo -e "${GREEN}Successfully uploaded: $upload_count scripts${NC}"
+    echo -e "${RED}Failed: $failed_count scripts${NC}"
+    echo "=====================================================================${NC}"
+    echo ""
+
+    if [ $failed_count -gt 0 ]; then
+        echo -e "${YELLOW}⚠ Some script uploads failed. Continue anyway? (y/n): ${NC}"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Aborting."
+            exit 1
+        fi
+    fi
+}
 
 # Function to deploy Glue jobs from JSON templates
 deploy_glue_jobs() {
@@ -156,20 +237,63 @@ discover_glue_jobs() {
         return 1
     fi
 
-    # Parse JSON array and populate GLUE_JOBS array
+    # Arrays to track all jobs and filtered jobs
+    declare -a ALL_JOBS=()
+    declare -a JOBS_TO_RUN=()
+    declare -a JOBS_SKIPPED=()
+
+    # Parse JSON array and populate ALL_JOBS array
     if [ ! -z "$jobs_json" ] && [ "$jobs_json" != "[]" ]; then
         # Convert JSON array to bash array using while loop
         while IFS= read -r job_name; do
-            GLUE_JOBS+=("$job_name")
+            ALL_JOBS+=("$job_name")
         done < <(echo "$jobs_json" | jq -r '.[]' | sort)
 
-        if [ ${#GLUE_JOBS[@]} -gt 0 ]; then
-            echo -e "${GREEN}✓ Discovered ${#GLUE_JOBS[@]} HMU* Glue jobs${NC}"
+        if [ ${#ALL_JOBS[@]} -gt 0 ]; then
+            echo -e "${GREEN}✓ Discovered ${#ALL_JOBS[@]} HMU* Glue jobs${NC}"
             echo ""
-            echo "Jobs found:"
-            for job in "${GLUE_JOBS[@]}"; do
-                echo "  - $job"
-            done
+
+            # Filter jobs based on their status (unless --force is used)
+            if [ "$FORCE_RUN" = true ]; then
+                echo -e "${YELLOW}Force mode: Running all jobs regardless of status${NC}"
+                GLUE_JOBS=("${ALL_JOBS[@]}")
+            else
+                echo -e "${BLUE}Checking job statuses to determine which jobs need to run...${NC}"
+                for job in "${ALL_JOBS[@]}"; do
+                    local status=$(get_latest_job_run_status "$job")
+                    if should_run_job "$job"; then
+                        GLUE_JOBS+=("$job")
+                        echo -e "${YELLOW}  ✓ $job (last status: ${status:-never run}) - will run${NC}"
+                    else
+                        JOBS_SKIPPED+=("$job")
+                        echo -e "${GREEN}  ✓ $job (last status: $status) - skipping${NC}"
+                    fi
+                done
+            fi
+
+            echo ""
+            if [ ${#GLUE_JOBS[@]} -gt 0 ]; then
+                echo -e "${GREEN}Jobs to run: ${#GLUE_JOBS[@]}${NC}"
+                for job in "${GLUE_JOBS[@]}"; do
+                    echo "  - $job"
+                done
+            else
+                echo -e "${YELLOW}No jobs need to run (all are in successful/running state)${NC}"
+                if [ ${#JOBS_SKIPPED[@]} -gt 0 ]; then
+                    echo ""
+                    echo -e "${BLUE}Skipped jobs (use --force to run anyway):${NC}"
+                    for job in "${JOBS_SKIPPED[@]}"; do
+                        echo "  - $job"
+                    done
+                fi
+                return 1
+            fi
+
+            if [ ${#JOBS_SKIPPED[@]} -gt 0 ]; then
+                echo ""
+                echo -e "${BLUE}Skipped ${#JOBS_SKIPPED[@]} jobs with successful/running status${NC}"
+            fi
+
             return 0
         else
             echo -e "${YELLOW}⚠ No HMU* jobs found after parsing${NC}"
@@ -297,6 +421,45 @@ get_job_error() {
         --output text 2>/dev/null
 }
 
+# Function to get the latest job run status
+get_latest_job_run_status() {
+    local job_name=$1
+
+    # Get the most recent job run for this job
+    local latest_run=$(aws glue get-job-runs \
+        --job-name "$job_name" \
+        --profile "$AWS_PROFILE" \
+        --region "$AWS_REGION" \
+        --max-results 1 \
+        --query 'JobRuns[0].JobRunState' \
+        --output text 2>/dev/null)
+
+    echo "$latest_run"
+}
+
+# Function to check if job should be run based on its latest status
+should_run_job() {
+    local job_name=$1
+
+    # If force flag is set, always run
+    if [ "$FORCE_RUN" = true ]; then
+        return 0
+    fi
+
+    # Get latest job run status
+    local status=$(get_latest_job_run_status "$job_name")
+
+    # Run if status is FAILED, STOPPED, or if no previous runs exist (status is empty/None)
+    case "$status" in
+        FAILED|STOPPED|""|"None")
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # Main execution
 echo -e "${BLUE}====================================================================="
 echo "RUNNING ALL HMU GLUE JOBS"
@@ -310,14 +473,21 @@ echo ""
 check_aws_credentials
 echo ""
 
+# Always upload scripts to S3 before running jobs
+upload_scripts_to_s3
+
 # Deploy jobs if requested
 if [ "$DEPLOY_FIRST" = true ]; then
     deploy_glue_jobs
 fi
 
-# Discover HMU* Glue jobs
+# Discover HMU* Glue jobs and filter by status
 if ! discover_glue_jobs; then
-    echo -e "${RED}No HMU* Glue jobs found to run. Exiting.${NC}"
+    if [ "$FORCE_RUN" = false ]; then
+        echo ""
+        echo -e "${BLUE}💡 Tip: Use --force to run all jobs regardless of their status${NC}"
+    fi
+    echo -e "${RED}No jobs need to run. Exiting.${NC}"
     exit 1
 fi
 

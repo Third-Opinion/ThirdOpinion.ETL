@@ -12,9 +12,215 @@ from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, 
 import json
 import logging
 
-# Set up logging
+# FHIR version comparison utilities implemented inline below
+
+# FHIR version comparison utilities are implemented inline below
+
+def get_existing_versions_from_redshift(table_name, id_column):
+    """Query Redshift to get existing entity timestamps for comparison"""
+    logger.info(f"Fetching existing timestamps from {table_name}...")
+
+    try:
+        # First check if table exists by trying to read it directly
+        # This prevents malformed query errors when table doesn't exist
+        existing_versions_df = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION
+            },
+            transformation_ctx=f"read_existing_versions_{table_name}"
+        )
+
+        # Convert to Spark DataFrame for easier processing
+        existing_df = existing_versions_df.toDF()
+
+        # Select only the columns we need if table exists
+        if id_column in existing_df.columns and 'meta_last_updated' in existing_df.columns:
+            existing_df = existing_df.select(id_column, 'meta_last_updated')
+        else:
+            logger.warning(f"Table {table_name} exists but missing required columns: {id_column} or meta_last_updated")
+            return {}
+
+        # Collect as dictionary: {entity_id: timestamp}
+        timestamp_map = {}
+        if existing_df.count() > 0:
+            rows = existing_df.collect()
+            for row in rows:
+                entity_id = row[id_column]
+                timestamp = row['meta_last_updated']
+                if entity_id and timestamp:
+                    timestamp_map[entity_id] = timestamp
+
+        logger.info(f"Found {len(timestamp_map)} existing entities with timestamps in {table_name}")
+        return timestamp_map
+
+    except Exception as e:
+        logger.info(f"Table {table_name} does not exist or is empty - treating all records as new")
+        logger.debug(f"Details: {str(e)}")
+        return {}
+
+def filter_dataframe_by_version(df, existing_versions, id_column):
+    """Filter DataFrame based on version comparison"""
+    logger.info("Filtering data based on version comparison...")
+
+    if not existing_versions:
+        # No existing data, all records are new
+        total_count = df.count()
+        logger.info(f"No existing versions found - treating all {total_count} records as new")
+        return df, total_count, 0
+
+    # Add a column to mark records that need processing
+    def needs_processing(entity_id, last_updated):
+        """Check if record needs processing based on timestamp comparison"""
+        if entity_id is None or last_updated is None:
+            return True  # Process records with missing IDs/timestamps
+
+        existing_timestamp = existing_versions.get(entity_id)
+        if existing_timestamp is None:
+            return True  # New entity
+
+        # Convert timestamps to comparable format if needed
+        # If timestamps are already datetime objects, direct comparison works
+        if existing_timestamp == last_updated:
+            return False  # Same timestamp, skip
+
+        # Process if incoming timestamp is newer than existing
+        # Note: This handles the case where timestamps might be different
+        # In production, you may want to add tolerance for small time differences
+        try:
+            return last_updated > existing_timestamp
+        except TypeError:
+            # If comparison fails (e.g., different types), process the record
+            return True
+
+    # Create UDF for timestamp comparison
+    from pyspark.sql.types import BooleanType
+    needs_processing_udf = F.udf(needs_processing, BooleanType())
+
+    # Add processing flag
+    df_with_flag = df.withColumn(
+        "needs_processing",
+        needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
+    )
+
+    # Split into processing needed and skipped
+    to_process_df = df_with_flag.filter(F.col("needs_processing") == True).drop("needs_processing")
+    skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
+
+    to_process_count = to_process_df.count()
+    total_count = df.count()
+
+    logger.info(f"Version comparison results:")
+    logger.info(f"  Total incoming records: {total_count}")
+    logger.info(f"  Records to process (new/updated): {to_process_count}")
+    logger.info(f"  Records to skip (same version): {skipped_count}")
+
+    return to_process_df, to_process_count, skipped_count
+
+def get_entities_to_delete(df, existing_versions, id_column):
+    """Get list of entity IDs that need their old versions deleted"""
+    logger.info("Identifying entities that need old version cleanup...")
+
+    if not existing_versions:
+        return []
+
+    # Get list of entity IDs from incoming data
+    incoming_entity_ids = set()
+    if df.count() > 0:
+        entity_rows = df.select(id_column).distinct().collect()
+        incoming_entity_ids = {row[id_column] for row in entity_rows if row[id_column]}
+
+    # Find entities that exist in both incoming data and Redshift
+    entities_to_delete = []
+    for entity_id in incoming_entity_ids:
+        if entity_id in existing_versions:
+            entities_to_delete.append(entity_id)
+
+    logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
+    return entities_to_delete
+
+def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
+    """Version-aware write to Redshift - only processes new/updated entities"""
+    logger.info(f"Writing {table_name} to Redshift with version checking...")
+
+    try:
+        # Convert dynamic frame to DataFrame for processing
+        df = dynamic_frame.toDF()
+        total_records = df.count()
+
+        if total_records == 0:
+            logger.info(f"No records to process for {table_name}")
+            return
+
+        # Step 1: Get existing versions from Redshift
+        existing_versions = get_existing_versions_from_redshift(table_name, id_column)
+
+        # Step 2: Filter incoming data based on version comparison
+        filtered_df, to_process_count, skipped_count = filter_dataframe_by_version(
+            df, existing_versions, id_column
+        )
+
+        if to_process_count == 0:
+            logger.info(f"✅ All {total_records} records in {table_name} are up to date - no changes needed")
+            return
+
+        # Step 3: Get entities that need old version cleanup
+        entities_to_delete = get_entities_to_delete(filtered_df, existing_versions, id_column)
+
+        # Step 4: Build preactions for selective deletion
+        selective_preactions = preactions
+        if entities_to_delete:
+            # Create DELETE statements for specific entity IDs
+            entity_ids_str = "', '".join(entities_to_delete)
+            delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
+
+            if selective_preactions:
+                selective_preactions = delete_clause + " " + selective_preactions
+            else:
+                selective_preactions = delete_clause
+
+            logger.info(f"Will delete {len(entities_to_delete)} existing entities before inserting updated versions")
+
+        # Step 5: Convert filtered DataFrame back to DynamicFrame
+        filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
+
+        # Step 6: Write only the new/updated records
+        logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=filtered_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": selective_preactions or ""
+            },
+            transformation_ctx=f"write_{table_name}_versioned_to_redshift"
+        )
+
+        logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
+        logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        raise
+
+# Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+# Add handler to write logs to stdout so they appear in CloudWatch
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -269,7 +475,6 @@ def transform_main_condition_data(df):
     
     # Add metadata information
     select_columns.extend([
-        F.col("meta").getField("versionId").alias("meta_version_id"),
         # Handle meta.lastUpdated with multiple possible formats
         F.coalesce(
             F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
@@ -561,11 +766,8 @@ def transform_condition_extensions(df):
 def create_redshift_tables_sql():
     """Generate SQL for creating main conditions table in Redshift with proper syntax"""
     return """
-    -- Drop existing table if it exists
-    DROP TABLE IF EXISTS public.conditions CASCADE;
-    
     -- Main conditions table
-    CREATE TABLE public.conditions (
+    CREATE TABLE IF NOT EXISTS public.conditions (
         condition_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
         encounter_id VARCHAR(255),
@@ -597,7 +799,6 @@ def create_redshift_tables_sql():
         recorder_id VARCHAR(255),
         asserter_type VARCHAR(50),
         asserter_id VARCHAR(255),
-        meta_version_id VARCHAR(50),
         meta_last_updated TIMESTAMP,
         meta_source VARCHAR(255),
         meta_profile VARCHAR(MAX),
@@ -611,10 +812,7 @@ def create_redshift_tables_sql():
 def create_condition_categories_table_sql():
     """Generate SQL for creating condition_categories table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_categories CASCADE;
-    
-    CREATE TABLE public.condition_categories (
+    CREATE TABLE IF NOT EXISTS public.condition_categories (
         condition_id VARCHAR(255),
         category_code VARCHAR(50),
         category_system VARCHAR(255),
@@ -626,10 +824,7 @@ def create_condition_categories_table_sql():
 def create_condition_notes_table_sql():
     """Generate SQL for creating condition_notes table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_notes CASCADE;
-    
-    CREATE TABLE public.condition_notes (
+    CREATE TABLE IF NOT EXISTS public.condition_notes (
         condition_id VARCHAR(255),
         note_text VARCHAR(MAX),
         note_author_reference VARCHAR(255),
@@ -640,10 +835,7 @@ def create_condition_notes_table_sql():
 def create_condition_body_sites_table_sql():
     """Generate SQL for creating condition_body_sites table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_body_sites CASCADE;
-    
-    CREATE TABLE public.condition_body_sites (
+    CREATE TABLE IF NOT EXISTS public.condition_body_sites (
         condition_id VARCHAR(255),
         body_site_code VARCHAR(50),
         body_site_system VARCHAR(255),
@@ -655,10 +847,7 @@ def create_condition_body_sites_table_sql():
 def create_condition_stages_table_sql():
     """Generate SQL for creating condition_stages table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_stages CASCADE;
-    
-    CREATE TABLE public.condition_stages (
+    CREATE TABLE IF NOT EXISTS public.condition_stages (
         condition_id VARCHAR(255),
         stage_summary_code VARCHAR(50),
         stage_summary_system VARCHAR(255),
@@ -675,10 +864,7 @@ def create_condition_stages_table_sql():
 def create_condition_codes_table_sql():
     """Generate SQL for creating condition_codes table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_codes CASCADE;
-    
-    CREATE TABLE public.condition_codes (
+    CREATE TABLE IF NOT EXISTS public.condition_codes (
         condition_id VARCHAR(255),
         code_code VARCHAR(50),
         code_system VARCHAR(255),
@@ -690,10 +876,7 @@ def create_condition_codes_table_sql():
 def create_condition_evidence_table_sql():
     """Generate SQL for creating condition_evidence table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_evidence CASCADE;
-    
-    CREATE TABLE public.condition_evidence (
+    CREATE TABLE IF NOT EXISTS public.condition_evidence (
         condition_id VARCHAR(255),
         evidence_code VARCHAR(50),
         evidence_system VARCHAR(255),
@@ -705,10 +888,7 @@ def create_condition_evidence_table_sql():
 def create_condition_extensions_table_sql():
     """Generate SQL for creating condition_extensions table"""
     return """
-    -- Drop existing table if it exists
-            DROP TABLE IF EXISTS public.condition_extensions CASCADE;
-    
-    CREATE TABLE public.condition_extensions (
+    CREATE TABLE IF NOT EXISTS public.condition_extensions (
         condition_id VARCHAR(255) NOT NULL,
         extension_url VARCHAR(500) NOT NULL,
         extension_type VARCHAR(50) NOT NULL,
@@ -728,35 +908,6 @@ def create_condition_extensions_table_sql():
     """
 
 
-def write_to_redshift(dynamic_frame, table_name, preactions=""):
-    """Write DynamicFrame to Redshift using JDBC connection"""
-    logger.info(f"Writing {table_name} to Redshift...")
-    
-    # Log the preactions SQL for debugging
-    logger.info(f"🔧 Preactions SQL for {table_name}:")
-    logger.info(preactions)
-    
-    # Tables are now dropped and recreated, so no need to delete data
-    # preactions already contains the DROP and CREATE statements
-    
-    try:
-        glueContext.write_dynamic_frame.from_options(
-            frame=dynamic_frame,
-            connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": S3_TEMP_DIR,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION,
-                "preactions": preactions
-            },
-            transformation_ctx=f"write_{table_name}_to_redshift"
-        )
-        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
-    except Exception as e:
-        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
-        logger.error(f"🔧 Preactions that were executed: {preactions}")
-        raise e
 
 def main():
     """Main ETL process"""
@@ -982,7 +1133,6 @@ def main():
             F.col("recorder_id").cast(StringType()).alias("recorder_id"),
             F.col("asserter_type").cast(StringType()).alias("asserter_type"),
             F.col("asserter_id").cast(StringType()).alias("asserter_id"),
-            F.col("meta_version_id").cast(StringType()).alias("meta_version_id"),
             F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("meta_source").cast(StringType()).alias("meta_source"),
             F.col("meta_profile").cast(StringType()).alias("meta_profile"),
@@ -1011,14 +1161,14 @@ def main():
         
         # Final validation: Ensure no unexpected columns that don't exist in Redshift table
         expected_columns = {
-            "condition_id", "patient_id", "encounter_id", "clinical_status_code", "clinical_status_display", 
-            "clinical_status_system", "verification_status_code", "verification_status_display", 
-            "verification_status_system", "condition_text", "severity_code", "severity_display", 
-            "severity_system", "onset_datetime", "onset_age_value", "onset_age_unit", "onset_period_start", 
-            "onset_period_end", "onset_text", "abatement_datetime", "abatement_age_value", 
-            "abatement_age_unit", "abatement_period_start", "abatement_period_end", "abatement_text", 
-            "abatement_boolean", "recorded_date", "recorder_type", "recorder_id", "asserter_type", 
-            "asserter_id", "meta_version_id", "meta_last_updated", "meta_source", "meta_profile", 
+            "condition_id", "patient_id", "encounter_id", "clinical_status_code", "clinical_status_display",
+            "clinical_status_system", "verification_status_code", "verification_status_display",
+            "verification_status_system", "condition_text", "severity_code", "severity_display",
+            "severity_system", "onset_datetime", "onset_age_value", "onset_age_unit", "onset_period_start",
+            "onset_period_end", "onset_text", "abatement_datetime", "abatement_age_value",
+            "abatement_age_unit", "abatement_period_start", "abatement_period_end", "abatement_text",
+            "abatement_boolean", "recorded_date", "recorder_type", "recorder_id", "asserter_type",
+            "asserter_id", "meta_last_updated", "meta_source", "meta_profile",
             "meta_security", "meta_tag", "created_at", "updated_at"
         }
         
@@ -1168,7 +1318,6 @@ def main():
                 ("recorder_id", "cast:string"),
                 ("asserter_type", "cast:string"),
                 ("asserter_id", "cast:string"),
-                ("meta_version_id", "cast:string"),
                 ("meta_last_updated", "cast:timestamp"),
                 ("meta_source", "cast:string"),
                 ("meta_profile", "cast:string"),
@@ -1321,14 +1470,14 @@ def main():
         
         # Reorder columns to match Redshift table schema exactly
         column_order = [
-            "condition_id", "patient_id", "encounter_id", "clinical_status_code", "clinical_status_display", 
-            "clinical_status_system", "verification_status_code", "verification_status_display", 
-            "verification_status_system", "condition_text", "severity_code", "severity_display", 
-            "severity_system", "onset_datetime", "onset_age_value", "onset_age_unit", "onset_period_start", 
-            "onset_period_end", "onset_text", "abatement_datetime", "abatement_age_value", 
-            "abatement_age_unit", "abatement_period_start", "abatement_period_end", "abatement_text", 
-            "abatement_boolean", "recorded_date", "recorder_type", "recorder_id", "asserter_type", 
-            "asserter_id", "meta_version_id", "meta_last_updated", "meta_source", "meta_profile", 
+            "condition_id", "patient_id", "encounter_id", "clinical_status_code", "clinical_status_display",
+            "clinical_status_system", "verification_status_code", "verification_status_display",
+            "verification_status_system", "condition_text", "severity_code", "severity_display",
+            "severity_system", "onset_datetime", "onset_age_value", "onset_age_unit", "onset_period_start",
+            "onset_period_end", "onset_text", "abatement_datetime", "abatement_age_value",
+            "abatement_age_unit", "abatement_period_start", "abatement_period_end", "abatement_text",
+            "abatement_boolean", "recorded_date", "recorder_type", "recorder_id", "asserter_type",
+            "asserter_id", "meta_last_updated", "meta_source", "meta_profile",
             "meta_security", "meta_tag", "created_at", "updated_at"
         ]
         
@@ -1440,42 +1589,42 @@ def main():
         else:
             logger.info("✅ Confirmed: DynamicFrame does NOT contain 'extensions' column")
         
-        write_to_redshift(main_resolved_frame, "conditions", conditions_table_sql)
+        write_to_redshift_versioned(main_resolved_frame, "conditions", "condition_id", conditions_table_sql)
         logger.info("✅ Main conditions table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition categories table...")
         categories_table_sql = create_condition_categories_table_sql()
-        write_to_redshift(categories_resolved_frame, "condition_categories", categories_table_sql)
+        write_to_redshift_versioned(categories_resolved_frame, "condition_categories", "condition_id", categories_table_sql)
         logger.info("✅ Condition categories table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition notes table...")
         notes_table_sql = create_condition_notes_table_sql()
-        write_to_redshift(notes_resolved_frame, "condition_notes", notes_table_sql)
+        write_to_redshift_versioned(notes_resolved_frame, "condition_notes", "condition_id", notes_table_sql)
         logger.info("✅ Condition notes table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition body sites table...")
         body_sites_table_sql = create_condition_body_sites_table_sql()
-        write_to_redshift(body_sites_resolved_frame, "condition_body_sites", body_sites_table_sql)
+        write_to_redshift_versioned(body_sites_resolved_frame, "condition_body_sites", "condition_id", body_sites_table_sql)
         logger.info("✅ Condition body sites table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition stages table...")
         stages_table_sql = create_condition_stages_table_sql()
-        write_to_redshift(stages_resolved_frame, "condition_stages", stages_table_sql)
+        write_to_redshift_versioned(stages_resolved_frame, "condition_stages", "condition_id", stages_table_sql)
         logger.info("✅ Condition stages table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition codes table...")
         codes_table_sql = create_condition_codes_table_sql()
-        write_to_redshift(codes_resolved_frame, "condition_codes", codes_table_sql)
+        write_to_redshift_versioned(codes_resolved_frame, "condition_codes", "condition_id", codes_table_sql)
         logger.info("✅ Condition codes table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition evidence table...")
         evidence_table_sql = create_condition_evidence_table_sql()
-        write_to_redshift(evidence_resolved_frame, "condition_evidence", evidence_table_sql)
+        write_to_redshift_versioned(evidence_resolved_frame, "condition_evidence", "condition_id", evidence_table_sql)
         logger.info("✅ Condition evidence table dropped, recreated and written successfully")
         
         logger.info("📝 Dropping and recreating condition extensions table...")
         extensions_table_sql = create_condition_extensions_table_sql()
-        write_to_redshift(extensions_resolved_frame, "condition_extensions", extensions_table_sql)
+        write_to_redshift_versioned(extensions_resolved_frame, "condition_extensions", "condition_id", extensions_table_sql)
         logger.info("✅ Condition extensions table dropped, recreated and written successfully")
         
         # Calculate processing time
