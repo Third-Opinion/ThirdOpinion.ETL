@@ -66,12 +66,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -101,7 +115,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -111,7 +125,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -152,7 +166,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -513,6 +552,7 @@ def transform_condition_categories(df):
     # First explode the category array
     categories_df = df.select(
         F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("category")).alias("category_item")
     ).filter(
         F.col("category_item").isNotNull()
@@ -521,10 +561,12 @@ def transform_condition_categories(df):
     # Extract category details and explode the coding array
     categories_final = categories_df.select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("category_item.coding")).alias("coding_item"),
         F.col("category_item.text").alias("category_text")
     ).select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.lit(None).alias("category_display"),
@@ -553,6 +595,7 @@ def transform_condition_notes(df):
     # First explode the note array
     notes_df = df.select(
         F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("note")).alias("note_item")
     ).filter(
         F.col("note_item").isNotNull()
@@ -561,6 +604,7 @@ def transform_condition_notes(df):
     # Extract note details
     notes_final = notes_df.select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.col("note_item.text").alias("note_text"),
         F.col("note_item.authorReference").alias("note_author_reference"),
         F.to_timestamp(F.col("note_item.time"), "yyyy-MM-dd'T'HH:mm:ssXXX").alias("note_time")
@@ -589,6 +633,7 @@ def transform_condition_body_sites(df):
     # First explode the bodySite array
     body_sites_df = df.select(
         F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("bodySite")).alias("body_site_item")
     ).filter(
         F.col("body_site_item").isNotNull()
@@ -597,10 +642,12 @@ def transform_condition_body_sites(df):
     # Extract body site details and explode the coding array
     body_sites_final = body_sites_df.select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("body_site_item.coding")).alias("coding_item"),
         F.col("body_site_item.text").alias("body_site_text")
     ).select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("body_site_code"),
         F.col("coding_item.system").alias("body_site_system"),
         F.lit(None).alias("body_site_display"),
@@ -635,6 +682,7 @@ def transform_condition_stages(df):
     # First explode the stage array
     stages_df = df.select(
         F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("stage")).alias("stage_item")
     ).filter(
         F.col("stage_item").isNotNull()
@@ -643,6 +691,7 @@ def transform_condition_stages(df):
     # Extract stage details - handle cases where fields might be References instead of CodeableConcepts
     stages_final = stages_df.select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.lit(None).alias("stage_summary_code"),
         F.lit(None).alias("stage_summary_system"),
         F.lit(None).alias("stage_summary_display"),
@@ -678,6 +727,7 @@ def transform_condition_codes(df):
     # First explode the code.coding array
     codes_df = df.select(
         F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.col("code").getField("text").alias("code_text"),
         F.explode(F.col("code").getField("coding")).alias("coding_item")
     ).filter(
@@ -687,6 +737,7 @@ def transform_condition_codes(df):
     # Extract code details
     codes_final = codes_df.select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("code_code"),
         F.col("coding_item.system").alias("code_system"),
         F.lit(None).alias("code_display"),
@@ -716,6 +767,7 @@ def transform_condition_evidence(df):
     # First explode the evidence array
     evidence_df = df.select(
         F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("evidence")).alias("evidence_item")
     ).filter(
         F.col("evidence_item").isNotNull()
@@ -724,10 +776,12 @@ def transform_condition_evidence(df):
     # Extract evidence details and explode the coding array
     evidence_final = evidence_df.select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("evidence_item.code.coding")).alias("coding_item"),
         F.col("evidence_item.detail").alias("evidence_detail")
     ).select(
         F.col("condition_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("evidence_code"),
         F.col("coding_item.system").alias("evidence_system"),
         F.lit(None).alias("evidence_display"),
@@ -814,6 +868,7 @@ def create_condition_categories_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.condition_categories (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         category_code VARCHAR(50),
         category_system VARCHAR(255),
         category_display VARCHAR(255),
@@ -826,6 +881,7 @@ def create_condition_notes_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.condition_notes (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         note_text VARCHAR(MAX),
         note_author_reference VARCHAR(255),
         note_time TIMESTAMP
@@ -837,6 +893,7 @@ def create_condition_body_sites_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.condition_body_sites (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         body_site_code VARCHAR(50),
         body_site_system VARCHAR(255),
         body_site_display VARCHAR(255),
@@ -849,6 +906,7 @@ def create_condition_stages_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.condition_stages (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         stage_summary_code VARCHAR(50),
         stage_summary_system VARCHAR(255),
         stage_summary_display VARCHAR(255),
@@ -866,6 +924,7 @@ def create_condition_codes_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.condition_codes (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         code_code VARCHAR(50),
         code_system VARCHAR(255),
         code_display VARCHAR(255),
@@ -878,6 +937,7 @@ def create_condition_evidence_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.condition_evidence (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         evidence_code VARCHAR(50),
         evidence_system VARCHAR(255),
         evidence_display VARCHAR(255),
@@ -1204,6 +1264,7 @@ def main():
         # Convert other DataFrames with type casting
         categories_flat_df = condition_categories_df.select(
             F.col("condition_id").cast(StringType()).alias("condition_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("category_code").cast(StringType()).alias("category_code"),
             F.col("category_system").cast(StringType()).alias("category_system"),
             F.col("category_display").cast(StringType()).alias("category_display"),
@@ -1213,6 +1274,7 @@ def main():
         
         notes_flat_df = condition_notes_df.select(
             F.col("condition_id").cast(StringType()).alias("condition_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("note_text").cast(StringType()).alias("note_text"),
             F.col("note_author_reference").cast(StringType()).alias("note_author_reference"),
             F.col("note_time").cast(TimestampType()).alias("note_time")
@@ -1221,6 +1283,7 @@ def main():
         
         body_sites_flat_df = condition_body_sites_df.select(
             F.col("condition_id").cast(StringType()).alias("condition_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("body_site_code").cast(StringType()).alias("body_site_code"),
             F.col("body_site_system").cast(StringType()).alias("body_site_system"),
             F.col("body_site_display").cast(StringType()).alias("body_site_display"),
@@ -1230,6 +1293,7 @@ def main():
         
         stages_flat_df = condition_stages_df.select(
             F.col("condition_id").cast(StringType()).alias("condition_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("stage_summary_code").cast(StringType()).alias("stage_summary_code"),
             F.col("stage_summary_system").cast(StringType()).alias("stage_summary_system"),
             F.col("stage_summary_display").cast(StringType()).alias("stage_summary_display"),
@@ -1244,6 +1308,7 @@ def main():
         
         evidence_flat_df = condition_evidence_df.select(
             F.col("condition_id").cast(StringType()).alias("condition_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("evidence_code").cast(StringType()).alias("evidence_code"),
             F.col("evidence_system").cast(StringType()).alias("evidence_system"),
             F.col("evidence_display").cast(StringType()).alias("evidence_display"),
@@ -1251,6 +1316,7 @@ def main():
         )
         codes_flat_df = condition_codes_df.select(
             F.col("condition_id").cast(StringType()).alias("condition_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("code_code").cast(StringType()).alias("code_code"),
             F.col("code_system").cast(StringType()).alias("code_system"),
             F.col("code_display").cast(StringType()).alias("code_display"),
