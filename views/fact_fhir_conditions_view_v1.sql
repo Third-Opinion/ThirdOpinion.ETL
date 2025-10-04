@@ -216,7 +216,6 @@ SELECT
     
     -- FHIR Metadata
     c.meta_last_updated,
-    c.meta_last_updated,
     c.meta_source,
     c.meta_profile,
     c.meta_security,

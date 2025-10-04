@@ -69,9 +69,8 @@ SELECT
     cp.title,                        -- Human-readable care plan title
     
     -- FHIR Metadata fields for tracking and versioning
-    cp.meta_last_updated,              -- FHIR resource version
-    cp.meta_last_updated,            -- Last update timestamp
-    
+    cp.meta_last_updated,              -- Last update timestamp
+
     -- ETL Audit fields
     cp.created_at,                   -- Record creation timestamp
     cp.updated_at,                   -- Record last update timestamp
@@ -228,7 +227,6 @@ GROUP BY
     cp.status,
     cp.intent,
     cp.title,
-    cp.meta_last_updated,
     cp.meta_last_updated,
     cp.created_at,
     cp.updated_at;
