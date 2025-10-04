@@ -228,7 +228,6 @@ SELECT
     -- DISCRETE META FIELDS
     -- ============================================
     e.meta_last_updated,
-    e.meta_last_updated,
 
     e.created_at AS etl_created_at,
     e.updated_at AS etl_updated_at,
