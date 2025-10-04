@@ -67,12 +67,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -102,7 +116,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -112,7 +126,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -153,7 +167,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -317,11 +356,13 @@ def transform_practitioner_names(df):
 
     names_df = df.select(
         F.col("id").alias("practitioner_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("name")).alias("name_item")
     )
-    
+
     names_final = names_df.select(
         F.col("practitioner_id"),
+        F.col("meta_last_updated"),
         F.col("name_item.text").alias("text"),
         F.col("name_item.family").alias("family"),
         F.concat_ws(" ", F.col("name_item.given")).alias("given")
@@ -343,11 +384,13 @@ def transform_practitioner_telecoms(df):
 
     telecoms_df = df.select(
         F.col("id").alias("practitioner_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("telecom")).alias("telecom_item")
     )
-    
+
     telecoms_final = telecoms_df.select(
         F.col("practitioner_id"),
+        F.col("meta_last_updated"),
         F.col("telecom_item.system").alias("system"),
         F.col("telecom_item.value").alias("value")
     ).filter(
@@ -370,11 +413,13 @@ def transform_practitioner_addresses(df):
 
     addresses_df = df.select(
         F.col("id").alias("practitioner_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("address")).alias("address_item")
     )
-    
+
     addresses_final = addresses_df.select(
         F.col("practitioner_id"),
+        F.col("meta_last_updated"),
         F.concat_ws(", ", F.col("address_item.line")).alias("line"),
         F.col("address_item.city").alias("city"),
         F.col("address_item.state").alias("state"),
@@ -402,6 +447,7 @@ def create_practitioner_names_table_sql():
     DROP TABLE IF EXISTS public.practitioner_names CASCADE;
     CREATE TABLE public.practitioner_names (
         practitioner_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         text VARCHAR(500),
         family VARCHAR(255),
         given VARCHAR(255)
@@ -413,6 +459,7 @@ def create_practitioner_telecoms_table_sql():
     DROP TABLE IF EXISTS public.practitioner_telecoms CASCADE;
     CREATE TABLE public.practitioner_telecoms (
         practitioner_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         "system" VARCHAR(50),
         value VARCHAR(255)
     ) SORTKEY (practitioner_id, "system");
@@ -423,6 +470,7 @@ def create_practitioner_addresses_table_sql():
     DROP TABLE IF EXISTS public.practitioner_addresses CASCADE;
     CREATE TABLE public.practitioner_addresses (
         practitioner_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         line VARCHAR(500),
         city VARCHAR(100),
         state VARCHAR(50),
@@ -430,74 +478,7 @@ def create_practitioner_addresses_table_sql():
     ) SORTKEY (practitioner_id, state);
     """
 
-def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
-    """Version-aware write to Redshift - only processes new/updated entities"""
-    logger.info(f"Writing {table_name} to Redshift with version checking...")
-
-    try:
-        # Convert dynamic frame to DataFrame for processing
-        df = dynamic_frame.toDF()
-        total_records = df.count()
-
-        if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
-            return
-
-        # Step 1: Get existing versions from Redshift
-        existing_versions = get_existing_versions_from_redshift(table_name, id_column)
-
-        # Step 2: Filter incoming data based on version comparison
-        filtered_df, to_process_count, skipped_count = filter_dataframe_by_version(
-            df, existing_versions, id_column
-        )
-
-        if to_process_count == 0:
-            logger.info(f"✅ All {total_records} records in {table_name} are up to date - no changes needed")
-            return
-
-        # Step 3: Get entities that need old version cleanup
-        entities_to_delete = get_entities_to_delete(filtered_df, existing_versions, id_column)
-
-        # Step 4: Build preactions for selective deletion
-        selective_preactions = preactions
-        if entities_to_delete:
-            # Create DELETE statements for specific entity IDs
-            entity_ids_str = "', '".join(entities_to_delete)
-            delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
-
-            if selective_preactions:
-                selective_preactions = delete_clause + " " + selective_preactions
-            else:
-                selective_preactions = delete_clause
-
-            logger.info(f"Will delete {len(entities_to_delete)} existing entities before inserting updated versions")
-
-        # Step 5: Convert filtered DataFrame back to DynamicFrame
-        filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
-
-        # Step 6: Write only the new/updated records
-        logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
-
-        glueContext.write_dynamic_frame.from_options(
-            frame=filtered_dynamic_frame,
-            connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": S3_TEMP_DIR,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION,
-                "preactions": selective_preactions or ""
-            },
-            transformation_ctx=f"write_{table_name}_versioned_to_redshift"
-        )
-
-        logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
-        logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
-
-    except Exception as e:
-        logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
-        logger.error(f"Error type: {type(e).__name__}")
-        raise
+# Duplicate function removed - using the version-aware write_to_redshift_versioned from line 146
 
 def main():
     start_time = datetime.now()
@@ -579,9 +560,9 @@ def main():
         addresses_dynamic_frame = DynamicFrame.fromDF(practitioner_addresses_df, glueContext, "addresses_dynamic_frame")
         
         main_resolved_frame = main_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
-        names_resolved_frame = names_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
-        telecoms_resolved_frame = telecoms_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
-        addresses_resolved_frame = addresses_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string')])
+        names_resolved_frame = names_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string'), ('meta_last_updated', 'cast:timestamp')])
+        telecoms_resolved_frame = telecoms_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string'), ('meta_last_updated', 'cast:timestamp')])
+        addresses_resolved_frame = addresses_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string'), ('meta_last_updated', 'cast:timestamp')])
 
         write_to_redshift_versioned(main_resolved_frame, "practitioners", "practitioner_id", create_redshift_tables_sql())
         write_to_redshift_versioned(names_resolved_frame, "practitioner_names", "practitioner_id", create_practitioner_names_table_sql())

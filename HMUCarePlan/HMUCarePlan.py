@@ -126,12 +126,26 @@ def filter_dataframe_by_version(df: DataFrame, existing_versions: Set[str]) -> D
     Returns:
         Filtered DataFrame containing only new/updated records
     """
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy("care_plan_id").orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per care plan)")
+
     if not existing_versions:
         logger.info("No existing versions found, processing all records")
-        return df
+        return df_latest
 
-    # Convert timestamps to string format for comparison
-    df_with_version_string = df.withColumn(
+    # Step 2: Convert timestamps to string format for comparison
+    df_with_version_string = df_latest.withColumn(
         "meta_last_updated_str",
         F.when(F.col("meta_last_updated").isNotNull(),
                F.date_format(F.col("meta_last_updated"), "yyyy-MM-dd HH:mm:ss"))
@@ -144,9 +158,8 @@ def filter_dataframe_by_version(df: DataFrame, existing_versions: Set[str]) -> D
         F.col("meta_last_updated_str").isNull()
     ).drop("meta_last_updated_str")
 
-    original_count = df.count()
     filtered_count = filtered_df.count()
-    logger.info(f"Filtered from {original_count} to {filtered_count} records ({original_count - filtered_count} duplicates removed)")
+    logger.info(f"Filtered from {deduplicated_count} to {filtered_count} records ({deduplicated_count - filtered_count} already exist in Redshift)")
 
     return filtered_df
 

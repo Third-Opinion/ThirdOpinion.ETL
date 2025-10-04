@@ -126,12 +126,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -161,7 +175,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -171,7 +185,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -345,6 +359,7 @@ def transform_encounter_types(df):
     # First explode the type array
     types_df = df.select(
         F.col("id").alias("encounter_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("type")).alias("type_item")
     ).filter(
         F.col("type_item").isNotNull()
@@ -353,10 +368,12 @@ def transform_encounter_types(df):
     # Extract type details and explode the coding array
     encounter_types_final = types_df.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("type_item.coding")).alias("coding_item"),
         F.lit("").alias("type_text")  # Use empty string as default since text field may not exist
     ).select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("type_code"),
         F.col("coding_item.system").alias("type_system"),
         F.col("coding_item.display").alias("type_display"),
@@ -377,6 +394,7 @@ def transform_encounter_participants(df):
     # First explode the participant array
     participants_df = df.select(
         F.col("id").alias("encounter_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("participant")).alias("participant_item")
     ).filter(
         F.col("participant_item").isNotNull()
@@ -385,6 +403,7 @@ def transform_encounter_participants(df):
     # Extract participant details and explode the type array
     participants_with_types = participants_df.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("participant_item.type")).alias("type_item"),
         F.col("participant_item.period").alias("period_data"),
         F.col("participant_item.individual").alias("individual_data")
@@ -395,11 +414,13 @@ def transform_encounter_participants(df):
     # Extract type information and explode the coding array
     participants_final = participants_with_types.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("type_item.coding")).alias("coding_item"),
         F.col("period_data"),
         F.col("individual_data")
     ).select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("participant_type"),
         F.when(F.col("individual_data").isNotNull(),
                F.regexp_extract(F.col("individual_data").getField("reference"), r"Practitioner/(.+)", 1)
@@ -449,6 +470,7 @@ def transform_encounter_reasons(df):
     # First explode the reasoncode array
     reasons_df = df.select(
         F.col("id").alias("encounter_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("reasonCode")).alias("reason_item")
     ).filter(
         F.col("reason_item").isNotNull()
@@ -458,6 +480,7 @@ def transform_encounter_reasons(df):
     # The coding field can be null, so we need to handle that case
     reasons_with_coding = reasons_df.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.col("reason_item.text").alias("reason_text"),
         F.col("reason_item.coding").alias("coding_array")
     ).filter(
@@ -467,6 +490,7 @@ def transform_encounter_reasons(df):
     # Handle cases where coding exists vs where it's null
     reasons_final = reasons_with_coding.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.col("reason_text"),
         # Extract coding details if coding array exists and is not null
         F.when(F.col("coding_array").isNotNull() & (F.size(F.col("coding_array")) > 0),
@@ -493,6 +517,7 @@ def transform_encounter_locations(df):
     # First explode the location array
     locations_df = df.select(
         F.col("id").alias("encounter_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("location")).alias("location_item")
     ).filter(
         F.col("location_item").isNotNull()
@@ -501,6 +526,7 @@ def transform_encounter_locations(df):
     # Extract location details
     locations_final = locations_df.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("location_item").isNotNull() & F.col("location_item.location").isNotNull(),
                F.regexp_extract(F.col("location_item.location").getField("reference"), r"Location/(.+)", 1)
               ).otherwise(None).alias("location_id")
@@ -528,6 +554,7 @@ def transform_encounter_hospitalization(df):
     # Extract hospitalization details
     hospitalization_final = df.select(
         F.col("id").alias("encounter_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.col("hospitalization").getField("dischargedisposition").getField("text").alias("discharge_disposition_text"),
         F.col("hospitalization").getField("dischargedisposition").getField("coding").alias("discharge_coding")
     ).filter(
@@ -537,10 +564,12 @@ def transform_encounter_hospitalization(df):
     # Explode discharge coding if it exists
     hospitalization_with_coding = hospitalization_final.select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.col("discharge_disposition_text"),
         F.explode(F.col("discharge_coding")).alias("coding_item")
     ).select(
         F.col("encounter_id"),
+        F.col("meta_last_updated"),
         F.col("discharge_disposition_text"),
         F.col("coding_item.code").alias("discharge_code"),
         F.col("coding_item.system").alias("discharge_system")
@@ -577,6 +606,7 @@ def create_encounter_types_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.encounter_types (
         encounter_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         type_code VARCHAR(50),
         type_system VARCHAR(255),
         type_display VARCHAR(255),
@@ -589,6 +619,7 @@ def create_encounter_participants_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.encounter_participants (
         encounter_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         participant_type VARCHAR(50),
         participant_id VARCHAR(255),
         participant_display VARCHAR(255),
@@ -602,6 +633,7 @@ def create_encounter_reasons_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.encounter_reasons (
         encounter_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         reason_code VARCHAR(50),
         reason_system VARCHAR(255),
         reason_display VARCHAR(255),
@@ -614,6 +646,7 @@ def create_encounter_locations_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.encounter_locations (
         encounter_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         location_id VARCHAR(255)
     ) SORTKEY (encounter_id)
     """
@@ -623,6 +656,7 @@ def create_encounter_hospitalization_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.encounter_hospitalization (
         encounter_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         discharge_disposition_text VARCHAR(500),
         discharge_code VARCHAR(50),
         discharge_system VARCHAR(500)
@@ -646,7 +680,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -889,6 +948,7 @@ def main():
         # Convert other DataFrames with type casting
         types_flat_df = encounter_types_df.select(
             F.col("encounter_id").cast(StringType()).alias("encounter_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("type_code").cast(StringType()).alias("type_code"),
             F.col("type_system").cast(StringType()).alias("type_system"),
             F.col("type_display").cast(StringType()).alias("type_display"),
@@ -898,6 +958,7 @@ def main():
         
         participants_flat_df = encounter_participants_df.select(
             F.col("encounter_id").cast(StringType()).alias("encounter_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("participant_type").cast(StringType()).alias("participant_type"),
             F.col("participant_id").cast(StringType()).alias("participant_id"),
             F.col("participant_display").cast(StringType()).alias("participant_display"),
@@ -908,6 +969,7 @@ def main():
         
         reasons_flat_df = encounter_reasons_df.select(
             F.col("encounter_id").cast(StringType()).alias("encounter_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("reason_code").cast(StringType()).alias("reason_code"),
             F.col("reason_system").cast(StringType()).alias("reason_system"),
             F.col("reason_display").cast(StringType()).alias("reason_display"),
@@ -918,12 +980,14 @@ def main():
         
         locations_flat_df = encounter_locations_df.select(
             F.col("encounter_id").cast(StringType()).alias("encounter_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("location_id").cast(StringType()).alias("location_id")
         )
         locations_dynamic_frame = DynamicFrame.fromDF(locations_flat_df, glueContext, "locations_dynamic_frame")
         
         hospitalization_flat_df = encounter_hospitalization_df.select(
             F.col("encounter_id").cast(StringType()).alias("encounter_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("discharge_disposition_text").cast(StringType()).alias("discharge_disposition_text"),
             F.col("discharge_code").cast(StringType()).alias("discharge_code"),
             F.col("discharge_system").cast(StringType()).alias("discharge_system")

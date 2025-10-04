@@ -67,12 +67,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -102,7 +116,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -112,7 +126,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -294,17 +308,25 @@ def transform_document_reference_identifiers(df):
     
     if "identifier" not in df.columns:
         logger.warning("identifier column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, identifier_system string, identifier_value string")
+        return spark.createDataFrame([], schema="document_reference_id string, meta_last_updated timestamp, identifier_system string, identifier_value string")
 
     identifiers_df = df.select(
         F.col("id").alias("document_reference_id"),
+        F.coalesce(
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.explode(F.col("identifier")).alias("identifier_item")
     ).filter(
         F.col("identifier_item").isNotNull()
     )
-    
+
     identifiers_final = identifiers_df.select(
         F.col("document_reference_id"),
+        F.col("meta_last_updated"),
         F.col("identifier_item.system").alias("identifier_system"),
         F.col("identifier_item.value").alias("identifier_value")
     ).filter(
@@ -319,20 +341,31 @@ def transform_document_reference_categories(df):
     
     if "category" not in df.columns:
         logger.warning("category column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, category_code string, category_system string, category_display string")
+        return spark.createDataFrame([], schema="document_reference_id string, meta_last_updated timestamp, category_code string, category_system string, category_display string")
 
+    # First explode to get category items, preserving meta_last_updated
     categories_df = df.select(
         F.col("id").alias("document_reference_id"),
+        F.coalesce(
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.explode(F.col("category")).alias("category_item")
     ).filter(
         F.col("category_item").isNotNull()
     )
-    
+
+    # Then explode coding array and extract fields, preserving meta_last_updated
     categories_final = categories_df.select(
         F.col("document_reference_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("category_item.coding")).alias("coding_item")
     ).select(
         F.col("document_reference_id"),
+        F.col("meta_last_updated"),
         F.col("coding_item.code").alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.col("coding_item.display").alias("category_display")
@@ -348,17 +381,25 @@ def transform_document_reference_authors(df):
     
     if "author" not in df.columns:
         logger.warning("author column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, author_id string")
-    
+        return spark.createDataFrame([], schema="document_reference_id string, meta_last_updated timestamp, author_id string")
+
     authors_df = df.select(
         F.col("id").alias("document_reference_id"),
+        F.coalesce(
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.explode(F.col("author")).alias("author_item")
     ).filter(
         F.col("author_item").isNotNull()
     )
-    
+
     authors_final = authors_df.select(
         F.col("document_reference_id"),
+        F.col("meta_last_updated"),
         F.regexp_extract(F.col("author_item.reference"), r"Practitioner/(.+)", 1).alias("author_id")
     ).filter(
         F.col("author_id") != ""
@@ -432,6 +473,7 @@ def create_document_reference_identifiers_table_sql():
     
     CREATE TABLE public.document_reference_identifiers (
         document_reference_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         identifier_system VARCHAR(255),
         identifier_value VARCHAR(255)
     ) SORTKEY (document_reference_id, identifier_system);
@@ -444,6 +486,7 @@ def create_document_reference_categories_table_sql():
     
     CREATE TABLE public.document_reference_categories (
         document_reference_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         category_code VARCHAR(50),
         category_system VARCHAR(255),
         category_display VARCHAR(255)
@@ -457,6 +500,7 @@ def create_document_reference_authors_table_sql():
     
     CREATE TABLE public.document_reference_authors (
         document_reference_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         author_id VARCHAR(255)
     ) SORTKEY (document_reference_id);
     """
@@ -483,7 +527,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift

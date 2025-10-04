@@ -126,12 +126,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -161,7 +175,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -171,7 +185,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")

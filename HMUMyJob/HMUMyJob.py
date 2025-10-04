@@ -152,7 +152,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift

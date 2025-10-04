@@ -227,8 +227,8 @@ def transform_patient_names(df):
         F.col("name_item").isNotNull()
     )
     
-    # Extract name details
-    names_final = names_df.select(
+    # Extract name details - keep meta_last_updated before filtering
+    names_with_meta = names_df.select(
         F.col("patient_id"),
         F.col("meta_last_updated"),
         F.col("name_item.use").alias("name_use"),
@@ -241,8 +241,11 @@ def transform_patient_names(df):
         F.col("name_item.suffix").alias("suffix"),
         F.to_date(F.col("name_item.period.start"), "yyyy-MM-dd").alias("period_start"),
         F.to_date(F.col("name_item.period.end"), "yyyy-MM-dd").alias("period_end")
-    ).filter(
-        F.col("family_name").isNotNull() | F.col("name_text").isNotNull()  # filter on either family name or text
+    )
+
+    # Apply filter after selecting all columns including meta_last_updated
+    names_final = names_with_meta.filter(
+        F.col("family_name").isNotNull() | F.col("name_text").isNotNull()
     )
     
     return names_final
@@ -561,6 +564,7 @@ def create_patient_names_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_names (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         name_use VARCHAR(50),
         name_text VARCHAR(255),
         family_name VARCHAR(255),
@@ -577,6 +581,7 @@ def create_patient_telecoms_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_telecoms (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         telecom_system VARCHAR(50),
         telecom_value VARCHAR(255),
         telecom_use VARCHAR(50),
@@ -591,6 +596,7 @@ def create_patient_addresses_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_addresses (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         address_use VARCHAR(50),
         address_type VARCHAR(50),
         address_text VARCHAR(500),
@@ -610,6 +616,7 @@ def create_patient_contacts_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_contacts (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         contact_relationship_code VARCHAR(50),
         contact_relationship_system VARCHAR(255),
         contact_relationship_display VARCHAR(255),
@@ -631,6 +638,7 @@ def create_patient_communications_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_communications (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         language_code VARCHAR(10),
         language_system VARCHAR(255),
         language_display VARCHAR(255),
@@ -644,6 +652,7 @@ def create_patient_practitioners_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_practitioners (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         practitioner_id VARCHAR(255),
         practitioner_role_id VARCHAR(255),
         organization_id VARCHAR(255),
@@ -656,6 +665,7 @@ def create_patient_links_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.patient_links (
         patient_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         other_patient_id VARCHAR(255),
         link_type_code VARCHAR(50),
         link_type_system VARCHAR(255),
@@ -711,16 +721,29 @@ def get_existing_versions_from_redshift(table_name, id_column):
         return {}
 
 def filter_dataframe_by_version(df, existing_versions, id_column):
-    """Filter DataFrame based on version comparison"""
+    """Filter DataFrame based on version comparison and keep only latest version per entity"""
     logger.info("Filtering data based on version comparison...")
+
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per patient)")
 
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
-    # Add a column to mark records that need processing
+    # Step 2: Compare with existing versions
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
         if entity_id is None or last_updated is None:
@@ -749,7 +772,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -759,10 +782,9 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
 
     logger.info(f"Version comparison results:")
-    logger.info(f"  Total incoming records: {total_count}")
+    logger.info(f"  Total incoming records (after dedup): {deduplicated_count}")
     logger.info(f"  Records to process (new/updated): {to_process_count}")
     logger.info(f"  Records to skip (same version): {skipped_count}")
 
@@ -800,7 +822,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -1067,6 +1114,7 @@ def main():
         # Convert other DataFrames with type casting
         names_flat_df = patient_names_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("name_use").cast(StringType()).alias("name_use"),
             F.col("name_text").cast(StringType()).alias("name_text"),
             F.col("family_name").cast(StringType()).alias("family_name"),
@@ -1080,6 +1128,7 @@ def main():
         
         telecoms_flat_df = patient_telecoms_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("telecom_system").cast(StringType()).alias("telecom_system"),
             F.col("telecom_value").cast(StringType()).alias("telecom_value"),
             F.col("telecom_use").cast(StringType()).alias("telecom_use"),
@@ -1091,6 +1140,7 @@ def main():
         
         addresses_flat_df = patient_addresses_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("address_use").cast(StringType()).alias("address_use"),
             F.col("address_type").cast(StringType()).alias("address_type"),
             F.col("address_text").cast(StringType()).alias("address_text"),
@@ -1107,6 +1157,7 @@ def main():
         
         contacts_flat_df = patient_contacts_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("contact_relationship_code").cast(StringType()).alias("contact_relationship_code"),
             F.col("contact_relationship_system").cast(StringType()).alias("contact_relationship_system"),
             F.col("contact_relationship_display").cast(StringType()).alias("contact_relationship_display"),
@@ -1125,6 +1176,7 @@ def main():
         
         communications_flat_df = patient_communications_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("language_code").cast(StringType()).alias("language_code"),
             F.col("language_system").cast(StringType()).alias("language_system"),
             F.col("language_display").cast(StringType()).alias("language_display"),
@@ -1135,6 +1187,7 @@ def main():
         
         practitioners_flat_df = patient_practitioners_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("practitioner_id").cast(StringType()).alias("practitioner_id"),
             F.col("practitioner_role_id").cast(StringType()).alias("practitioner_role_id"),
             F.col("organization_id").cast(StringType()).alias("organization_id"),
@@ -1144,6 +1197,7 @@ def main():
         
         links_flat_df = patient_links_df.select(
             F.col("patient_id").cast(StringType()).alias("patient_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("other_patient_id").cast(StringType()).alias("other_patient_id"),
             F.col("link_type_code").cast(StringType()).alias("link_type_code"),
             F.col("link_type_system").cast(StringType()).alias("link_type_system"),
@@ -1186,6 +1240,7 @@ def main():
         names_resolved_frame = names_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("name_use", "cast:string"),
                 ("name_text", "cast:string"),
                 ("family_name", "cast:string"),
@@ -1200,6 +1255,7 @@ def main():
         telecoms_resolved_frame = telecoms_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("telecom_system", "cast:string"),
                 ("telecom_value", "cast:string"),
                 ("telecom_use", "cast:string"),
@@ -1212,6 +1268,7 @@ def main():
         addresses_resolved_frame = addresses_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("address_use", "cast:string"),
                 ("address_type", "cast:string"),
                 ("address_text", "cast:string"),
@@ -1229,6 +1286,7 @@ def main():
         contacts_resolved_frame = contacts_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("contact_relationship_code", "cast:string"),
                 ("contact_relationship_system", "cast:string"),
                 ("contact_relationship_display", "cast:string"),
@@ -1248,6 +1306,7 @@ def main():
         communications_resolved_frame = communications_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("language_code", "cast:string"),
                 ("language_system", "cast:string"),
                 ("language_display", "cast:string"),
@@ -1259,6 +1318,7 @@ def main():
         practitioners_resolved_frame = practitioners_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("practitioner_id", "cast:string"),
                 ("practitioner_role_id", "cast:string"),
                 ("organization_id", "cast:string"),
@@ -1269,6 +1329,7 @@ def main():
         links_resolved_frame = links_dynamic_frame.resolveChoice(
             specs=[
                 ("patient_id", "cast:string"),
+                ("meta_last_updated", "cast:timestamp"),
                 ("other_patient_id", "cast:string"),
                 ("link_type_code", "cast:string"),
                 ("link_type_system", "cast:string"),

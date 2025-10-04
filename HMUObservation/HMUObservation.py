@@ -67,12 +67,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -102,7 +116,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -112,7 +126,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -153,7 +167,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -446,7 +485,7 @@ def transform_main_observation_data(df):
 def transform_observation_categories(df):
     """Transform observation categories (multiple categories per observation)"""
     logger.info("Transforming observation categories...")
-    
+
     # Check if category column exists
     if "category" not in df.columns:
         logger.warning("category column not found in data, returning empty DataFrame")
@@ -457,10 +496,11 @@ def transform_observation_categories(df):
             F.lit("").alias("category_display"),
             F.lit("").alias("category_text")
         ).filter(F.lit(False))
-    
+
     # Explode the category array
     categories_df = df.select(
         F.col("id").alias("observation_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("category")).alias("category_item")
     ).filter(
         F.col("category_item").isNotNull()
@@ -470,13 +510,15 @@ def transform_observation_categories(df):
     # First get the text from category level, then explode coding
     categories_with_text = categories_df.select(
         F.col("observation_id"),
+        F.col("meta_last_updated"),
         F.col("category_item.text").alias("category_text"),
         F.col("category_item.coding").alias("coding_array")
     )
-    
+
     # Now explode the coding array
     categories_final = categories_with_text.select(
         F.col("observation_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("coding_array")).alias("coding_item"),
         F.col("category_text")
     ).select(
@@ -484,11 +526,12 @@ def transform_observation_categories(df):
         F.col("coding_item.code").alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.col("coding_item.display").alias("category_display"),
-        F.col("category_text")
+        F.col("category_text"),
+        F.col("meta_last_updated")
     ).filter(
         F.col("category_code").isNotNull()
     )
-    
+
     return categories_final
 
 def transform_observation_interpretations(df):
@@ -508,22 +551,25 @@ def transform_observation_interpretations(df):
     # Explode the interpretation array
     interpretations_df = df.select(
         F.col("id").alias("observation_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("interpretation")).alias("interpretation_item")
     ).filter(
         F.col("interpretation_item").isNotNull()
     )
-    
+
     # Extract interpretation details and explode the coding array
     # First get the text from interpretation level, then explode coding
     interpretations_with_text = interpretations_df.select(
         F.col("observation_id"),
+        F.col("meta_last_updated"),
         F.col("interpretation_item.text").alias("interpretation_text"),
         F.col("interpretation_item.coding").alias("coding_array")
     )
-    
+
     # Now explode the coding array
     interpretations_final = interpretations_with_text.select(
         F.col("observation_id"),
+        F.col("meta_last_updated"),
         F.explode(F.col("coding_array")).alias("coding_item"),
         F.col("interpretation_text")
     ).select(
@@ -531,11 +577,12 @@ def transform_observation_interpretations(df):
         F.col("coding_item.code").alias("interpretation_code"),
         F.col("coding_item.system").alias("interpretation_system"),
         F.col("coding_item.display").alias("interpretation_display"),
-        F.col("interpretation_text")
+        F.col("interpretation_text"),
+        F.col("meta_last_updated")
     ).filter(
         F.col("interpretation_code").isNotNull()
     )
-    
+
     return interpretations_final
 
 def transform_observation_reference_ranges(df):
@@ -560,6 +607,7 @@ def transform_observation_reference_ranges(df):
     # Explode the referenceRange array
     ranges_df = df.select(
         F.col("id").alias("observation_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("referenceRange")).alias("range_item")
     ).filter(
         F.col("range_item").isNotNull()
@@ -577,6 +625,7 @@ def transform_observation_reference_ranges(df):
         # Approach 1: Try the nested structure with low/high as complex types
         ranges_final = ranges_df.select(
             F.col("observation_id"),
+            F.col("meta_last_updated"),
             # Try different paths for low value
             F.coalesce(
                 F.col("range_item.low.value.double"),
@@ -601,20 +650,20 @@ def transform_observation_reference_ranges(df):
             ).alias("range_high_unit"),
             # Extract type if it exists
             F.coalesce(
-                F.when(F.col("range_item.type.coding").isNotNull() & 
+                F.when(F.col("range_item.type.coding").isNotNull() &
                        (F.size(F.col("range_item.type.coding")) > 0),
                        F.col("range_item.type.coding")[0].getField("code")),
                 F.col("range_item.type.code"),
                 F.col("range_item.type")
             ).alias("range_type_code"),
             F.coalesce(
-                F.when(F.col("range_item.type.coding").isNotNull() & 
+                F.when(F.col("range_item.type.coding").isNotNull() &
                        (F.size(F.col("range_item.type.coding")) > 0),
                        F.col("range_item.type.coding")[0].getField("system")),
                 F.col("range_item.type.system")
             ).alias("range_type_system"),
             F.coalesce(
-                F.when(F.col("range_item.type.coding").isNotNull() & 
+                F.when(F.col("range_item.type.coding").isNotNull() &
                        (F.size(F.col("range_item.type.coding")) > 0),
                        F.col("range_item.type.coding")[0].getField("display")),
                 F.col("range_item.type.display"),
@@ -627,6 +676,7 @@ def transform_observation_reference_ranges(df):
         # Fallback: Just extract text field if available
         ranges_final = ranges_df.select(
             F.col("observation_id"),
+            F.col("meta_last_updated"),
             F.lit(None).cast(DecimalType(15,4)).alias("range_low_value"),
             F.lit(None).alias("range_low_unit"),
             F.lit(None).cast(DecimalType(15,4)).alias("range_high_value"),
@@ -1065,41 +1115,7 @@ def create_observation_derived_from_table_sql():
     ) SORTKEY (observation_id, derived_from_reference)
     """
 
-def write_to_redshift_versioned(dynamic_frame, table_name, observation_id, preactions=""):
-    """Write DynamicFrame to Redshift using JDBC connection"""
-    logger.info(f"Writing {table_name} to Redshift...")
-    
-    # Use DELETE to clear data while preserving table structure and relationships
-    # DELETE is the most reliable option for healthcare data with foreign key constraints
-    # It handles referential integrity properly and can be rolled back if needed
-    if preactions:
-        preactions = f"DELETE FROM public.{table_name}; " + preactions
-    else:
-        preactions = f"DELETE FROM public.{table_name};"
-    
-    try:
-        logger.info(f"Executing preactions for {table_name}: {preactions}")
-        logger.info(f"Writing to table: public.{table_name}")
-        logger.info(f"Using S3 temp directory: {S3_TEMP_DIR}")
-        logger.info(f"Using connection: {REDSHIFT_CONNECTION}")
-        
-        glueContext.write_dynamic_frame.from_options(
-            frame=dynamic_frame,
-            connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": S3_TEMP_DIR,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION,
-                "preactions": preactions
-            },
-            transformation_ctx=f"write_{table_name}_to_redshift"
-        )
-        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
-    except Exception as e:
-        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
-        logger.error(f"Preactions that were executed: {preactions}")
-        raise e
+# Duplicate function removed - using the version-aware write_to_redshift_versioned from line 146
 
 def main():
     """Main ETL process"""

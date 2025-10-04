@@ -126,12 +126,26 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
+    # Step 1: Deduplicate incoming data - keep only latest version per entity
+    from pyspark.sql.window import Window
+
+    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                  .filter(F.col("row_num") == 1) \
+                  .drop("row_num")
+
+    incoming_count = df.count()
+    deduplicated_count = df_latest.count()
+
+    if incoming_count > deduplicated_count:
+        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+
     if not existing_versions:
         # No existing data, all records are new
-        total_count = df.count()
-        logger.info(f"No existing versions found - treating all {total_count} records as new")
-        return df, total_count, 0
+        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
+        return df_latest, deduplicated_count, 0
 
+    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -161,7 +175,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df.withColumn(
+    df_with_flag = df_latest.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -171,7 +185,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df.count()
+    total_count = df_latest.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -294,6 +308,7 @@ def transform_medication_dispense_identifiers(df):
     # First explode the identifier array
     identifiers_df = df.select(
         F.col("id").alias("medication_dispense_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("identifier")).alias("identifier_item")
     ).filter(
         F.col("identifier_item").isNotNull()
@@ -302,6 +317,7 @@ def transform_medication_dispense_identifiers(df):
     # Extract identifier details
     identifiers_final = identifiers_df.select(
         F.col("medication_dispense_id"),
+        F.col("meta_last_updated"),
         F.lit(None).cast(StringType()).alias("identifier_system"),
         F.col("identifier_item.value").alias("identifier_value")
     ).filter(
@@ -326,6 +342,7 @@ def transform_medication_dispense_performers(df):
     # First explode the performer array
     performers_df = df.select(
         F.col("id").alias("medication_dispense_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("performer")).alias("performer_item")
     ).filter(
         F.col("performer_item").isNotNull()
@@ -334,6 +351,7 @@ def transform_medication_dispense_performers(df):
     # Extract performer details
     performers_final = performers_df.select(
         F.col("medication_dispense_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("performer_item.actor").isNotNull(),
                F.col("performer_item.actor.reference")
               ).otherwise(None).alias("performer_actor_reference")
@@ -358,9 +376,11 @@ def transform_medication_dispense_auth_prescriptions(df):
     # Explode the array and extract the reference ID
     auth_prescriptions_df = df.select(
         F.col("id").alias("medication_dispense_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode_outer(F.col("authorizingPrescription")).alias("prescription_item")
     ).select(
         F.col("medication_dispense_id"),
+        F.col("meta_last_updated"),
         F.when(F.col("prescription_item").isNotNull(),
                F.regexp_extract(F.col("prescription_item.reference"), r"MedicationRequest/(.+)", 1)
               ).otherwise(None).alias("authorizing_prescription_id")
@@ -395,6 +415,7 @@ def transform_medication_dispense_dosage_instructions(df):
     # First explode the dosageInstruction array
     dosage_df = df.select(
         F.col("id").alias("medication_dispense_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("dosageInstruction")).alias("dosage_item")
     ).filter(
         F.col("dosage_item").isNotNull()
@@ -403,6 +424,7 @@ def transform_medication_dispense_dosage_instructions(df):
     # Extract dosage instruction details
     dosage_final = dosage_df.select(
         F.col("medication_dispense_id"),
+        F.col("meta_last_updated"),
         F.col("dosage_item.text").alias("dosage_text"),
         F.col("dosage_item.timing.repeat.frequency").alias("dosage_timing_frequency"),
         F.col("dosage_item.timing.repeat.period").alias("dosage_timing_period"),
@@ -461,6 +483,7 @@ def create_medication_dispense_identifiers_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.medication_dispense_identifiers (
         medication_dispense_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         identifier_system VARCHAR(255),
         identifier_value VARCHAR(255)
     ) SORTKEY (medication_dispense_id, identifier_system)
@@ -471,6 +494,7 @@ def create_medication_dispense_performers_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.medication_dispense_performers (
         medication_dispense_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         performer_actor_reference VARCHAR(255)
     ) SORTKEY (medication_dispense_id, performer_actor_reference)
     """
@@ -480,6 +504,7 @@ def create_medication_dispense_auth_prescriptions_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.medication_dispense_auth_prescriptions (
         medication_dispense_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         authorizing_prescription_id VARCHAR(255)
     ) SORTKEY (medication_dispense_id)
     """
@@ -489,6 +514,7 @@ def create_medication_dispense_dosage_instructions_table_sql():
     return """
     CREATE TABLE IF NOT EXISTS public.medication_dispense_dosage_instructions (
         medication_dispense_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         dosage_text VARCHAR(MAX),
         dosage_timing_frequency INTEGER,
         dosage_timing_period INTEGER,
@@ -513,7 +539,32 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}")
+            logger.info(f"No records to process for {table_name}, but ensuring table exists")
+            # Execute preactions to create table even if no data
+            if preactions:
+                logger.info(f"Executing preactions to create empty {table_name} table")
+                # Need to write at least one record to execute preactions, then delete it
+                # Create a dummy record with all nulls
+                from pyspark.sql import Row
+                schema = df.schema
+                null_row = Row(**{field.name: None for field in schema.fields})
+                dummy_df = spark.createDataFrame([null_row], schema)
+                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=dummy_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions,
+                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
+                    },
+                    transformation_ctx=f"create_empty_{table_name}"
+                )
+                logger.info(f"✅ Created empty {table_name} table")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -751,6 +802,7 @@ def main():
         # Convert other DataFrames with type casting
         identifiers_flat_df = medication_dispense_identifiers_df.select(
             F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("identifier_system").cast(StringType()).alias("identifier_system"),
             F.col("identifier_value").cast(StringType()).alias("identifier_value")
         )
@@ -758,18 +810,21 @@ def main():
         
         performers_flat_df = medication_dispense_performers_df.select(
             F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("performer_actor_reference").cast(StringType()).alias("performer_actor_reference")
         )
         performers_dynamic_frame = DynamicFrame.fromDF(performers_flat_df, glueContext, "performers_dynamic_frame")
         
         auth_prescriptions_flat_df = medication_dispense_auth_prescriptions_df.select(
             F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("authorizing_prescription_id").cast(StringType()).alias("authorizing_prescription_id")
         )
         auth_prescriptions_dynamic_frame = DynamicFrame.fromDF(auth_prescriptions_flat_df, glueContext, "auth_prescriptions_dynamic_frame")
         
         dosage_flat_df = medication_dispense_dosage_df.select(
             F.col("medication_dispense_id").cast(StringType()).alias("medication_dispense_id"),
+            F.col("meta_last_updated").cast(TimestampType()).alias("meta_last_updated"),
             F.col("dosage_text").cast(StringType()).alias("dosage_text"),
             F.col("dosage_timing_frequency").cast(IntegerType()).alias("dosage_timing_frequency"),
             F.col("dosage_timing_period").cast(IntegerType()).alias("dosage_timing_period"),
