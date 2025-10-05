@@ -195,12 +195,10 @@ SELECT
     -- CALCULATED FIELDS
     -- ============================================
     -- Calculate report age in days
-    CASE 
-        WHEN dr.issued_datetime IS NOT NULL 
+    CASE
+        WHEN dr.issued_datetime IS NOT NULL
         THEN DATEDIFF(day, dr.issued_datetime, CURRENT_DATE)
-        WHEN dr.issued IS NOT NULL
-        THEN DATEDIFF(day, dr.issued, CURRENT_DATE)
-        ELSE NULL 
+        ELSE NULL
     END AS report_age_days,
     
     -- Determine if report is final
