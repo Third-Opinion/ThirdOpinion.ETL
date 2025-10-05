@@ -78,7 +78,6 @@ SELECT
     p.active_condition_count,
     -- METADATA
     p.meta_last_updated,
-    p.meta_last_updated,
     p.meta_source,
     -- DERIVED FIELDS (from patients view)
     p.current_age,

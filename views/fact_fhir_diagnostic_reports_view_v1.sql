@@ -174,7 +174,6 @@ SELECT
     
     -- Metadata
     dr.meta_last_updated,                   -- Version identifier
-    dr.meta_last_updated,                 -- Last update timestamp
     dr.extensions,                        -- FHIR extensions as JSON string
     
     -- ETL Audit Fields

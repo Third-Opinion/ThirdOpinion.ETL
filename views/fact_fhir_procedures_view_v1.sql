@@ -118,7 +118,6 @@ SELECT
     
     -- FHIR Metadata
     p.meta_last_updated,                   -- FHIR resource version
-    p.meta_last_updated,                 -- Last updated timestamp
     
     -- ETL Audit Fields
     p.created_at,

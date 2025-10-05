@@ -163,11 +163,10 @@ SELECT
     
     -- Dates
     mr.authored_on,                       -- When request was initially authored
-    
+
     -- Metadata
-    mr.meta_last_updated,                  -- FHIR resource version
     mr.meta_last_updated,                -- Last updated timestamp
-    
+
     -- ETL Audit Fields
     mr.created_at AS etl_created_at,
     mr.updated_at AS etl_updated_at,

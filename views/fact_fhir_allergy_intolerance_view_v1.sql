@@ -104,7 +104,6 @@ SELECT
 
     -- FHIR Metadata
     ai.meta_last_updated,                  -- FHIR version ID
-    ai.meta_last_updated,                -- Last updated timestamp
 
     -- ETL Audit Fields
     ai.created_at,                       -- Record creation time

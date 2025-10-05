@@ -250,7 +250,6 @@ SELECT
     o.method_display,
     o.method_text,
     o.meta_last_updated,
-    o.meta_last_updated,
 
     -- COMPUTED FIELDS
     CASE
