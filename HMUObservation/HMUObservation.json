@@ -31,10 +31,10 @@
     ]
   },
   "MaxRetries": 0,
-  "Timeout": 480,
+  "Timeout": 720,
   "GlueVersion": "4.0",
-  "NumberOfWorkers": 10,
-  "WorkerType": "G.1X",
+  "NumberOfWorkers": 20,
+  "WorkerType": "G.2X",
   "ExecutionClass": "STANDARD",
   "SourceControlDetails": {
     "Provider": "GITHUB",

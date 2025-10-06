@@ -410,22 +410,30 @@ def transform_document_reference_authors(df):
 def transform_document_reference_content(df):
     """Transform document reference content"""
     logger.info("Transforming document reference content...")
-    
+
     if "content" not in df.columns:
         logger.warning("content column not found, returning empty DataFrame")
-        return spark.createDataFrame([], schema="document_reference_id string, attachment_content_type string, attachment_url string")
+        return spark.createDataFrame([], schema="document_reference_id string, meta_last_updated timestamp, attachment_content_type string, attachment_url string")
 
-    # First, get the content array with index
+    # First, get the content array with index, preserving meta_last_updated
     content_df = df.select(
         F.col("id").alias("document_reference_id"),
+        F.coalesce(
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            F.to_timestamp(F.col("meta.lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+        ).alias("meta_last_updated"),
         F.posexplode(F.col("content")).alias("content_index", "content_item")
     ).filter(
         F.col("content_item").isNotNull()
     )
-    
+
     # Handle both external URLs and embedded data
     content_final = content_df.select(
         F.col("document_reference_id"),
+        F.col("meta_last_updated"),
         F.col("content_item.attachment.contentType").alias("attachment_content_type"),
         # Check if there's a URL field (external reference)
         F.when(
@@ -440,7 +448,7 @@ def transform_document_reference_content(df):
         # Keep records that have either URL or data
         F.col("attachment_url").isNotNull()
     )
-    
+
     return content_final
 
 def create_redshift_tables_sql():
@@ -509,9 +517,10 @@ def create_document_reference_content_table_sql():
     """Generate SQL for creating document_reference_content table"""
     return """
     DROP TABLE IF EXISTS public.document_reference_content CASCADE;
-    
+
     CREATE TABLE public.document_reference_content (
         document_reference_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         attachment_content_type VARCHAR(100),
         attachment_url VARCHAR(MAX)
     ) SORTKEY (document_reference_id);

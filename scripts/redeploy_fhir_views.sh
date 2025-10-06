@@ -194,12 +194,12 @@ check_view_exists() {
 # Function to redeploy a single view
 redeploy_view() {
     local view_name="$1"
-    local sql_file="${view_name}.sql"
-    
+    local sql_file="views/${view_name}.sql"
+
     print_status "\n========================================" "$BLUE"
     print_status "Redeploying: $view_name" "$BLUE"
     print_status "========================================" "$BLUE"
-    
+
     # Check if SQL file exists
     if [ ! -f "$sql_file" ]; then
         print_status "✗ SQL file not found: $sql_file" "$RED"
@@ -276,7 +276,7 @@ display_menu() {
             local status="[Not Found]"
             local color="$RED"
 
-            if [ -f "${view_name}.sql" ]; then
+            if [ -f "views/${view_name}.sql" ]; then
                 status="[SQL Ready]"
                 color="$GREEN"
             fi
@@ -295,7 +295,7 @@ display_menu() {
             local status="[Not Found]"
             local color="$RED"
 
-            if [ -f "${view_name}.sql" ]; then
+            if [ -f "views/${view_name}.sql" ]; then
                 status="[SQL Ready]"
                 color="$GREEN"
             fi
@@ -336,7 +336,7 @@ redeploy_all_views() {
     local skip_count=0
     
     for view_name in "${VIEW_NAMES[@]}"; do
-        if [ -f "${view_name}.sql" ]; then
+        if [ -f "views/${view_name}.sql" ]; then
             redeploy_view "$view_name"
             if [ $? -eq 0 ]; then
                 success_count=$((success_count + 1))
@@ -372,7 +372,7 @@ redeploy_views_by_type() {
 
     for view_name in "${VIEW_NAMES[@]}"; do
         if [[ $view_name == $view_type* ]]; then
-            if [ -f "${view_name}.sql" ]; then
+            if [ -f "views/${view_name}.sql" ]; then
                 redeploy_view "$view_name"
                 if [ $? -eq 0 ]; then
                     success_count=$((success_count + 1))

@@ -10,15 +10,17 @@ ISSUES_FOUND=0
 
 # SQL files to check
 SQL_FILES=(
-    "fact_fhir_patients_view_v1.sql"
-    "fact_fhir_encounters_view_v1.sql"
-    "fact_fhir_conditions_view_v1.sql"
-    "fact_fhir_diagnostic_reports_view_v1.sql"
-    "fact_fhir_document_references_view_v1.sql"
-    "fact_fhir_medication_requests_view_v1.sql"
-    "fact_fhir_observations_view_v1.sql"
-    "fact_fhir_practitioners_view_v1.sql"
-    "fact_fhir_procedures_view_v1.sql"
+    "views/fact_fhir_patients_view_v1.sql"
+    "views/fact_fhir_encounters_view_v1.sql"
+    "views/fact_fhir_conditions_view_v1.sql"
+    "views/fact_fhir_diagnostic_reports_view_v1.sql"
+    "views/fact_fhir_document_references_view_v1.sql"
+    "views/fact_fhir_medication_requests_view_v1.sql"
+    "views/fact_fhir_observations_view_v1.sql"
+    "views/fact_fhir_practitioners_view_v1.sql"
+    "views/fact_fhir_procedures_view_v1.sql"
+    "views/fact_fhir_allergy_intolerance_view_v1.sql"
+    "views/fact_fhir_care_plans_view_v1.sql"
 )
 
 for sql_file in "${SQL_FILES[@]}"; do

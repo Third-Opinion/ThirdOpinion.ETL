@@ -7,7 +7,7 @@ DATABASE="dev"
 SECRET_ARN="arn:aws:secretsmanager:us-east-2:442042533707:secret:redshift!prod-redshift-main-ue2-awsuser-yp5Lq4"
 REGION="us-east-2"
 
-SQL_FILE="fact_fhir_patients_view_v1.sql"
+SQL_FILE="views/fact_fhir_patients_view_v1.sql"
 
 echo "Testing with: $SQL_FILE"
 echo "----------------------------------------"

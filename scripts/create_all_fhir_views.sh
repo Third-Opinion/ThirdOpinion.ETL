@@ -208,15 +208,17 @@ echo ""
 # Array of views to create (in dependency order)
 # Only create latest version (v2 when available, v1 otherwise)
 declare -a VIEWS=(
-    "fact_fhir_patients_view_v1.sql:fact_fhir_patients_view_v1"                     # v1 is latest
-    "fact_fhir_encounters_view_v2.sql:fact_fhir_encounters_view_v2"                 # v2 is latest
-    "fact_fhir_conditions_view_v1.sql:fact_fhir_conditions_view_v1"                 # only v1 exists
-    "fact_fhir_diagnostic_reports_view_v1.sql:fact_fhir_diagnostic_reports_view_v1" # only v1 exists
-    "fact_fhir_document_references_view_v1.sql:fact_fhir_document_references_view_v1" # only v1 exists
-    "fact_fhir_medication_requests_view_v1.sql:fact_fhir_medication_requests_view_v1" # only v1 exists
-    "fact_fhir_observations_view_v2.sql:fact_fhir_observations_view_v2"             # only v1 exists
-    "fact_fhir_practitioners_view_v1.sql:fact_fhir_practitioners_view_v1"           # only v1 exists
-    "fact_fhir_procedures_view_v1.sql:fact_fhir_procedures_view_v1"                 # only v1 exists
+    "views/fact_fhir_patients_view_v1.sql:fact_fhir_patients_view_v1"                     # v1 is latest
+    "views/fact_fhir_encounters_view_v1.sql:fact_fhir_encounters_view_v1"                 # v1 is latest
+    "views/fact_fhir_conditions_view_v1.sql:fact_fhir_conditions_view_v1"                 # only v1 exists
+    "views/fact_fhir_diagnostic_reports_view_v1.sql:fact_fhir_diagnostic_reports_view_v1" # only v1 exists
+    "views/fact_fhir_document_references_view_v1.sql:fact_fhir_document_references_view_v1" # only v1 exists
+    "views/fact_fhir_medication_requests_view_v1.sql:fact_fhir_medication_requests_view_v1" # only v1 exists
+    "views/fact_fhir_observations_view_v1.sql:fact_fhir_observations_view_v1"             # only v1 exists
+    "views/fact_fhir_practitioners_view_v1.sql:fact_fhir_practitioners_view_v1"           # only v1 exists
+    "views/fact_fhir_procedures_view_v1.sql:fact_fhir_procedures_view_v1"                 # only v1 exists
+    "views/fact_fhir_allergy_intolerance_view_v1.sql:fact_fhir_allergy_intolerance_view_v1" # v1 is latest
+    "views/fact_fhir_care_plans_view_v1.sql:fact_fhir_care_plans_view_v1"                 # v1 is latest
 )
 
 TOTAL=${#VIEWS[@]}
