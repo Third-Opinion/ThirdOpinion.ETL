@@ -1656,11 +1656,30 @@ def main():
         logger.info("📝 Creating main observations table...")
 
         # Repartition to improve reliability for large datasets
-        logger.info("Repartitioning main observations frame for better write performance...")
+        # Use coalesce instead of repartition to reduce shuffle operations
+        logger.info("Optimizing main observations frame partitioning for better write performance...")
         main_df = main_resolved_frame.toDF()
-        main_repartitioned_df = main_df.repartition(50)  # Split into 50 partitions for better parallelism
+        current_partitions = main_df.rdd.getNumPartitions()
+        logger.info(f"Current partitions: {current_partitions}")
+
+        # Only repartition if we have too many or too few partitions
+        # Target: ~30 partitions (aligned with worker count)
+        target_partitions = 30
+        if current_partitions > target_partitions * 2:
+            # Too many partitions, coalesce to reduce shuffle
+            main_repartitioned_df = main_df.coalesce(target_partitions)
+            logger.info(f"Coalesced from {current_partitions} to {target_partitions} partitions (no shuffle)")
+        elif current_partitions < target_partitions // 2:
+            # Too few partitions, repartition to increase parallelism
+            main_repartitioned_df = main_df.repartition(target_partitions)
+            logger.info(f"Repartitioned from {current_partitions} to {target_partitions} partitions")
+        else:
+            # Partition count is reasonable, skip repartitioning
+            main_repartitioned_df = main_df
+            logger.info(f"Partition count ({current_partitions}) is optimal, skipping repartitioning")
+
         main_resolved_frame = DynamicFrame.fromDF(main_repartitioned_df, glueContext, "main_repartitioned")
-        logger.info("✅ Repartitioned main observations frame")
+        logger.info("✅ Optimized main observations frame partitioning")
 
         observations_table_sql = create_redshift_tables_sql()
         write_to_redshift_versioned(main_resolved_frame, "observations", "observation_id", observations_table_sql)
