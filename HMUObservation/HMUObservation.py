@@ -227,24 +227,43 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         # Step 5: Convert filtered DataFrame back to DynamicFrame
         filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
 
-        # Step 6: Write only the new/updated records
+        # Step 6: Write only the new/updated records with retry logic
         logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
 
-        glueContext.write_dynamic_frame.from_options(
-            frame=filtered_dynamic_frame,
-            connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": S3_TEMP_DIR,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION,
-                "preactions": selective_preactions or ""
-            },
-            transformation_ctx=f"write_{table_name}_versioned_to_redshift"
-        )
+        # Retry logic for transient network failures
+        max_retries = 3
+        retry_delay = 30  # seconds
 
-        logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
-        logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Write attempt {attempt + 1}/{max_retries} for {table_name}")
+
+                glueContext.write_dynamic_frame.from_options(
+                    frame=filtered_dynamic_frame,
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": f"public.{table_name}",
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": selective_preactions or ""
+                    },
+                    transformation_ctx=f"write_{table_name}_versioned_to_redshift_attempt_{attempt}"
+                )
+
+                logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
+                logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
+                break  # Success, exit retry loop
+
+            except Exception as write_error:
+                if attempt < max_retries - 1:
+                    logger.warning(f"⚠️ Write attempt {attempt + 1} failed for {table_name}: {str(write_error)}")
+                    logger.info(f"Retrying in {retry_delay * (attempt + 1)} seconds...")
+                    import time
+                    time.sleep(retry_delay * (attempt + 1))
+                else:
+                    logger.error(f"❌ All {max_retries} write attempts failed for {table_name}")
+                    raise
 
     except Exception as e:
         logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
@@ -1635,6 +1654,14 @@ def main():
         # Create all tables individually
         # Note: Each write_to_redshift call now includes DELETE to prevent duplicates
         logger.info("📝 Creating main observations table...")
+
+        # Repartition to improve reliability for large datasets
+        logger.info("Repartitioning main observations frame for better write performance...")
+        main_df = main_resolved_frame.toDF()
+        main_repartitioned_df = main_df.repartition(50)  # Split into 50 partitions for better parallelism
+        main_resolved_frame = DynamicFrame.fromDF(main_repartitioned_df, glueContext, "main_repartitioned")
+        logger.info("✅ Repartitioned main observations frame")
+
         observations_table_sql = create_redshift_tables_sql()
         write_to_redshift_versioned(main_resolved_frame, "observations", "observation_id", observations_table_sql)
         logger.info("✅ Main observations table created and written successfully")
