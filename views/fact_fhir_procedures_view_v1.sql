@@ -49,9 +49,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_procedures_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_procedures_view_v1
 AS
 WITH code_counts AS (
     SELECT 

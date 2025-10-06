@@ -57,9 +57,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_medication_requests_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_medication_requests_view_v1
 AS
 WITH dosage_counts AS (
     SELECT 

@@ -63,7 +63,8 @@
 -- - Primary vs secondary code analysis using code_rank column
 --
 -- ===================================================================
-CREATE MATERIALIZED VIEW fact_fhir_conditions_view_v1 BACKUP NO AUTO REFRESH NO AS WITH aggregated_body_sites AS (
+CREATE VIEW fact_fhir_conditions_view_v1
+AS WITH aggregated_body_sites AS (
     SELECT
         cb.condition_id,
         JSON_PARSE(

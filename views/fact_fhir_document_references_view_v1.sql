@@ -52,9 +52,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_document_references_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_document_references_view_v1
 AS
 WITH content_counts AS (
     SELECT 

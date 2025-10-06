@@ -34,9 +34,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_observations_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_observations_view_v1
 AS
 WITH aggregated_codes AS (
     SELECT

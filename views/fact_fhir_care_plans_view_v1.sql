@@ -54,9 +54,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_care_plans_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_care_plans_view_v1
 AS
 SELECT 
     -- ============================================

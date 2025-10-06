@@ -729,44 +729,83 @@ def parse_code_string(code_str):
         if text_value == 'null' or text_value == '_text=null':
             text_value = None
 
-        # Find all coding entries
-        coding_pattern = r'\{id=.*?(?:system=(.*?)).*?(?:code=(.*?)).*?(?:display=(.*?)).*?\}'
-
         # Extract all coding entries
         codings = []
 
-        # Split by '{' to find individual coding entries
-        parts = code_str.split('{')
-        for part in parts:
-            if 'system=' in part and 'code=' in part:
-                # Extract system
+        # First try to extract the coding array content
+        # Look for coding=[ ... ] pattern
+        coding_array_match = re.search(r'coding=\[(.*?)\](?:,\s*text=|$)', code_str, re.DOTALL)
+
+        if coding_array_match:
+            coding_array_str = coding_array_match.group(1)
+
+            # Split by '}, {' to separate individual coding objects
+            # This handles the case where there are multiple coding objects in the array
+            coding_parts = re.split(r'\},\s*\{', coding_array_str)
+
+            for part in coding_parts:
+                # Clean up the part (remove leading/trailing braces if present)
+                part = part.strip().strip('{}')
+
+                # Extract system, code, and display from each part
                 system_match = re.search(r'system=([^,}]+)', part)
-                system = system_match.group(1) if system_match else None
-
-                # Extract code
                 code_match = re.search(r'code=([^,}]+)', part)
-                code = code_match.group(1) if code_match else None
-
-                # Extract display
                 display_match = re.search(r'display=([^,}]+)', part)
-                display = display_match.group(1) if display_match else None
 
-                # Clean up values
-                if system and system != 'null':
-                    if code and code != 'null':
-                        # Remove any trailing commas or special chars
-                        code = code.strip().rstrip(',')
-                        system = system.strip().rstrip(',')
-                        if display and display != 'null':
-                            display = display.strip().rstrip(',')
-                        else:
-                            display = None
+                system = system_match.group(1).strip() if system_match else None
+                code = code_match.group(1).strip() if code_match else None
+                display = display_match.group(1).strip() if display_match else None
 
-                        codings.append({
-                            'system': system,
-                            'code': code,
-                            'display': display
-                        })
+                # Clean up values and add to codings list
+                if system and system != 'null' and code and code != 'null':
+                    # Remove any quotes or extra characters
+                    system = system.strip(',').strip()
+                    code = code.strip(',').strip()
+                    display = display.strip(',').strip() if display and display != 'null' else None
+
+                    codings.append({
+                        'system': system,
+                        'code': code,
+                        'display': display
+                    })
+        else:
+            # Fallback to original logic if array pattern not found
+            # Split by '{' to find individual coding entries
+            parts = code_str.split('{')
+            for part in parts:
+                if 'system=' in part and 'code=' in part:
+                    # Extract system
+                    system_match = re.search(r'system=([^,}]+)', part)
+                    system = system_match.group(1) if system_match else None
+
+                    # Extract code
+                    code_match = re.search(r'code=([^,}]+)', part)
+                    code = code_match.group(1) if code_match else None
+
+                    # Extract display
+                    display_match = re.search(r'display=([^,}]+)', part)
+                    display = display_match.group(1) if display_match else None
+
+                    # Clean up values
+                    if system and system != 'null':
+                        if code and code != 'null':
+                            # Remove any trailing commas or special chars
+                            code = code.strip().rstrip(',')
+                            system = system.strip().rstrip(',')
+                            if display and display != 'null':
+                                display = display.strip().rstrip(',')
+                            else:
+                                display = None
+
+                            codings.append({
+                                'system': system,
+                                'code': code,
+                                'display': display
+                            })
+
+        # Debug logging
+        if len(codings) > 1:
+            logger.debug(f"Parsed {len(codings)} coding entries from code string")
 
         if codings:
             return {
@@ -825,7 +864,14 @@ def transform_condition_codes(df):
             F.col("parsed_code").isNotNull()
         )
 
-        # Extract text and explode the coding array
+        # Debug: Check how many coding elements are in the parsed array
+        logger.info("Checking parsed code array sizes...")
+        parsed_df.select(
+            F.col("condition_id"),
+            F.size(F.col("parsed_code.coding")).alias("coding_array_size")
+        ).filter(F.col("coding_array_size") > 1).show(5, truncate=False)
+
+        # Extract text and explode the coding array - this should create one row per code
         codes_df = parsed_df.select(
             F.col("condition_id"),
             F.col("meta_last_updated"),
@@ -847,11 +893,19 @@ def transform_condition_codes(df):
             F.col("code_code").isNotNull()
         )
 
+        # Debug: Check distribution of codes per condition
+        logger.info("Codes per condition distribution:")
+        codes_per_condition = codes_final.groupBy("condition_id").agg(
+            F.count("*").alias("num_codes"),
+            F.collect_list("code_system").alias("systems")
+        )
+        codes_per_condition.filter(F.col("num_codes") > 1).show(5, truncate=False)
+
     else:
         # Original logic for structured data
         logger.info("Code column is structured - using original logic")
 
-        # First explode the code.coding array
+        # First explode the code.coding array - this should create one row per code
         codes_df = df.select(
             F.col("id").alias("condition_id"),
             F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
@@ -867,7 +921,7 @@ def transform_condition_codes(df):
             F.col("meta_last_updated"),
             F.col("coding_item.code").alias("code_code"),
             F.col("coding_item.system").alias("code_system"),
-            F.lit(None).alias("code_display"),
+            F.col("coding_item.display").alias("code_display"),
             F.col("code_text")
         ).filter(
             F.col("code_code").isNotNull()

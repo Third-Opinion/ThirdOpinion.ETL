@@ -39,8 +39,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_patients_view_v1
-BACKUP NO
+CREATE VIEW fact_fhir_patients_view_v1
 AS
 WITH ranked_names AS (
     -- Use window function for name ranking

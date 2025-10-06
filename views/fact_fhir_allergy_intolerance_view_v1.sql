@@ -55,9 +55,7 @@
 --
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_allergy_intolerance_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_allergy_intolerance_view_v1
 AS
 WITH aggregated_extensions AS (
     SELECT

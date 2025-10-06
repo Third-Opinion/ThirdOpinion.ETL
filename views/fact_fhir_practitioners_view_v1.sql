@@ -60,9 +60,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_practitioners_view_v1
-BACKUP NO
-AUTO REFRESH NO
+CREATE VIEW fact_fhir_practitioners_view_v1
 AS
 WITH ranked_names AS (
     -- Subquery to rank and select the best name per practitioner

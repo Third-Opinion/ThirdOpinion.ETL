@@ -24,10 +24,13 @@
 --
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW rpt_fhir_hmu_patients_v1 BACKUP NO AUTO REFRESH NO AS WITH target_patients AS (
+CREATE VIEW rpt_fhir_hmu_patients_v1
+AS WITH target_patients AS (
     SELECT
         DISTINCT c.patient_id,
-        e.last_encounter_date
+        e.last_encounter_date,
+        c.code_code,
+        c.code_system
     FROM
         fact_fhir_conditions_view_v1 AS c
         INNER JOIN (
@@ -52,6 +55,9 @@ SELECT
     -- PATIENT IDENTIFICATION
     p.patient_id,
     tp.last_encounter_date,
+    -- CONDITION CODES
+    tp.code_code,
+    tp.code_system,
     -- DEMOGRAPHICS
     p.birth_date,
     p.gender,

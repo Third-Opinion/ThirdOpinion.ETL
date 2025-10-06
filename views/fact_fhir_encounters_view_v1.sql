@@ -34,8 +34,7 @@
 -- 
 -- ===================================================================
 
-CREATE MATERIALIZED VIEW fact_fhir_encounters_view_v1
-BACKUP NO
+CREATE VIEW fact_fhir_encounters_view_v1
 AS
 WITH condition_counts AS (
     -- Count conditions and get primary diagnosis with prioritized code system
