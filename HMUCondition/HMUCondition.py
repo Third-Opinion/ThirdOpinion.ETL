@@ -8,9 +8,10 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType
+from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType, ArrayType, StructType, StructField
 import json
 import logging
+import re
 
 # FHIR version comparison utilities implemented inline below
 
@@ -708,10 +709,93 @@ def transform_condition_stages(df):
     
     return stages_final
 
+def parse_code_string(code_str):
+    """Parse string representation of code object to extract coding array"""
+    if code_str is None or code_str == '' or code_str == 'null':
+        return None
+
+    try:
+        # Handle case where it's already a proper dict/struct
+        if isinstance(code_str, dict):
+            return code_str
+
+        # Parse string representation
+        if not isinstance(code_str, str):
+            return None
+
+        # Extract the text field first (if present)
+        text_match = re.search(r'text=([^,}]+?)(?:,|$|})', code_str)
+        text_value = text_match.group(1).strip() if text_match else None
+        if text_value == 'null' or text_value == '_text=null':
+            text_value = None
+
+        # Find all coding entries
+        coding_pattern = r'\{id=.*?(?:system=(.*?)).*?(?:code=(.*?)).*?(?:display=(.*?)).*?\}'
+
+        # Extract all coding entries
+        codings = []
+
+        # Split by '{' to find individual coding entries
+        parts = code_str.split('{')
+        for part in parts:
+            if 'system=' in part and 'code=' in part:
+                # Extract system
+                system_match = re.search(r'system=([^,}]+)', part)
+                system = system_match.group(1) if system_match else None
+
+                # Extract code
+                code_match = re.search(r'code=([^,}]+)', part)
+                code = code_match.group(1) if code_match else None
+
+                # Extract display
+                display_match = re.search(r'display=([^,}]+)', part)
+                display = display_match.group(1) if display_match else None
+
+                # Clean up values
+                if system and system != 'null':
+                    if code and code != 'null':
+                        # Remove any trailing commas or special chars
+                        code = code.strip().rstrip(',')
+                        system = system.strip().rstrip(',')
+                        if display and display != 'null':
+                            display = display.strip().rstrip(',')
+                        else:
+                            display = None
+
+                        codings.append({
+                            'system': system,
+                            'code': code,
+                            'display': display
+                        })
+
+        if codings:
+            return {
+                'text': text_value,
+                'coding': codings
+            }
+        else:
+            return None
+
+    except Exception as e:
+        logger.warning(f"Failed to parse code string: {str(e)[:100]}")
+        return None
+
+# Create UDF for parsing code strings
+parse_code_string_udf = F.udf(parse_code_string, StructType([
+    StructField("text", StringType(), True),
+    StructField("coding", ArrayType(
+        StructType([
+            StructField("system", StringType(), True),
+            StructField("code", StringType(), True),
+            StructField("display", StringType(), True)
+        ])
+    ), True)
+]))
+
 def transform_condition_codes(df):
     """Transform condition codes (all codes from code.coding array)"""
     logger.info("Transforming condition codes...")
-    
+
     # Check if code column exists
     if "code" not in df.columns:
         logger.warning("code column not found in data, returning empty DataFrame")
@@ -723,29 +807,72 @@ def transform_condition_codes(df):
             F.lit("").alias("code_display"),
             F.lit("").alias("code_text")
         ).filter(F.lit(False))
-    
-    # First explode the code.coding array
-    codes_df = df.select(
-        F.col("id").alias("condition_id"),
-        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
-        F.col("code").getField("text").alias("code_text"),
-        F.explode(F.col("code").getField("coding")).alias("coding_item")
-    ).filter(
-        F.col("coding_item").isNotNull()
-    )
-    
-    # Extract code details
-    codes_final = codes_df.select(
-        F.col("condition_id"),
-        F.col("meta_last_updated"),
-        F.col("coding_item.code").alias("code_code"),
-        F.col("coding_item.system").alias("code_system"),
-        F.lit(None).alias("code_display"),
-        F.col("code_text")
-    ).filter(
-        F.col("code_code").isNotNull()
-    )
-    
+
+    # Check the data type of the code column
+    code_dtype = str(df.schema["code"].dataType)
+    logger.info(f"Code column data type: {code_dtype}")
+
+    # If code column is StringType, we need to parse it
+    if "StringType" in code_dtype:
+        logger.info("Code column is StringType - using string parsing logic")
+
+        # Parse the string representation into structured data
+        parsed_df = df.select(
+            F.col("id").alias("condition_id"),
+            F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
+            parse_code_string_udf(F.col("code")).alias("parsed_code")
+        ).filter(
+            F.col("parsed_code").isNotNull()
+        )
+
+        # Extract text and explode the coding array
+        codes_df = parsed_df.select(
+            F.col("condition_id"),
+            F.col("meta_last_updated"),
+            F.col("parsed_code.text").alias("code_text"),
+            F.explode(F.col("parsed_code.coding")).alias("coding_item")
+        ).filter(
+            F.col("coding_item").isNotNull()
+        )
+
+        # Extract code details from parsed data
+        codes_final = codes_df.select(
+            F.col("condition_id"),
+            F.col("meta_last_updated"),
+            F.col("coding_item.code").alias("code_code"),
+            F.col("coding_item.system").alias("code_system"),
+            F.col("coding_item.display").alias("code_display"),
+            F.col("code_text")
+        ).filter(
+            F.col("code_code").isNotNull()
+        )
+
+    else:
+        # Original logic for structured data
+        logger.info("Code column is structured - using original logic")
+
+        # First explode the code.coding array
+        codes_df = df.select(
+            F.col("id").alias("condition_id"),
+            F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
+            F.col("code").getField("text").alias("code_text"),
+            F.explode(F.col("code").getField("coding")).alias("coding_item")
+        ).filter(
+            F.col("coding_item").isNotNull()
+        )
+
+        # Extract code details
+        codes_final = codes_df.select(
+            F.col("condition_id"),
+            F.col("meta_last_updated"),
+            F.col("coding_item.code").alias("code_code"),
+            F.col("coding_item.system").alias("code_system"),
+            F.lit(None).alias("code_display"),
+            F.col("code_text")
+        ).filter(
+            F.col("code_code").isNotNull()
+        )
+
     return codes_final
 
 def transform_condition_evidence(df):

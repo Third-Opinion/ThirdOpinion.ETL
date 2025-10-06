@@ -67,26 +67,12 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     """Filter DataFrame based on version comparison"""
     logger.info("Filtering data based on version comparison...")
 
-    # Step 1: Deduplicate incoming data - keep only latest version per entity
-    from pyspark.sql.window import Window
-
-    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
-    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
-                  .filter(F.col("row_num") == 1) \
-                  .drop("row_num")
-
-    incoming_count = df.count()
-    deduplicated_count = df_latest.count()
-
-    if incoming_count > deduplicated_count:
-        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
-
     if not existing_versions:
         # No existing data, all records are new
-        logger.info(f"No existing versions found - treating all {deduplicated_count} records as new")
-        return df_latest, deduplicated_count, 0
+        total_count = df.count()
+        logger.info(f"No existing versions found - treating all {total_count} records as new")
+        return df, total_count, 0
 
-    # Step 2: Compare with existing versions
     # Add a column to mark records that need processing
     def needs_processing(entity_id, last_updated):
         """Check if record needs processing based on timestamp comparison"""
@@ -116,7 +102,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     needs_processing_udf = F.udf(needs_processing, BooleanType())
 
     # Add processing flag
-    df_with_flag = df_latest.withColumn(
+    df_with_flag = df.withColumn(
         "needs_processing",
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
@@ -126,7 +112,7 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
     skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
 
     to_process_count = to_process_df.count()
-    total_count = df_latest.count()
+    total_count = df.count()
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -157,6 +143,79 @@ def get_entities_to_delete(df, existing_versions, id_column):
     logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
     return entities_to_delete
 
+def deduplicate_observations(df):
+    """Deduplicate observations by keeping only the latest occurrence of each observation ID"""
+    logger.info("Deduplicating observations by observation ID...")
+    
+    # Check if required columns exist
+    if "id" not in df.columns:
+        logger.warning("id column not found in data, skipping deduplication")
+        return df
+    
+    if "meta" not in df.columns:
+        logger.warning("meta column not found in data, skipping deduplication")
+        return df
+    
+    # Get initial count
+    initial_count = df.count()
+    logger.info(f"Initial observation count: {initial_count:,}")
+    
+    if initial_count == 0:
+        logger.info("No observations to deduplicate")
+        return df
+    
+    # Check for duplicate observation IDs
+    unique_ids = df.select("id").distinct().count()
+    logger.info(f"Unique observation IDs: {unique_id
+    s:,}")
+    
+    if unique_ids == initial_count:
+        logger.info("✅ No duplicate observation IDs found - no deduplication needed")
+        return df
+    
+    duplicates_count = initial_count - unique_ids
+    logger.info(f"Found {duplicates_count:,} duplicate observation records")
+    
+    # Create a window function to rank observations by meta.lastUpdated timestamp
+    # We'll use row_number() to get the latest record for each observation ID
+    from pyspark.sql.window import Window
+    
+    # Handle different possible timestamp formats in meta.lastUpdated
+    # First, try to extract and parse the timestamp
+    timestamp_expr = F.coalesce(
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss"),
+        F.col("meta").getField("lastUpdated")  # Fallback to raw value
+    )
+    
+    # Create window specification partitioned by observation ID, ordered by timestamp (descending)
+    # For records with NULL timestamps, we'll use a secondary sort by a stable column
+    window_spec = Window.partitionBy("id").orderBy(
+        F.desc(timestamp_expr),
+        F.desc("id")  # Secondary sort for stability when timestamps are equal
+    )
+    
+    # Add row number to each observation within its ID group
+    df_with_rank = df.withColumn("row_num", F.row_number().over(window_spec))
+    
+    # Keep only the first row (latest timestamp) for each observation ID
+    deduplicated_df = df_with_rank.filter(F.col("row_num") == 1).drop("row_num")
+    
+    # Get final count
+    final_count = deduplicated_df.count()
+    removed_count = initial_count - final_count
+    
+    logger.info(f"✅ Deduplication completed:")
+    logger.info(f"  📊 Initial records: {initial_count:,}")
+    logger.info(f"  📊 Final records: {final_count:,}")
+    logger.info(f"  🗑️  Removed duplicates: {removed_count:,}")
+    logger.info(f"  📈 Deduplication ratio: {(removed_count/initial_count)*100:.1f}%")
+    
+    return deduplicated_df
+
 def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
     """Version-aware write to Redshift - only processes new/updated entities"""
     logger.info(f"Writing {table_name} to Redshift with version checking...")
@@ -167,32 +226,7 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}, but ensuring table exists")
-            # Execute preactions to create table even if no data
-            if preactions:
-                logger.info(f"Executing preactions to create empty {table_name} table")
-                # Need to write at least one record to execute preactions, then delete it
-                # Create a dummy record with all nulls
-                from pyspark.sql import Row
-                schema = df.schema
-                null_row = Row(**{field.name: None for field in schema.fields})
-                dummy_df = spark.createDataFrame([null_row], schema)
-                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
-
-                glueContext.write_dynamic_frame.from_options(
-                    frame=dummy_dynamic_frame,
-                    connection_type="redshift",
-                    connection_options={
-                        "redshiftTmpDir": S3_TEMP_DIR,
-                        "useConnectionProperties": "true",
-                        "dbtable": f"public.{table_name}",
-                        "connectionName": REDSHIFT_CONNECTION,
-                        "preactions": preactions,
-                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
-                    },
-                    transformation_ctx=f"create_empty_{table_name}"
-                )
-                logger.info(f"✅ Created empty {table_name} table")
+            logger.info(f"No records to process for {table_name}")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -227,43 +261,24 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         # Step 5: Convert filtered DataFrame back to DynamicFrame
         filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
 
-        # Step 6: Write only the new/updated records with retry logic
+        # Step 6: Write only the new/updated records
         logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
 
-        # Retry logic for transient network failures
-        max_retries = 3
-        retry_delay = 30  # seconds
+        glueContext.write_dynamic_frame.from_options(
+            frame=filtered_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": selective_preactions or ""
+            },
+            transformation_ctx=f"write_{table_name}_versioned_to_redshift"
+        )
 
-        for attempt in range(max_retries):
-            try:
-                logger.info(f"Write attempt {attempt + 1}/{max_retries} for {table_name}")
-
-                glueContext.write_dynamic_frame.from_options(
-                    frame=filtered_dynamic_frame,
-                    connection_type="redshift",
-                    connection_options={
-                        "redshiftTmpDir": S3_TEMP_DIR,
-                        "useConnectionProperties": "true",
-                        "dbtable": f"public.{table_name}",
-                        "connectionName": REDSHIFT_CONNECTION,
-                        "preactions": selective_preactions or ""
-                    },
-                    transformation_ctx=f"write_{table_name}_versioned_to_redshift_attempt_{attempt}"
-                )
-
-                logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
-                logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
-                break  # Success, exit retry loop
-
-            except Exception as write_error:
-                if attempt < max_retries - 1:
-                    logger.warning(f"⚠️ Write attempt {attempt + 1} failed for {table_name}: {str(write_error)}")
-                    logger.info(f"Retrying in {retry_delay * (attempt + 1)} seconds...")
-                    import time
-                    time.sleep(retry_delay * (attempt + 1))
-                else:
-                    logger.error(f"❌ All {max_retries} write attempts failed for {table_name}")
-                    raise
+        logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
+        logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
 
     except Exception as e:
         logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
@@ -504,7 +519,7 @@ def transform_main_observation_data(df):
 def transform_observation_categories(df):
     """Transform observation categories (multiple categories per observation)"""
     logger.info("Transforming observation categories...")
-
+    
     # Check if category column exists
     if "category" not in df.columns:
         logger.warning("category column not found in data, returning empty DataFrame")
@@ -515,11 +530,10 @@ def transform_observation_categories(df):
             F.lit("").alias("category_display"),
             F.lit("").alias("category_text")
         ).filter(F.lit(False))
-
+    
     # Explode the category array
     categories_df = df.select(
         F.col("id").alias("observation_id"),
-        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("category")).alias("category_item")
     ).filter(
         F.col("category_item").isNotNull()
@@ -529,15 +543,13 @@ def transform_observation_categories(df):
     # First get the text from category level, then explode coding
     categories_with_text = categories_df.select(
         F.col("observation_id"),
-        F.col("meta_last_updated"),
         F.col("category_item.text").alias("category_text"),
         F.col("category_item.coding").alias("coding_array")
     )
-
+    
     # Now explode the coding array
     categories_final = categories_with_text.select(
         F.col("observation_id"),
-        F.col("meta_last_updated"),
         F.explode(F.col("coding_array")).alias("coding_item"),
         F.col("category_text")
     ).select(
@@ -545,12 +557,11 @@ def transform_observation_categories(df):
         F.col("coding_item.code").alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.col("coding_item.display").alias("category_display"),
-        F.col("category_text"),
-        F.col("meta_last_updated")
+        F.col("category_text")
     ).filter(
         F.col("category_code").isNotNull()
     )
-
+    
     return categories_final
 
 def transform_observation_interpretations(df):
@@ -570,25 +581,22 @@ def transform_observation_interpretations(df):
     # Explode the interpretation array
     interpretations_df = df.select(
         F.col("id").alias("observation_id"),
-        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("interpretation")).alias("interpretation_item")
     ).filter(
         F.col("interpretation_item").isNotNull()
     )
-
+    
     # Extract interpretation details and explode the coding array
     # First get the text from interpretation level, then explode coding
     interpretations_with_text = interpretations_df.select(
         F.col("observation_id"),
-        F.col("meta_last_updated"),
         F.col("interpretation_item.text").alias("interpretation_text"),
         F.col("interpretation_item.coding").alias("coding_array")
     )
-
+    
     # Now explode the coding array
     interpretations_final = interpretations_with_text.select(
         F.col("observation_id"),
-        F.col("meta_last_updated"),
         F.explode(F.col("coding_array")).alias("coding_item"),
         F.col("interpretation_text")
     ).select(
@@ -596,12 +604,11 @@ def transform_observation_interpretations(df):
         F.col("coding_item.code").alias("interpretation_code"),
         F.col("coding_item.system").alias("interpretation_system"),
         F.col("coding_item.display").alias("interpretation_display"),
-        F.col("interpretation_text"),
-        F.col("meta_last_updated")
+        F.col("interpretation_text")
     ).filter(
         F.col("interpretation_code").isNotNull()
     )
-
+    
     return interpretations_final
 
 def transform_observation_reference_ranges(df):
@@ -626,7 +633,6 @@ def transform_observation_reference_ranges(df):
     # Explode the referenceRange array
     ranges_df = df.select(
         F.col("id").alias("observation_id"),
-        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
         F.explode(F.col("referenceRange")).alias("range_item")
     ).filter(
         F.col("range_item").isNotNull()
@@ -644,7 +650,6 @@ def transform_observation_reference_ranges(df):
         # Approach 1: Try the nested structure with low/high as complex types
         ranges_final = ranges_df.select(
             F.col("observation_id"),
-            F.col("meta_last_updated"),
             # Try different paths for low value
             F.coalesce(
                 F.col("range_item.low.value.double"),
@@ -669,20 +674,20 @@ def transform_observation_reference_ranges(df):
             ).alias("range_high_unit"),
             # Extract type if it exists
             F.coalesce(
-                F.when(F.col("range_item.type.coding").isNotNull() &
+                F.when(F.col("range_item.type.coding").isNotNull() & 
                        (F.size(F.col("range_item.type.coding")) > 0),
                        F.col("range_item.type.coding")[0].getField("code")),
                 F.col("range_item.type.code"),
                 F.col("range_item.type")
             ).alias("range_type_code"),
             F.coalesce(
-                F.when(F.col("range_item.type.coding").isNotNull() &
+                F.when(F.col("range_item.type.coding").isNotNull() & 
                        (F.size(F.col("range_item.type.coding")) > 0),
                        F.col("range_item.type.coding")[0].getField("system")),
                 F.col("range_item.type.system")
             ).alias("range_type_system"),
             F.coalesce(
-                F.when(F.col("range_item.type.coding").isNotNull() &
+                F.when(F.col("range_item.type.coding").isNotNull() & 
                        (F.size(F.col("range_item.type.coding")) > 0),
                        F.col("range_item.type.coding")[0].getField("display")),
                 F.col("range_item.type.display"),
@@ -695,7 +700,6 @@ def transform_observation_reference_ranges(df):
         # Fallback: Just extract text field if available
         ranges_final = ranges_df.select(
             F.col("observation_id"),
-            F.col("meta_last_updated"),
             F.lit(None).cast(DecimalType(15,4)).alias("range_low_value"),
             F.lit(None).alias("range_low_unit"),
             F.lit(None).cast(DecimalType(15,4)).alias("range_high_value"),
@@ -1134,7 +1138,6 @@ def create_observation_derived_from_table_sql():
     ) SORTKEY (observation_id, derived_from_reference)
     """
 
-# Duplicate function removed - using the version-aware write_to_redshift_versioned from line 146
 
 def main():
     """Main ETL process"""
@@ -1147,7 +1150,7 @@ def main():
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
         logger.info(f"🎯 Target: Redshift (10 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
-        logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
+        logger.info("🔄 Process: 8 steps (Read → Deduplicate → Transform → Convert → Resolve → Validate → Write)")
         
         # Step 1: Read data from S3 using Iceberg catalog
         logger.info("\n" + "=" * 50)
@@ -1186,8 +1189,18 @@ def main():
         total_records = observation_df.count()
         logger.info(f"📊 Read {total_records:,} raw observation records")
         
+        # Step 1.5: Deduplicate observations by observation ID
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 1.5: DEDUPLICATING OBSERVATIONS")
+        logger.info("=" * 50)
+        logger.info("Removing duplicate observation IDs, keeping only the latest occurrence...")
+        
+        observation_df = deduplicate_observations(observation_df)
+        total_records_after_dedup = observation_df.count()
+        logger.info(f"✅ Deduplication completed - {total_records_after_dedup:,} unique observations remaining")
+        
         # Debug: Show sample of raw data and schema
-        if total_records > 0:
+        if total_records_after_dedup > 0:
             logger.info("\n🔍 DATA QUALITY CHECKS:")
             logger.info("Sample of raw observation data:")
             observation_df.show(3, truncate=False)
@@ -1204,7 +1217,7 @@ def main():
             
             logger.info("NULL value analysis in key fields:")
             for field, null_count in null_checks.items():
-                percentage = (null_count / total_records) * 100 if total_records > 0 else 0
+                percentage = (null_count / total_records_after_dedup) * 100 if total_records_after_dedup > 0 else 0
                 logger.info(f"  {field}: {null_count:,} NULLs ({percentage:.1f}%)")
         else:
             logger.error("❌ No raw data found! Check the data source.")
@@ -1654,33 +1667,6 @@ def main():
         # Create all tables individually
         # Note: Each write_to_redshift call now includes DELETE to prevent duplicates
         logger.info("📝 Creating main observations table...")
-
-        # Repartition to improve reliability for large datasets
-        # Use coalesce instead of repartition to reduce shuffle operations
-        logger.info("Optimizing main observations frame partitioning for better write performance...")
-        main_df = main_resolved_frame.toDF()
-        current_partitions = main_df.rdd.getNumPartitions()
-        logger.info(f"Current partitions: {current_partitions}")
-
-        # Only repartition if we have too many or too few partitions
-        # Target: ~30 partitions (aligned with worker count)
-        target_partitions = 30
-        if current_partitions > target_partitions * 2:
-            # Too many partitions, coalesce to reduce shuffle
-            main_repartitioned_df = main_df.coalesce(target_partitions)
-            logger.info(f"Coalesced from {current_partitions} to {target_partitions} partitions (no shuffle)")
-        elif current_partitions < target_partitions // 2:
-            # Too few partitions, repartition to increase parallelism
-            main_repartitioned_df = main_df.repartition(target_partitions)
-            logger.info(f"Repartitioned from {current_partitions} to {target_partitions} partitions")
-        else:
-            # Partition count is reasonable, skip repartitioning
-            main_repartitioned_df = main_df
-            logger.info(f"Partition count ({current_partitions}) is optimal, skipping repartitioning")
-
-        main_resolved_frame = DynamicFrame.fromDF(main_repartitioned_df, glueContext, "main_repartitioned")
-        logger.info("✅ Optimized main observations frame partitioning")
-
         observations_table_sql = create_redshift_tables_sql()
         write_to_redshift_versioned(main_resolved_frame, "observations", "observation_id", observations_table_sql)
         logger.info("✅ Main observations table created and written successfully")
@@ -1754,6 +1740,8 @@ def main():
         
         logger.info("\n📊 FINAL ETL STATISTICS:")
         logger.info(f"  📥 Total raw records processed: {total_records:,}")
+        logger.info(f"  🔄 Records after deduplication: {total_records_after_dedup:,}")
+        logger.info(f"  🗑️  Duplicates removed: {total_records - total_records_after_dedup:,}")
         logger.info(f"  🔬 Main observation records: {main_count:,}")
         logger.info(f"  🔢 Code records: {codes_count:,}")
         logger.info(f"  🏷️  Category records: {categories_count:,}")
@@ -1767,8 +1755,8 @@ def main():
         
         # Calculate data expansion ratio
         total_output_records = main_count + codes_count + categories_count + interpretations_count + reference_ranges_count + components_count + notes_count + performers_count + members_count + derived_from_count
-        expansion_ratio = total_output_records / total_records if total_records > 0 else 0
-        logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / input records)")
+        expansion_ratio = total_output_records / total_records_after_dedup if total_records_after_dedup > 0 else 0
+        logger.info(f"  📈 Data expansion ratio: {expansion_ratio:.2f}x (output records / deduplicated input records)")
         
         logger.info("\n" + "=" * 80)
         if USE_SAMPLE:

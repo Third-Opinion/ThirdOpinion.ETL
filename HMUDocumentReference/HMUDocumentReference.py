@@ -30,7 +30,6 @@ def get_existing_versions_from_redshift(table_name, id_column):
                 "redshiftTmpDir": S3_TEMP_DIR,
                 "useConnectionProperties": "true",
                 "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION
             },
             transformation_ctx=f"read_existing_versions_{table_name}"
         )
@@ -241,7 +240,7 @@ def transform_main_document_reference_data(df):
     
     select_columns = [
         F.col("id").alias("document_reference_id"),
-        F.when(F.col("subject").isNotNull(), 
+        F.when(F.col("subject").isNotNull(),
                F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
               ).otherwise(None).alias("patient_id"),
         F.col("status").alias("status"),
@@ -254,6 +253,37 @@ def transform_main_document_reference_data(df):
         F.when(F.col("type").isNotNull() & (F.size(F.col("type.coding")) > 0),
                F.col("type.coding")[0].getField("display")
               ).otherwise(None).alias("type_display"),
+        # Add meta-type mapping based on type_code and type_system
+        F.when(
+            (F.col("type.coding")[0].getField("code") == "11502-2") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "lab"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "70006-2") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "medication"
+        ).when(
+            (F.col("type.coding")[0].getField("code").isin("60591-5", "28570-0", "78322-5", "34117-2", "11488-4",
+                                                           "11506-3", "68629-5", "18842-5")) &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "history"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "18748-4") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "imaging"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "87273-9") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "immunization"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "11526-1") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "pathology"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "75425-9") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "cardiology"
+        ).otherwise("unknown").alias("meta_type"),
         # Handle date with multiple possible formats
         F.coalesce(
             F.to_timestamp(F.col("date"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
@@ -455,7 +485,7 @@ def create_redshift_tables_sql():
     """Generate SQL for creating main document references table in Redshift"""
     return """
     DROP TABLE IF EXISTS public.document_references CASCADE;
-    
+
     CREATE TABLE public.document_references (
         document_reference_id VARCHAR(255) PRIMARY KEY,
         patient_id VARCHAR(255) NOT NULL,
@@ -463,6 +493,7 @@ def create_redshift_tables_sql():
         type_code VARCHAR(50),
         type_system VARCHAR(255),
         type_display VARCHAR(500),
+        meta_type VARCHAR(50),
         date TIMESTAMP,
         custodian_id VARCHAR(255),
         description VARCHAR(MAX),
