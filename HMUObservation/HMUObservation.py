@@ -166,8 +166,7 @@ def deduplicate_observations(df):
     
     # Check for duplicate observation IDs
     unique_ids = df.select("id").distinct().count()
-    logger.info(f"Unique observation IDs: {unique_id
-    s:,}")
+    logger.info(f"Unique observation IDs: {unique_ids:,}")
     
     if unique_ids == initial_count:
         logger.info("✅ No duplicate observation IDs found - no deduplication needed")

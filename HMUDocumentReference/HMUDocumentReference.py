@@ -263,10 +263,22 @@ def transform_main_document_reference_data(df):
             (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
             "medication"
         ).when(
-            (F.col("type.coding")[0].getField("code").isin("60591-5", "28570-0", "78322-5", "34117-2", "11488-4",
-                                                           "11506-3", "68629-5", "18842-5")) &
+            (F.col("type.coding")[0].getField("code").isin("60591-5", "28570-0", "34117-2", "11488-4",
+                                                           "11506-3")) &
             (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
             "history"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "78322-5") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "surgery"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "68629-5") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "allergy"
+        ).when(
+            (F.col("type.coding")[0].getField("code") == "18842-5") &
+            (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
+            "discharge"
         ).when(
             (F.col("type.coding")[0].getField("code") == "18748-4") &
             (F.col("type.coding")[0].getField("system") == "http://loinc.org"),
