@@ -852,7 +852,8 @@ def transform_condition_codes(df):
     logger.info(f"Code column data type: {code_dtype}")
 
     # If code column is StringType, we need to parse it
-    if "StringType" in code_dtype:
+    # Check if it starts with StringType (not just contains it, to avoid matching StructType)
+    if code_dtype.startswith("StringType"):
         logger.info("Code column is StringType - using string parsing logic")
 
         # Parse the string representation into structured data
@@ -977,26 +978,88 @@ def transform_condition_extensions(df):
     """Transform condition extensions into normalized structure"""
     logger.info("Transforming condition extensions...")
 
-    # Return empty DataFrame since extensions are causing struct access issues
-    # In a production environment, this would require schema analysis of the actual extension data
-    logger.warning("Skipping extensions transformation due to schema compatibility issues")
-    return df.select(
-        F.col("id").alias("condition_id"),
-        F.lit(None).alias("extension_url"),
-        F.lit("simple").alias("extension_type"),
-        F.lit("unknown").alias("value_type"),
-        F.lit(None).alias("value_string"),
-        F.lit(None).alias("value_datetime"),
-        F.lit(None).alias("value_reference"),
-        F.lit(None).alias("value_code"),
-        F.lit(None).cast(BooleanType()).alias("value_boolean"),
-        F.lit(None).cast(DecimalType(18,6)).alias("value_decimal"),
-        F.lit(None).cast("integer").alias("value_integer"),
-        F.lit(None).alias("parent_extension_url"),
-        F.lit(0).alias("extension_order"),
-        F.current_timestamp().alias("created_at"),
-        F.current_timestamp().alias("updated_at")
-    ).filter(F.lit(False))  # Return empty DataFrame
+    # Check if extension column exists
+    if "extension" not in df.columns:
+        logger.warning("extension column not found in data, returning empty DataFrame")
+        return df.select(
+            F.col("id").alias("condition_id"),
+            F.lit(None).alias("extension_url"),
+            F.lit("simple").alias("extension_type"),
+            F.lit("unknown").alias("value_type"),
+            F.lit(None).alias("value_string"),
+            F.lit(None).alias("value_datetime"),
+            F.lit(None).alias("value_reference"),
+            F.lit(None).alias("value_code"),
+            F.lit(None).cast(BooleanType()).alias("value_boolean"),
+            F.lit(None).cast(DecimalType(18,6)).alias("value_decimal"),
+            F.lit(None).cast("integer").alias("value_integer"),
+            F.lit(None).alias("parent_extension_url"),
+            F.lit(0).alias("extension_order"),
+            F.current_timestamp().alias("created_at"),
+            F.current_timestamp().alias("updated_at")
+        ).filter(F.lit(False))
+
+    try:
+        # Explode the extension array
+        extensions_df = df.select(
+            F.col("id").alias("condition_id"),
+            F.explode(F.col("extension")).alias("ext")
+        ).filter(
+            F.col("ext").isNotNull()
+        )
+
+        # Extract extension details
+        # Handle both simple extensions and nested extensions
+        extensions_final = extensions_df.select(
+            F.col("condition_id"),
+            F.col("ext.url").alias("extension_url"),
+            F.when(F.col("ext.extension").isNotNull(), F.lit("nested")).otherwise(F.lit("simple")).alias("extension_type"),
+            # Determine value type based on which value field is present
+            F.when(F.col("ext.valueString").isNotNull(), F.lit("string"))
+             .when(F.col("ext.valueDateTime").isNotNull(), F.lit("dateTime"))
+             .when(F.col("ext.valueReference").isNotNull(), F.lit("reference"))
+             .when(F.col("ext.valueCode").isNotNull(), F.lit("code"))
+             .when(F.col("ext.valueBoolean").isNotNull(), F.lit("boolean"))
+             .when(F.col("ext.valueDecimal").isNotNull(), F.lit("decimal"))
+             .when(F.col("ext.valueInteger").isNotNull(), F.lit("integer"))
+             .otherwise(F.lit("unknown")).alias("value_type"),
+            F.col("ext.valueString").alias("value_string"),
+            F.col("ext.valueDateTime").alias("value_datetime"),
+            # Handle valueReference which might be a struct with a reference field
+            F.when(F.col("ext.valueReference").isNotNull(),
+                   F.col("ext.valueReference.reference")).otherwise(None).alias("value_reference"),
+            F.col("ext.valueCode").alias("value_code"),
+            F.col("ext.valueBoolean").alias("value_boolean"),
+            F.col("ext.valueDecimal").alias("value_decimal"),
+            F.col("ext.valueInteger").alias("value_integer"),
+            F.lit(None).alias("parent_extension_url"),
+            F.lit(0).alias("extension_order"),
+            F.current_timestamp().alias("created_at"),
+            F.current_timestamp().alias("updated_at")
+        )
+
+        return extensions_final
+
+    except Exception as e:
+        logger.warning(f"Failed to transform extensions: {str(e)}")
+        logger.warning("Returning empty extensions DataFrame")
+        return df.select(
+            F.col("id").alias("condition_id"),
+            F.lit(None).alias("extension_url"),
+            F.lit("simple").alias("extension_type"),
+            F.lit("unknown").alias("value_type"),
+            F.lit(None).alias("value_string"),
+            F.lit(None).alias("value_datetime"),
+            F.lit(None).alias("value_reference"),
+            F.lit(None).alias("value_code"),
+            F.lit(None).cast(BooleanType()).alias("value_boolean"),
+            F.lit(None).cast(DecimalType(18,6)).alias("value_decimal"),
+            F.lit(None).cast("integer").alias("value_integer"),
+            F.lit(None).alias("parent_extension_url"),
+            F.lit(0).alias("extension_order"),
+            F.current_timestamp().alias("created_at"),
+            F.current_timestamp().alias("updated_at")
+        ).filter(F.lit(False))
 
 def create_redshift_tables_sql():
     """Generate SQL for creating main conditions table in Redshift with proper syntax"""
