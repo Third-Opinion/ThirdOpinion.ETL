@@ -11,6 +11,22 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType
 import json
 import logging
+import gc
+import time
+
+# Import Spark optimization utilities
+try:
+    from spark_utils import (
+        safe_count, batch_count_operations, optimize_dataframe_for_counting,
+        checkpoint_dataframe, monitor_spark_context, log_memory_usage,
+        release_dataframe_resources, configure_spark_for_large_shuffle
+    )
+    SPARK_UTILS_AVAILABLE = True
+except ImportError:
+    SPARK_UTILS_AVAILABLE = False
+    # Fallback to standard count if utilities not available
+    def safe_count(df, operation_name="count", max_retries=3, repartition_before=True, num_partitions=200):
+        return df.count()
 
 # Import FHIR version comparison utilities
 # FHIR version comparison utilities implemented inline below
@@ -107,12 +123,31 @@ def filter_dataframe_by_version(df, existing_versions, id_column):
         needs_processing_udf(F.col(id_column), F.col("meta_last_updated"))
     )
 
+    # Optimize DataFrame for counting operations
+    df_with_flag = optimize_dataframe_for_counting(df_with_flag, cache=True, repartition=True, num_partitions=200) if SPARK_UTILS_AVAILABLE else df_with_flag
+
     # Split into processing needed and skipped
     to_process_df = df_with_flag.filter(F.col("needs_processing") == True).drop("needs_processing")
-    skipped_count = df_with_flag.filter(F.col("needs_processing") == False).count()
+    skipped_df = df_with_flag.filter(F.col("needs_processing") == False)
 
-    to_process_count = to_process_df.count()
-    total_count = df.count()
+    # Use safe counting with retry logic
+    if SPARK_UTILS_AVAILABLE:
+        counts = batch_count_operations({
+            "to_process": to_process_df,
+            "skipped": skipped_df,
+            "total": df
+        })
+        to_process_count = counts.get("to_process", 0)
+        skipped_count = counts.get("skipped", 0)
+        total_count = counts.get("total", 0)
+    else:
+        skipped_count = skipped_df.count()
+        to_process_count = to_process_df.count()
+        total_count = df.count()
+
+    # Release skipped DataFrame resources
+    if SPARK_UTILS_AVAILABLE:
+        release_dataframe_resources(skipped_df)
 
     logger.info(f"Version comparison results:")
     logger.info(f"  Total incoming records: {total_count}")
@@ -286,11 +321,11 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
 
 # Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Add handler to write logs to stdout so they appear in CloudWatch
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
@@ -1150,7 +1185,17 @@ def main():
         logger.info(f"🎯 Target: Redshift (10 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
         logger.info("🔄 Process: 8 steps (Read → Deduplicate → Transform → Convert → Resolve → Validate → Write)")
-        
+
+        # Configure Spark for large shuffle operations
+        if SPARK_UTILS_AVAILABLE:
+            logger.info("🔧 Configuring Spark for optimized performance...")
+            configure_spark_for_large_shuffle(spark)
+
+            # Set checkpoint directory
+            checkpoint_dir = "s3://aws-glue-assets-442042533707-us-east-2/checkpoints/HMUObservation/"
+            spark.sparkContext.setCheckpointDir(checkpoint_dir)
+            logger.info(f"✅ Checkpoint directory set to: {checkpoint_dir}")
+
         # Step 1: Read data from S3 using Iceberg catalog
         logger.info("\n" + "=" * 50)
         logger.info("📥 STEP 1: READING DATA FROM GLUE CATALOG")
@@ -1184,18 +1229,30 @@ def main():
             observation_df = observation_df_raw
         
         logger.info("✅ Successfully read data using AWS Glue Data Catalog")
-        
-        total_records = observation_df.count()
+
+        # Repartition for better performance and use safe count
+        if SPARK_UTILS_AVAILABLE:
+            observation_df = observation_df.repartition(200)
+            total_records = safe_count(observation_df, "Initial record count")
+        else:
+            total_records = observation_df.count()
         logger.info(f"📊 Read {total_records:,} raw observation records")
-        
+
         # Step 1.5: Deduplicate observations by observation ID
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 1.5: DEDUPLICATING OBSERVATIONS")
         logger.info("=" * 50)
         logger.info("Removing duplicate observation IDs, keeping only the latest occurrence...")
-        
+
         observation_df = deduplicate_observations(observation_df)
-        total_records_after_dedup = observation_df.count()
+
+        # Checkpoint after deduplication to break lineage
+        if SPARK_UTILS_AVAILABLE:
+            logger.info("📍 Checkpointing after deduplication...")
+            observation_df = checkpoint_dataframe(observation_df, spark)
+            total_records_after_dedup = safe_count(observation_df, "Post-deduplication count")
+        else:
+            total_records_after_dedup = observation_df.count()
         logger.info(f"✅ Deduplication completed - {total_records_after_dedup:,} unique observations remaining")
         
         # Debug: Show sample of raw data and schema
@@ -1206,13 +1263,22 @@ def main():
             logger.info("Raw data schema:")
             observation_df.printSchema()
             
-            # Check for NULL values in key fields
-            null_checks = {
-                "id": observation_df.filter(F.col("id").isNull()).count(),
-                "subject.reference": observation_df.filter(F.col("subject").isNull() | F.col("subject.reference").isNull()).count(),
-                "status": observation_df.filter(F.col("status").isNull()).count(),
-                "code": observation_df.filter(F.col("code").isNull()).count()
-            }
+            # Check for NULL values in key fields using optimized counting
+            if SPARK_UTILS_AVAILABLE:
+                null_checks_dfs = {
+                    "id": observation_df.filter(F.col("id").isNull()),
+                    "subject.reference": observation_df.filter(F.col("subject").isNull() | F.col("subject.reference").isNull()),
+                    "status": observation_df.filter(F.col("status").isNull()),
+                    "code": observation_df.filter(F.col("code").isNull())
+                }
+                null_checks = batch_count_operations(null_checks_dfs, repartition_before=False)
+            else:
+                null_checks = {
+                    "id": observation_df.filter(F.col("id").isNull()).count(),
+                    "subject.reference": observation_df.filter(F.col("subject").isNull() | F.col("subject.reference").isNull()).count(),
+                    "status": observation_df.filter(F.col("status").isNull()).count(),
+                    "code": observation_df.filter(F.col("code").isNull()).count()
+                }
             
             logger.info("NULL value analysis in key fields:")
             for field, null_count in null_checks.items():

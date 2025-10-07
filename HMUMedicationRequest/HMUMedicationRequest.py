@@ -21,11 +21,11 @@ from typing import Set
 
 # Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Add handler to write logs to stdout so they appear in CloudWatch
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
