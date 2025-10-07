@@ -1,38 +1,3 @@
--- ===================================================================
--- FACT FHIR OBSERVATIONS VIEW V1 (NO VITAL SIGNS)
--- 
--- OVERVIEW:
--- Modified version of the observations view that:
--- 1. Excludes vital signs observations
--- 2. Includes JOIN with observation_notes table
--- 3. Includes JOIN with observation_codes table (NEW)
--- 4. Fixed observation_reference_ranges field names (UPDATED)
--- 
--- PRIMARY KEY: observation_id
--- 
--- SOURCE TABLES:
--- - public.observations: Core observation data with values, status, and timing
--- - public.observation_codes: Observation codes from different coding systems (NEW)
--- - public.observation_components: Multi-component observation data (lab panels)
--- - public.observation_categories: Observation category classifications
--- - public.observation_performers: Healthcare providers who performed observations
--- - public.observation_reference_ranges: Normal/abnormal ranges for interpretation (FIXED)
--- - public.observation_interpretations: Clinical interpretations (H, L, N, etc.)
--- - public.observation_notes: Clinical notes and annotations
--- - public.observation_derived_from: Parent-child observation relationships
--- - public.observation_members: Panel/battery observation groupings
--- 
--- REFRESH STRATEGY:
--- - AUTO REFRESH NO: Manual refresh required via scheduled jobs
--- - BACKUP NO: No backup required for this materialized view
--- 
--- FILTERING:
--- - EXCLUDES vital signs (category = 'vital-signs')
--- - Excludes observations with status 'entered-in-error'
--- - Uses LEFT JOINs to preserve observations without related data
--- 
--- ===================================================================
-
 CREATE VIEW fact_fhir_observations_view_v1
 AS
 WITH aggregated_codes AS (

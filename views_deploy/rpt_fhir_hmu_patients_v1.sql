@@ -1,28 +1,3 @@
--- ===================================================================
--- RPT FHIR HMU PATIENTS VIEW V1
--- ===================================================================
--- OVERVIEW:
--- Comprehensive materialized view for HMU target patients with prostate cancer conditions
--- and recent encounters. This view combines patient demographics with clinical data
--- for analytics and reporting purposes.
---
--- PRIMARY KEY: patient_id
---
--- PATIENT CRITERIA:
--- - Patients with prostate cancer related conditions (ICD-10-CM codes: C61, Z19.1, Z19.2, R97.21)
--- - Must have encounters since 2024-01-01
---
--- SOURCE TABLES:
--- - fact_fhir_conditions_view_v1: Condition data for filtering
--- - fact_fhir_encounters_view_v1: Encounter data for date filtering
--- - fact_fhir_patients_view_v1: Patient demographics and details
---
--- REFRESH STRATEGY:
--- - AUTO REFRESH NO: Manual refresh required via scheduled jobs
--- - BACKUP NO: No backup required for this materialized view
---
--- ===================================================================
-
 CREATE VIEW rpt_fhir_hmu_patients_v1
 AS WITH target_patients AS (
     SELECT

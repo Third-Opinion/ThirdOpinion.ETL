@@ -23,7 +23,17 @@
     "--job-bookmark-option": "job-bookmark-disable",
     "--datalake-formats": "iceberg",
     "--job-language": "python",
-    "--TempDir": "s3://aws-glue-assets-442042533707-us-east-2/temporary/"
+    "--TempDir": "s3://aws-glue-assets-442042533707-us-east-2/temporary/",
+    "--conf": "spark.sql.adaptive.enabled=true",
+    "--conf": "spark.sql.adaptive.coalescePartitions.enabled=true",
+    "--conf": "spark.sql.shuffle.partitions=400",
+    "--conf": "spark.sql.adaptive.skewJoin.enabled=true",
+    "--conf": "spark.shuffle.compress=true",
+    "--conf": "spark.serializer=org.apache.spark.serializer.KryoSerializer",
+    "--conf": "spark.sql.adaptive.advisoryPartitionSizeInBytes=128MB",
+    "--conf": "spark.dynamicAllocation.enabled=true",
+    "--conf": "spark.dynamicAllocation.minExecutors=5",
+    "--conf": "spark.dynamicAllocation.maxExecutors=30"
   },
   "Connections": {
     "Connections": [
@@ -33,8 +43,8 @@
   "MaxRetries": 0,
   "Timeout": 720,
   "GlueVersion": "4.0",
-  "NumberOfWorkers": 20,
-  "WorkerType": "G.2X",
+  "NumberOfWorkers": 30,
+  "WorkerType": "G.4X",
   "ExecutionClass": "STANDARD",
   "SourceControlDetails": {
     "Provider": "GITHUB",

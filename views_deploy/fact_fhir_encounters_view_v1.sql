@@ -1,38 +1,3 @@
--- ===================================================================
--- FACT FHIR ENCOUNTERS VIEW V1
--- 
--- OVERVIEW:
--- Enhanced materialized view for FHIR Encounter resources with advanced analytics
--- including duration calculations, participant aggregations, and diagnosis/procedure counts.
--- This V2 version removes AUTO REFRESH in preparation for scheduled refresh patterns.
--- 
--- PRIMARY KEY: encounter_id
--- 
--- SOURCE TABLES:
--- - public.encounters: Primary encounter data
--- - public.encounter_identifiers: External identifiers (NOT AVAILABLE - using placeholders)
--- - public.encounter_hospitalization: Hospitalization details
--- - public.encounter_locations: Location information
--- - public.encounter_participants: Care team participants
--- - public.encounter_reasons: Reason codes
--- - public.encounter_types: Encounter type classifications
--- - public.conditions: Associated diagnoses via encounter_id (V2 enhancement)
--- - public.condition_codes: Condition codes and descriptions
--- 
--- REFRESH STRATEGY:
--- - AUTO REFRESH NO: Uses scheduled refresh via AWS Lambda
--- - BACKUP NO: No backup required for this materialized view
--- - Refresh frequency: Hourly during business hours, every 3 hours off-hours
--- 
--- V2 ENHANCEMENTS:
--- - Advanced duration calculations with business day logic
--- - LISTAGG for participant and diagnosis aggregation
--- - Diagnosis counts from conditions table
--- - Length of stay calculations
--- - Emergency vs scheduled encounter classification
--- 
--- ===================================================================
-
 CREATE VIEW fact_fhir_encounters_view_v1
 AS
 WITH condition_counts AS (

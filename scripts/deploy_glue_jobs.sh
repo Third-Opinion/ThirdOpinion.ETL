@@ -63,11 +63,29 @@ deploy_job() {
     if [ -f "$python_file" ]; then
         local s3_location=$(jq -r '.Command.ScriptLocation' "$json_file")
         if [ "$s3_location" != "null" ] && [ ! -z "$s3_location" ]; then
-            log_info "Uploading Python script to $s3_location"
-            if aws s3 cp "$python_file" "$s3_location" --profile "$AWS_PROFILE" --region "$AWS_REGION"; then
+            # Add deployment timestamp to the Python file
+            local temp_python="/tmp/${actual_job_name}_deploy.py"
+            local timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+            # Check if file already has a deployment timestamp comment
+            if head -n 3 "$python_file" | grep -q "# Deployed:"; then
+                # Update existing timestamp
+                sed "1,3s/# Deployed: .*/# Deployed: $timestamp/" "$python_file" > "$temp_python"
+            else
+                # Add new timestamp at the top
+                echo "# Deployed: $timestamp" > "$temp_python"
+                cat "$python_file" >> "$temp_python"
+            fi
+
+            log_info "Uploading Python script to $s3_location (with timestamp: $timestamp)"
+            if aws s3 cp "$temp_python" "$s3_location" --profile "$AWS_PROFILE" --region "$AWS_REGION"; then
                 log_info "✅ Successfully uploaded script to S3"
+                # Also update the local file with the timestamp
+                cp "$temp_python" "$python_file"
+                rm -f "$temp_python"
             else
                 log_error "Failed to upload script to S3"
+                rm -f "$temp_python"
                 return 1
             fi
         fi

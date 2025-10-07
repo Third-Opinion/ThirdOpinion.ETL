@@ -69,6 +69,27 @@ print_status() {
     echo -e "${2}${1}${NC}"
 }
 
+# Function to check if view SQL file exists (checks both directories)
+view_file_exists() {
+    local view_name="$1"
+    if [ -f "views_deploy/${view_name}.sql" ] || [ -f "views/${view_name}.sql" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to get view SQL file path (prefers deployment version)
+get_view_file() {
+    local view_name="$1"
+    if [ -f "views_deploy/${view_name}.sql" ]; then
+        echo "views_deploy/${view_name}.sql"
+    elif view_file_exists "$view_name"; then
+        echo "views/${view_name}.sql"
+    else
+        echo ""
+    fi
+}
+
 # Function to get dependency level for a view
 get_dependency_level() {
     local view_name="$1"
@@ -267,11 +288,11 @@ drop_all_views() {
 # Function to create a single view
 create_view() {
     local view_name="$1"
-    local sql_file="views/${view_name}.sql"
+    local sql_file=$(get_view_file "$view_name")
 
     # Check if SQL file exists
-    if [ ! -f "$sql_file" ]; then
-        print_status "✗ SQL file not found: $sql_file" "$RED"
+    if [ -z "$sql_file" ]; then
+        print_status "✗ SQL file not found for view: $view_name" "$RED"
         return 1
     fi
 
@@ -309,7 +330,7 @@ deploy_views_by_level() {
     local fail_count=0
 
     for view_name in "${views[@]}"; do
-        if [ -f "views/${view_name}.sql" ]; then
+        if view_file_exists "$view_name"; then
             print_status "\nDeploying: $view_name" "$YELLOW"
             create_view "$view_name"
             if [ $? -eq 0 ]; then
@@ -329,7 +350,7 @@ deploy_views_by_level() {
 # Function to redeploy a single view
 redeploy_view() {
     local view_name="$1"
-    local sql_file="views/${view_name}.sql"
+    local sql_file=$(get_view_file "$view_name")
 
     print_status "\n========================================" "$BLUE"
     print_status "Redeploying: $view_name" "$BLUE"
@@ -338,8 +359,8 @@ redeploy_view() {
     print_status "========================================" "$BLUE"
 
     # Check if SQL file exists
-    if [ ! -f "$sql_file" ]; then
-        print_status "✗ SQL file not found: $sql_file" "$RED"
+    if [ -z "$sql_file" ]; then
+        print_status "✗ SQL file not found for view: $view_name" "$RED"
         return 1
     fi
 
@@ -379,7 +400,7 @@ display_menu() {
         local status="[Not Found]"
         local color="$RED"
 
-        if [ -f "views/${view_name}.sql" ]; then
+        if view_file_exists "$view_name"; then
             status="[SQL Ready]"
             color="$GREEN"
         fi
@@ -395,7 +416,7 @@ display_menu() {
         local status="[Not Found]"
         local color="$RED"
 
-        if [ -f "views/${view_name}.sql" ]; then
+        if view_file_exists "$view_name"; then
             status="[SQL Ready]"
             color="$GREEN"
         fi
@@ -411,7 +432,7 @@ display_menu() {
         local status="[Not Found]"
         local color="$RED"
 
-        if [ -f "views/${view_name}.sql" ]; then
+        if view_file_exists "$view_name"; then
             status="[SQL Ready]"
             color="$GREEN"
         fi
@@ -427,7 +448,7 @@ display_menu() {
         local status="[Not Found]"
         local color="$RED"
 
-        if [ -f "views/${view_name}.sql" ]; then
+        if view_file_exists "$view_name"; then
             status="[SQL Ready]"
             color="$GREEN"
         fi
@@ -509,19 +530,19 @@ redeploy_fact_views() {
     print_status "\nCreating fact views in dependency order..." "$YELLOW"
 
     for view_name in "${DEPENDENCY_LEVEL_0[@]}"; do
-        if [[ $view_name == fact_* ]] && [ -f "views/${view_name}.sql" ]; then
+        if [[ $view_name == fact_* ]] && view_file_exists "$view_name"; then
             create_view "$view_name"
         fi
     done
 
     for view_name in "${DEPENDENCY_LEVEL_1[@]}"; do
-        if [[ $view_name == fact_* ]] && [ -f "views/${view_name}.sql" ]; then
+        if [[ $view_name == fact_* ]] && view_file_exists "$view_name"; then
             create_view "$view_name"
         fi
     done
 
     for view_name in "${DEPENDENCY_LEVEL_2[@]}"; do
-        if [[ $view_name == fact_* ]] && [ -f "views/${view_name}.sql" ]; then
+        if [[ $view_name == fact_* ]] && view_file_exists "$view_name"; then
             create_view "$view_name"
         fi
     done
@@ -543,7 +564,7 @@ redeploy_reporting_views() {
     print_status "\nCreating reporting views..." "$YELLOW"
 
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
-        if [[ $view_name == rpt_* ]] && [ -f "views/${view_name}.sql" ]; then
+        if [[ $view_name == rpt_* ]] && view_file_exists "$view_name"; then
             create_view "$view_name"
         fi
     done

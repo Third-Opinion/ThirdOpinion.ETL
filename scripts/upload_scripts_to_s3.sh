@@ -42,13 +42,31 @@ main() {
 
     # Upload fhir_version_utils.py if it exists
     if [[ -f "fhir_version_utils.py" ]]; then
-        log_info "Uploading fhir_version_utils.py..."
-        if aws s3 cp "fhir_version_utils.py" "${S3_BUCKET}fhir_version_utils.py" \
+        # Add deployment timestamp to the file
+        temp_file="/tmp/fhir_version_utils_deploy.py"
+        timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        # Check if file already has a deployment timestamp comment
+        if head -n 3 "fhir_version_utils.py" | grep -q "# Deployed:"; then
+            # Update existing timestamp
+            sed "1,3s/# Deployed: .*/# Deployed: $timestamp/" "fhir_version_utils.py" > "$temp_file"
+        else
+            # Add new timestamp at the top
+            echo "# Deployed: $timestamp" > "$temp_file"
+            cat "fhir_version_utils.py" >> "$temp_file"
+        fi
+
+        log_info "Uploading fhir_version_utils.py (timestamp: $timestamp)..."
+        if aws s3 cp "$temp_file" "${S3_BUCKET}fhir_version_utils.py" \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION"; then
             log_info "✅ Successfully uploaded fhir_version_utils.py"
+            # Update local file with timestamp
+            cp "$temp_file" "fhir_version_utils.py"
+            rm -f "$temp_file"
         else
             log_error "Failed to upload fhir_version_utils.py"
+            rm -f "$temp_file"
         fi
     else
         log_warning "fhir_version_utils.py not found"
@@ -67,14 +85,32 @@ main() {
             continue
         fi
 
+        # Add deployment timestamp to the Python file
+        temp_python="/tmp/${job_name}_deploy.py"
+        timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        # Check if file already has a deployment timestamp comment
+        if head -n 3 "$py_file" | grep -q "# Deployed:"; then
+            # Update existing timestamp
+            sed "1,3s/# Deployed: .*/# Deployed: $timestamp/" "$py_file" > "$temp_python"
+        else
+            # Add new timestamp at the top
+            echo "# Deployed: $timestamp" > "$temp_python"
+            cat "$py_file" >> "$temp_python"
+        fi
+
         # Upload to S3
-        log_info "Uploading $job_name.py..."
-        if aws s3 cp "$py_file" "${S3_BUCKET}${job_name}.py" \
+        log_info "Uploading $job_name.py (timestamp: $timestamp)..."
+        if aws s3 cp "$temp_python" "${S3_BUCKET}${job_name}.py" \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION"; then
             log_info "✅ Successfully uploaded $job_name.py"
+            # Update local file with timestamp
+            cp "$temp_python" "$py_file"
+            rm -f "$temp_python"
         else
             log_error "Failed to upload $job_name.py"
+            rm -f "$temp_python"
         fi
     done
 

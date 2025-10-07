@@ -123,10 +123,30 @@ fix_syntax_errors('$py_file')
         fi
     fi
 
-    # Deploy to S3
+    # Deploy to S3 with timestamp
     echo "📤 Deploying to S3..."
-    if AWS_PROFILE="$AWS_PROFILE" aws s3 cp "$py_file" "s3://$S3_BUCKET/scripts/$job.py" --region "$REGION"; then
+
+    # Add deployment timestamp to the Python file
+    temp_python="/tmp/${job}_deploy.py"
+    timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+    # Check if file already has a deployment timestamp comment
+    if head -n 3 "$py_file" | grep -q "# Deployed:"; then
+        # Update existing timestamp
+        sed "1,3s/# Deployed: .*/# Deployed: $timestamp/" "$py_file" > "$temp_python"
+    else
+        # Add new timestamp at the top
+        echo "# Deployed: $timestamp" > "$temp_python"
+        cat "$py_file" >> "$temp_python"
+    fi
+
+    echo "⏰ Adding timestamp: $timestamp"
+
+    if AWS_PROFILE="$AWS_PROFILE" aws s3 cp "$temp_python" "s3://$S3_BUCKET/scripts/$job.py" --region "$REGION"; then
         echo "✅ Deployed successfully"
+        # Update local file with timestamp
+        cp "$temp_python" "$py_file"
+        rm -f "$temp_python"
 
         # Start the job
         echo "🚀 Starting job run..."

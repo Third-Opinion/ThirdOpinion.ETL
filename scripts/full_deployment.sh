@@ -90,14 +90,32 @@ main() {
             continue
         fi
 
-        echo -n "Uploading $job_name.py... "
-        if aws s3 cp "$py_file" "${S3_BUCKET}${job_name}.py" \
+        # Add deployment timestamp to the Python file
+        temp_python="/tmp/${job_name}_deploy.py"
+        timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+        # Check if file already has a deployment timestamp comment
+        if head -n 3 "$py_file" | grep -q "# Deployed:"; then
+            # Update existing timestamp
+            sed "1,3s/# Deployed: .*/# Deployed: $timestamp/" "$py_file" > "$temp_python"
+        else
+            # Add new timestamp at the top
+            echo "# Deployed: $timestamp" > "$temp_python"
+            cat "$py_file" >> "$temp_python"
+        fi
+
+        echo -n "Uploading $job_name.py (${timestamp})... "
+        if aws s3 cp "$temp_python" "${S3_BUCKET}${job_name}.py" \
             --profile "$AWS_PROFILE" \
             --region "$AWS_REGION" &>/dev/null; then
             echo -e "${GREEN}✅${NC}"
+            # Update local file with timestamp
+            cp "$temp_python" "$py_file"
+            rm -f "$temp_python"
             ((upload_count++))
         else
             echo -e "${RED}❌${NC}"
+            rm -f "$temp_python"
             ((upload_failed++))
         fi
     done
