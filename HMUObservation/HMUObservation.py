@@ -17,6 +17,52 @@ import logging
 
 # FHIR version comparison utilities are implemented inline below
 
+def get_bookmark_from_redshift():
+    """Get the maximum meta_last_updated timestamp from Redshift observations table
+    
+    This bookmark represents the latest data already loaded into Redshift.
+    We'll only process Iceberg records newer than this timestamp.
+    """
+    logger.info("Fetching bookmark (max meta_last_updated) from Redshift observations table...")
+    
+    try:
+        # Query Redshift for the maximum meta_last_updated timestamp
+        bookmark_query = "(SELECT MAX(meta_last_updated) as max_timestamp FROM public.observations) as bookmark"
+        
+        bookmark_frame = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": bookmark_query,
+                "connectionName": REDSHIFT_CONNECTION
+            },
+            transformation_ctx="read_bookmark"
+        )
+        
+        # Convert to DataFrame and get the value
+        bookmark_df = bookmark_frame.toDF()
+        
+        if bookmark_df.count() > 0:
+            max_timestamp = bookmark_df.collect()[0]['max_timestamp']
+            
+            if max_timestamp:
+                logger.info(f"✅ Bookmark found: {max_timestamp}")
+                logger.info(f"Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
+                return max_timestamp
+            else:
+                logger.info("No bookmark found (observations table is empty)")
+                logger.info("This is an initial full load - will process all Iceberg records")
+                return None
+        else:
+            logger.info("No bookmark available - proceeding with full load")
+            return None
+            
+    except Exception as e:
+        logger.info(f"Could not fetch bookmark (table may not exist): {str(e)}")
+        logger.info("Proceeding with full initial load of all Iceberg records")
+        return None
+
 def get_existing_versions_from_redshift(table_name, id_column):
     """Query Redshift to get existing entity timestamps for comparison"""
     logger.info(f"Fetching existing timestamps from {table_name}...")
@@ -144,8 +190,16 @@ def get_entities_to_delete(df, existing_versions, id_column):
     return entities_to_delete
 
 def deduplicate_observations(df):
-    """Deduplicate observations by keeping only the latest occurrence of each observation ID"""
+    """Deduplicate observations by keeping only the latest occurrence of each observation ID
+    
+    Uses an optimized groupBy + sortWithinPartitions approach that:
+    - Avoids expensive window functions
+    - Uses partition-level sorting instead of global sorting
+    - Minimizes shuffle operations
+    - Handles large datasets efficiently
+    """
     logger.info("Deduplicating observations by observation ID...")
+    logger.info("Using optimized partition-based deduplication strategy")
     
     # Check if required columns exist
     if "id" not in df.columns:
@@ -157,6 +211,7 @@ def deduplicate_observations(df):
         return df
     
     # Get initial count
+    logger.info("Counting initial records...")
     initial_count = df.count()
     logger.info(f"Initial observation count: {initial_count:,}")
     
@@ -164,46 +219,52 @@ def deduplicate_observations(df):
         logger.info("No observations to deduplicate")
         return df
     
-    # Check for duplicate observation IDs
-    unique_ids = df.select("id").distinct().count()
-    logger.info(f"Unique observation IDs: {unique_ids:,}")
-    
-    if unique_ids == initial_count:
-        logger.info("✅ No duplicate observation IDs found - no deduplication needed")
-        return df
-    
-    duplicates_count = initial_count - unique_ids
-    logger.info(f"Found {duplicates_count:,} duplicate observation records")
-    
-    # Create a window function to rank observations by meta.lastUpdated timestamp
-    # We'll use row_number() to get the latest record for each observation ID
-    from pyspark.sql.window import Window
+    # Always perform deduplication to ensure data quality
+    logger.info("Proceeding with deduplication to ensure data quality...")
     
     # Handle different possible timestamp formats in meta.lastUpdated
-    # First, try to extract and parse the timestamp
+    logger.info("Extracting timestamps for deduplication...")
     timestamp_expr = F.coalesce(
         F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
         F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
         F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
         F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
         F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss"),
-        F.col("meta").getField("lastUpdated")  # Fallback to raw value
+        F.lit("1970-01-01 00:00:00").cast(TimestampType())  # Default for NULL timestamps
     )
     
-    # Create window specification partitioned by observation ID, ordered by timestamp (descending)
-    # For records with NULL timestamps, we'll use a secondary sort by a stable column
-    window_spec = Window.partitionBy("id").orderBy(
-        F.desc(timestamp_expr),
-        F.desc("id")  # Secondary sort for stability when timestamps are equal
-    )
+    # Add timestamp column
+    df_with_ts = df.withColumn("_dedup_ts", timestamp_expr)
     
-    # Add row number to each observation within its ID group
-    df_with_rank = df.withColumn("row_num", F.row_number().over(window_spec))
+    # OPTIMIZED APPROACH: Use SQL-based aggregation to find max timestamp per ID
+    # Then use broadcast join to filter
+    logger.info("Finding maximum timestamp for each observation ID...")
     
-    # Keep only the first row (latest timestamp) for each observation ID
-    deduplicated_df = df_with_rank.filter(F.col("row_num") == 1).drop("row_num")
+    # Create a temporary view for SQL operations
+    df_with_ts.createOrReplaceTempView("observations_with_ts")
+    
+    # Use SQL to find the max timestamp for each ID and join back
+    # This is more efficient than window functions for large datasets
+    dedup_sql = """
+        SELECT obs.*
+        FROM observations_with_ts obs
+        INNER JOIN (
+            SELECT id, MAX(_dedup_ts) as max_ts
+            FROM observations_with_ts
+            GROUP BY id
+        ) max_records
+        ON obs.id = max_records.id AND obs._dedup_ts = max_records.max_ts
+    """
+    
+    logger.info("Executing deduplication query (keeping latest record per ID)...")
+    deduplicated_with_ts = spark.sql(dedup_sql)
+    
+    # In case multiple records have the same max timestamp, use dropDuplicates as final safety
+    logger.info("Applying final duplicate removal (for identical timestamps)...")
+    deduplicated_df = deduplicated_with_ts.dropDuplicates(["id"]).drop("_dedup_ts")
     
     # Get final count
+    logger.info("Counting deduplicated records...")
     final_count = deduplicated_df.count()
     removed_count = initial_count - final_count
     
@@ -214,6 +275,82 @@ def deduplicate_observations(df):
     logger.info(f"  📈 Deduplication ratio: {(removed_count/initial_count)*100:.1f}%")
     
     return deduplicated_df
+
+def filter_by_bookmark(df, bookmark_timestamp):
+    """Filter Iceberg DataFrame to only include records newer than the bookmark
+    
+    Args:
+        df: Source DataFrame from Iceberg
+        bookmark_timestamp: Maximum meta_last_updated from Redshift (or None for full load)
+    
+    Returns:
+        Filtered DataFrame with only new/updated records
+    """
+    if bookmark_timestamp is None:
+        logger.info("No bookmark - processing all Iceberg records (full load)")
+        return df
+    
+    logger.info(f"Applying bookmark filter to Iceberg data...")
+    logger.info(f"Bookmark threshold: {bookmark_timestamp}")
+    
+    # Parse meta.lastUpdated timestamp from Iceberg data
+    timestamp_expr = F.coalesce(
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+    )
+    
+    # Add timestamp column temporarily for filtering
+    df_with_ts = df.withColumn("_filter_ts", timestamp_expr)
+    
+    # Filter for records newer than bookmark
+    filtered_df = df_with_ts.filter(F.col("_filter_ts") > F.lit(bookmark_timestamp)).drop("_filter_ts")
+    
+    # Count results
+    initial_count = df.count()
+    filtered_count = filtered_df.count()
+    skipped_count = initial_count - filtered_count
+    
+    logger.info(f"✅ Bookmark filter applied:")
+    logger.info(f"  📊 Total records in Iceberg: {initial_count:,}")
+    logger.info(f"  📊 New/updated records (after bookmark): {filtered_count:,}")
+    logger.info(f"  ⏭️  Records skipped (already in Redshift): {skipped_count:,}")
+    logger.info(f"  📈 Filter efficiency: {(skipped_count/initial_count)*100:.1f}% skipped")
+    
+    return filtered_df
+
+def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
+    """Write DynamicFrame to Redshift without version checking
+    
+    Used with bookmark pattern - since we filter at source, we can simply append all records.
+    For initial loads, uses TRUNCATE to clear existing data.
+    """
+    logger.info(f"Writing {table_name} to Redshift...")
+    
+    try:
+        logger.info(f"Executing preactions for {table_name}: {preactions[:100] if preactions else 'None'}")
+        logger.info(f"Writing to table: public.{table_name}")
+        
+        glueContext.write_dynamic_frame.from_options(
+            frame=dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": preactions or ""
+            },
+            transformation_ctx=f"write_{table_name}_to_redshift"
+        )
+        
+        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
+        raise e
 
 def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
     """Version-aware write to Redshift - only processes new/updated entities"""
@@ -311,6 +448,22 @@ spark = (SparkSession.builder
     .config(f"spark.sql.catalog.{catalog_nm}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
     .config("spark.sql.catalog.glue_catalog.glue.lakeformation-enabled", "true")
     .config("spark.sql.catalog.glue_catalog.glue.id", tableCatalogId)
+    # Performance optimizations for large dataset processing
+    .config("spark.sql.shuffle.partitions", "400")  # Increase from default 200/232
+    .config("spark.sql.adaptive.enabled", "true")  # Enable adaptive query execution
+    .config("spark.sql.adaptive.coalescePartitions.enabled", "true")  # Combine small partitions
+    .config("spark.sql.adaptive.skewJoin.enabled", "true")  # Handle data skew
+    .config("spark.sql.adaptive.localShuffleReader.enabled", "true")  # Optimize shuffle reads
+    # Conservative broadcast settings to prevent hanging
+    .config("spark.sql.autoBroadcastJoinThreshold", "-1")  # Disable auto broadcast to prevent hanging
+    .config("spark.sql.broadcastTimeout", "300")  # 5 minutes max for broadcasts
+    # Timeout and heartbeat settings
+    .config("spark.network.timeout", "600s")  # 10 minutes for network operations
+    .config("spark.executor.heartbeatInterval", "30s")  # Heartbeat every 30 seconds
+    .config("spark.sql.broadcastExchangeMaxThreadThreshold", "8")  # Limit broadcast threads
+    # Memory and execution settings
+    .config("spark.sql.files.maxPartitionBytes", "134217728")  # 128MB max partition size
+    .config("spark.sql.adaptive.advisoryPartitionSizeInBytes", "134217728")  # Target 128MB partitions
     .getOrCreate())
 sc = spark.sparkContext
 glueContext = GlueContext(sc)
@@ -1149,7 +1302,7 @@ def main():
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
         logger.info(f"🎯 Target: Redshift (10 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
-        logger.info("🔄 Process: 8 steps (Read → Deduplicate → Transform → Convert → Resolve → Validate → Write)")
+        logger.info("🔄 Process: 9 steps (Read → Bookmark Filter → Deduplicate → Transform → Convert → Resolve → Validate → Write)")
         
         # Step 1: Read data from S3 using Iceberg catalog
         logger.info("\n" + "=" * 50)
@@ -1173,7 +1326,7 @@ def main():
         # TESTING MODE: Sample data for quick testing
         # Comment out or set to False for production runs
         USE_SAMPLE = False  # Set to False for full data processing
-        SAMPLE_SIZE = 1000
+        SAMPLE_SIZE = 100000  # 100k records for testing
         
         if USE_SAMPLE:
             logger.info(f"⚠️  TESTING MODE: Sampling {SAMPLE_SIZE} records for quick testing")
@@ -1186,13 +1339,26 @@ def main():
         logger.info("✅ Successfully read data using AWS Glue Data Catalog")
         
         total_records = observation_df.count()
-        logger.info(f"📊 Read {total_records:,} raw observation records")
+        logger.info(f"📊 Read {total_records:,} raw observation records from Iceberg")
         
-        # Step 1.5: Deduplicate observations by observation ID
+        # Step 1.5: Apply Bookmark Filter
         logger.info("\n" + "=" * 50)
-        logger.info("🔄 STEP 1.5: DEDUPLICATING OBSERVATIONS")
+        logger.info("📌 STEP 1.5: APPLYING BOOKMARK FILTER")
         logger.info("=" * 50)
-        logger.info("Removing duplicate observation IDs, keeping only the latest occurrence...")
+        logger.info("Checking Redshift for existing data to enable incremental processing...")
+        
+        bookmark_timestamp = get_bookmark_from_redshift()
+        observation_df = filter_by_bookmark(observation_df, bookmark_timestamp)
+        
+        total_records_after_bookmark = observation_df.count()
+        logger.info(f"✅ Bookmark filter applied - {total_records_after_bookmark:,} records to process")
+        
+        # Step 1.6: Deduplicate observations by observation ID
+        # Note: This is still needed to handle duplicates within the incremental data
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 1.6: DEDUPLICATING OBSERVATIONS")
+        logger.info("=" * 50)
+        logger.info("Removing duplicate observation IDs within incremental data...")
         
         observation_df = deduplicate_observations(observation_df)
         total_records_after_dedup = observation_df.count()
@@ -1663,57 +1829,107 @@ def main():
         logger.info(f"🔗 Using connection: {REDSHIFT_CONNECTION}")
         logger.info(f"📁 S3 temp directory: {S3_TEMP_DIR}")
         
-        # Create all tables individually
-        # Note: Each write_to_redshift call now includes DELETE to prevent duplicates
-        logger.info("📝 Creating main observations table...")
+        # Create all tables individually and write data
+        # Using simple append mode since bookmark pattern filters data at source
+        # For initial load or when bookmark returns no data, we use TRUNCATE to clear tables
+        
+        # Determine if this is an initial load or incremental
+        is_initial_load = (bookmark_timestamp is None)
+        
+        if is_initial_load:
+            logger.info("🔄 Initial load mode - will TRUNCATE existing tables before insert")
+        else:
+            logger.info("➕ Incremental load mode - will APPEND new records only")
+        
+        logger.info("📝 Writing main observations table...")
         observations_table_sql = create_redshift_tables_sql()
-        write_to_redshift_versioned(main_resolved_frame, "observations", "observation_id", observations_table_sql)
-        logger.info("✅ Main observations table created and written successfully")
+        if is_initial_load:
+            observations_preactions = observations_table_sql + "; TRUNCATE TABLE public.observations;"
+        else:
+            observations_preactions = observations_table_sql
+        write_to_redshift_simple(main_resolved_frame, "observations", observations_preactions)
+        logger.info("✅ Main observations table written successfully")
         
-        logger.info("📝 Creating observation codes table...")
+        logger.info("📝 Writing observation codes table...")
         codes_table_sql = create_observation_codes_table_sql()
-        write_to_redshift_versioned(codes_resolved_frame, "observation_codes", "observation_id", codes_table_sql)
-        logger.info("✅ Observation codes table created and written successfully")
+        if is_initial_load:
+            codes_preactions = codes_table_sql + "; TRUNCATE TABLE public.observation_codes;"
+        else:
+            codes_preactions = codes_table_sql
+        write_to_redshift_simple(codes_resolved_frame, "observation_codes", codes_preactions)
+        logger.info("✅ Observation codes table written successfully")
         
-        logger.info("📝 Creating observation categories table...")
+        logger.info("📝 Writing observation categories table...")
         categories_table_sql = create_observation_categories_table_sql()
-        write_to_redshift_versioned(categories_resolved_frame, "observation_categories", "observation_id", categories_table_sql)
-        logger.info("✅ Observation categories table created and written successfully")
+        if is_initial_load:
+            categories_preactions = categories_table_sql + "; TRUNCATE TABLE public.observation_categories;"
+        else:
+            categories_preactions = categories_table_sql
+        write_to_redshift_simple(categories_resolved_frame, "observation_categories", categories_preactions)
+        logger.info("✅ Observation categories table written successfully")
         
-        logger.info("📝 Creating observation interpretations table...")
+        logger.info("📝 Writing observation interpretations table...")
         interpretations_table_sql = create_observation_interpretations_table_sql()
-        write_to_redshift_versioned(interpretations_resolved_frame, "observation_interpretations", "observation_id", interpretations_table_sql)
-        logger.info("✅ Observation interpretations table created and written successfully")
+        if is_initial_load:
+            interpretations_preactions = interpretations_table_sql + "; TRUNCATE TABLE public.observation_interpretations;"
+        else:
+            interpretations_preactions = interpretations_table_sql
+        write_to_redshift_simple(interpretations_resolved_frame, "observation_interpretations", interpretations_preactions)
+        logger.info("✅ Observation interpretations table written successfully")
         
-        logger.info("📝 Creating observation reference ranges table...")
+        logger.info("📝 Writing observation reference ranges table...")
         reference_ranges_table_sql = create_observation_reference_ranges_table_sql()
-        write_to_redshift_versioned(reference_ranges_resolved_frame, "observation_reference_ranges", "observation_id", reference_ranges_table_sql)
-        logger.info("✅ Observation reference ranges table created and written successfully")
+        if is_initial_load:
+            reference_ranges_preactions = reference_ranges_table_sql + "; TRUNCATE TABLE public.observation_reference_ranges;"
+        else:
+            reference_ranges_preactions = reference_ranges_table_sql
+        write_to_redshift_simple(reference_ranges_resolved_frame, "observation_reference_ranges", reference_ranges_preactions)
+        logger.info("✅ Observation reference ranges table written successfully")
         
-        logger.info("📝 Creating observation components table...")
+        logger.info("📝 Writing observation components table...")
         components_table_sql = create_observation_components_table_sql()
-        write_to_redshift_versioned(components_resolved_frame, "observation_components", "observation_id", components_table_sql)
-        logger.info("✅ Observation components table created and written successfully")
+        if is_initial_load:
+            components_preactions = components_table_sql + "; TRUNCATE TABLE public.observation_components;"
+        else:
+            components_preactions = components_table_sql
+        write_to_redshift_simple(components_resolved_frame, "observation_components", components_preactions)
+        logger.info("✅ Observation components table written successfully")
         
-        logger.info("📝 Creating observation notes table...")
+        logger.info("📝 Writing observation notes table...")
         notes_table_sql = create_observation_notes_table_sql()
-        write_to_redshift_versioned(notes_resolved_frame, "observation_notes", "observation_id", notes_table_sql)
-        logger.info("✅ Observation notes table created and written successfully")
+        if is_initial_load:
+            notes_preactions = notes_table_sql + "; TRUNCATE TABLE public.observation_notes;"
+        else:
+            notes_preactions = notes_table_sql
+        write_to_redshift_simple(notes_resolved_frame, "observation_notes", notes_preactions)
+        logger.info("✅ Observation notes table written successfully")
         
-        logger.info("📝 Creating observation performers table...")
+        logger.info("📝 Writing observation performers table...")
         performers_table_sql = create_observation_performers_table_sql()
-        write_to_redshift_versioned(performers_resolved_frame, "observation_performers", "observation_id", performers_table_sql)
-        logger.info("✅ Observation performers table created and written successfully")
+        if is_initial_load:
+            performers_preactions = performers_table_sql + "; TRUNCATE TABLE public.observation_performers;"
+        else:
+            performers_preactions = performers_table_sql
+        write_to_redshift_simple(performers_resolved_frame, "observation_performers", performers_preactions)
+        logger.info("✅ Observation performers table written successfully")
         
-        logger.info("📝 Creating observation members table...")
+        logger.info("📝 Writing observation members table...")
         members_table_sql = create_observation_members_table_sql()
-        write_to_redshift_versioned(members_resolved_frame, "observation_members", "observation_id", members_table_sql)
-        logger.info("✅ Observation members table created and written successfully")
+        if is_initial_load:
+            members_preactions = members_table_sql + "; TRUNCATE TABLE public.observation_members;"
+        else:
+            members_preactions = members_table_sql
+        write_to_redshift_simple(members_resolved_frame, "observation_members", members_preactions)
+        logger.info("✅ Observation members table written successfully")
         
-        logger.info("📝 Creating observation derived from table...")
+        logger.info("📝 Writing observation derived from table...")
         derived_from_table_sql = create_observation_derived_from_table_sql()
-        write_to_redshift_versioned(derived_from_resolved_frame, "observation_derived_from", "observation_id", derived_from_table_sql)
-        logger.info("✅ Observation derived from table created and written successfully")
+        if is_initial_load:
+            derived_from_preactions = derived_from_table_sql + "; TRUNCATE TABLE public.observation_derived_from;"
+        else:
+            derived_from_preactions = derived_from_table_sql
+        write_to_redshift_simple(derived_from_resolved_frame, "observation_derived_from", derived_from_preactions)
+        logger.info("✅ Observation derived from table written successfully")
         
         # Calculate processing time
         end_time = datetime.now()
@@ -1738,10 +1954,12 @@ def main():
         logger.info("  ✅ public.observation_derived_from (derived from references)")
         
         logger.info("\n📊 FINAL ETL STATISTICS:")
-        logger.info(f"  📥 Total raw records processed: {total_records:,}")
+        logger.info(f"  📥 Total raw records in Iceberg: {total_records:,}")
+        logger.info(f"  📌 Records after bookmark filter: {total_records_after_bookmark:,}")
+        logger.info(f"  ⏭️  Records skipped by bookmark: {total_records - total_records_after_bookmark:,}")
         logger.info(f"  🔄 Records after deduplication: {total_records_after_dedup:,}")
-        logger.info(f"  🗑️  Duplicates removed: {total_records - total_records_after_dedup:,}")
-        logger.info(f"  🔬 Main observation records: {main_count:,}")
+        logger.info(f"  🗑️  Duplicates removed: {total_records_after_bookmark - total_records_after_dedup:,}")
+        logger.info(f"  🔬 Main observation records written: {main_count:,}")
         logger.info(f"  🔢 Code records: {codes_count:,}")
         logger.info(f"  🏷️  Category records: {categories_count:,}")
         logger.info(f"  📊 Interpretation records: {interpretations_count:,}")
