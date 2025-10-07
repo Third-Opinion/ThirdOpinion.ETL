@@ -63,23 +63,36 @@ def get_existing_versions_from_redshift(table_name, id_column):
         logger.debug(f"Details: {str(e)}")
         return {}
 
-def filter_dataframe_by_version(df, existing_versions, id_column):
-    """Filter DataFrame based on version comparison"""
+def filter_dataframe_by_version(df, existing_versions, id_column, is_child_table=False):
+    """Filter DataFrame based on version comparison
+
+    Args:
+        df: Input DataFrame
+        existing_versions: Dict of existing entity versions
+        id_column: Column name to use for ID comparison
+        is_child_table: If True, skips deduplication (for tables with multiple rows per parent ID)
+    """
     logger.info("Filtering data based on version comparison...")
 
     # Step 1: Deduplicate incoming data - keep only latest version per entity
-    from pyspark.sql.window import Window
+    # Skip deduplication for child tables (they have multiple rows per parent ID)
+    if is_child_table:
+        logger.info("Child table detected - skipping deduplication (keeping all rows per parent)")
+        df_latest = df
+        deduplicated_count = df.count()
+    else:
+        from pyspark.sql.window import Window
 
-    window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
-    df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
-                  .filter(F.col("row_num") == 1) \
-                  .drop("row_num")
+        window_spec = Window.partitionBy(id_column).orderBy(F.col("meta_last_updated").desc())
+        df_latest = df.withColumn("row_num", F.row_number().over(window_spec)) \
+                      .filter(F.col("row_num") == 1) \
+                      .drop("row_num")
 
-    incoming_count = df.count()
-    deduplicated_count = df_latest.count()
+        incoming_count = df.count()
+        deduplicated_count = df_latest.count()
 
-    if incoming_count > deduplicated_count:
-        logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
+        if incoming_count > deduplicated_count:
+            logger.info(f"Deduplicated incoming data: {incoming_count} → {deduplicated_count} records (kept latest per entity)")
 
     if not existing_versions:
         # No existing data, all records are new
@@ -157,8 +170,16 @@ def get_entities_to_delete(df, existing_versions, id_column):
     logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
     return entities_to_delete
 
-def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
-    """Version-aware write to Redshift - only processes new/updated entities"""
+def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions="", is_child_table=False):
+    """Version-aware write to Redshift - only processes new/updated entities
+
+    Args:
+        dynamic_frame: DynamicFrame to write
+        table_name: Target table name
+        id_column: Column name used for versioning (parent ID for child tables)
+        preactions: SQL to execute before write
+        is_child_table: If True, skips deduplication (for tables with multiple rows per parent ID)
+    """
     logger.info(f"Writing {table_name} to Redshift with version checking...")
 
     try:
@@ -200,7 +221,7 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
 
         # Step 2: Filter incoming data based on version comparison
         filtered_df, to_process_count, skipped_count = filter_dataframe_by_version(
-            df, existing_versions, id_column
+            df, existing_versions, id_column, is_child_table=is_child_table
         )
 
         if to_process_count == 0:
@@ -1932,37 +1953,37 @@ def main():
         
         logger.info("📝 Dropping and recreating condition categories table...")
         categories_table_sql = create_condition_categories_table_sql()
-        write_to_redshift_versioned(categories_resolved_frame, "condition_categories", "condition_id", categories_table_sql)
+        write_to_redshift_versioned(categories_resolved_frame, "condition_categories", "condition_id", categories_table_sql, is_child_table=True)
         logger.info("✅ Condition categories table dropped, recreated and written successfully")
-        
+
         logger.info("📝 Dropping and recreating condition notes table...")
         notes_table_sql = create_condition_notes_table_sql()
-        write_to_redshift_versioned(notes_resolved_frame, "condition_notes", "condition_id", notes_table_sql)
+        write_to_redshift_versioned(notes_resolved_frame, "condition_notes", "condition_id", notes_table_sql, is_child_table=True)
         logger.info("✅ Condition notes table dropped, recreated and written successfully")
-        
+
         logger.info("📝 Dropping and recreating condition body sites table...")
         body_sites_table_sql = create_condition_body_sites_table_sql()
-        write_to_redshift_versioned(body_sites_resolved_frame, "condition_body_sites", "condition_id", body_sites_table_sql)
+        write_to_redshift_versioned(body_sites_resolved_frame, "condition_body_sites", "condition_id", body_sites_table_sql, is_child_table=True)
         logger.info("✅ Condition body sites table dropped, recreated and written successfully")
-        
+
         logger.info("📝 Dropping and recreating condition stages table...")
         stages_table_sql = create_condition_stages_table_sql()
-        write_to_redshift_versioned(stages_resolved_frame, "condition_stages", "condition_id", stages_table_sql)
+        write_to_redshift_versioned(stages_resolved_frame, "condition_stages", "condition_id", stages_table_sql, is_child_table=True)
         logger.info("✅ Condition stages table dropped, recreated and written successfully")
-        
+
         logger.info("📝 Dropping and recreating condition codes table...")
         codes_table_sql = create_condition_codes_table_sql()
-        write_to_redshift_versioned(codes_resolved_frame, "condition_codes", "condition_id", codes_table_sql)
+        write_to_redshift_versioned(codes_resolved_frame, "condition_codes", "condition_id", codes_table_sql, is_child_table=True)
         logger.info("✅ Condition codes table dropped, recreated and written successfully")
-        
+
         logger.info("📝 Dropping and recreating condition evidence table...")
         evidence_table_sql = create_condition_evidence_table_sql()
-        write_to_redshift_versioned(evidence_resolved_frame, "condition_evidence", "condition_id", evidence_table_sql)
+        write_to_redshift_versioned(evidence_resolved_frame, "condition_evidence", "condition_id", evidence_table_sql, is_child_table=True)
         logger.info("✅ Condition evidence table dropped, recreated and written successfully")
-        
+
         logger.info("📝 Dropping and recreating condition extensions table...")
         extensions_table_sql = create_condition_extensions_table_sql()
-        write_to_redshift_versioned(extensions_resolved_frame, "condition_extensions", "condition_id", extensions_table_sql)
+        write_to_redshift_versioned(extensions_resolved_frame, "condition_extensions", "condition_id", extensions_table_sql, is_child_table=True)
         logger.info("✅ Condition extensions table dropped, recreated and written successfully")
         
         # Calculate processing time
