@@ -999,6 +999,34 @@ def transform_condition_extensions(df):
             F.current_timestamp().alias("updated_at")
         ).filter(F.lit(False))
 
+    # Check the data type of the extension column
+    ext_dtype = str(df.schema["extension"].dataType)
+    logger.info(f"Extension column data type: {ext_dtype}")
+
+    # For StringType extension data, return empty for now
+    # The extension data is typically JSON-formatted but parsing it would require
+    # complex JSON parsing which may have performance implications
+    if ext_dtype.startswith("StringType") or "StringType" in ext_dtype:
+        logger.warning("Extension column is StringType - returning empty DataFrame")
+        logger.warning("Extension parsing from string representation is not yet implemented")
+        return df.select(
+            F.col("id").alias("condition_id"),
+            F.lit(None).alias("extension_url"),
+            F.lit("simple").alias("extension_type"),
+            F.lit("unknown").alias("value_type"),
+            F.lit(None).alias("value_string"),
+            F.lit(None).alias("value_datetime"),
+            F.lit(None).alias("value_reference"),
+            F.lit(None).alias("value_code"),
+            F.lit(None).cast(BooleanType()).alias("value_boolean"),
+            F.lit(None).cast(DecimalType(18,6)).alias("value_decimal"),
+            F.lit(None).cast("integer").alias("value_integer"),
+            F.lit(None).alias("parent_extension_url"),
+            F.lit(0).alias("extension_order"),
+            F.current_timestamp().alias("created_at"),
+            F.current_timestamp().alias("updated_at")
+        ).filter(F.lit(False))
+
     try:
         # Explode the extension array
         extensions_df = df.select(
