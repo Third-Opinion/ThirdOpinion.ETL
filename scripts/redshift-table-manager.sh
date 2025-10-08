@@ -503,10 +503,11 @@ record_deployment() {
         return 0
     fi
 
-    local git_sha=$(get_git_sha)
-    local git_message=$(get_git_commit_message)
-    local git_author=$(get_git_author)
-    local git_date=$(get_git_commit_date)
+    # Use the file's last modification commit, not HEAD
+    local git_sha=$(get_file_git_sha "$ddl_file")
+    local git_message=$(git log -1 --pretty=%B "$git_sha" 2>/dev/null | tr -d "'" | head -c 1000)
+    local git_author=$(git log -1 --pretty=%an "$git_sha" 2>/dev/null)
+    local git_date=$(git log -1 --pretty=%cI "$git_sha" 2>/dev/null)
 
     local aws_opts=""
     if [ -n "$AWS_PROFILE" ]; then
@@ -1054,13 +1055,13 @@ cmd_deploy() {
         return 1
     fi
 
-    # Get git info
-    local git_sha=$(get_git_sha)
-    local git_sha_short=$(get_git_sha_short)
-    local git_message=$(get_git_commit_message)
-    local git_author=$(get_git_author)
+    # Get git info for this specific file
+    local git_sha=$(get_file_git_sha "$ddl_file")
+    local git_sha_short=$(git rev-parse --short "$git_sha" 2>/dev/null)
+    local git_message=$(git log -1 --pretty=%B "$git_sha" 2>/dev/null | tr -d "'" | head -c 1000)
+    local git_author=$(git log -1 --pretty=%an "$git_sha" 2>/dev/null)
 
-    log_git "Git SHA: $git_sha_short"
+    log_git "Git SHA: $git_sha_short (file: $ddl_file)"
     log_git "Author: $git_author"
     log_git "Message: $git_message"
 
