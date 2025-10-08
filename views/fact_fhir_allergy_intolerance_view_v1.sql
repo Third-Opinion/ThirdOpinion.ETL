@@ -54,7 +54,8 @@
 --
 -- ===================================================================
 
-CREATE VIEW fact_fhir_allergy_intolerance_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_allergy_intolerance_view_v1
+AUTO REFRESH NO
 AS
 WITH aggregated_extensions AS (
     SELECT
@@ -102,8 +103,8 @@ SELECT
     ai.meta_last_updated,                  -- FHIR version ID
 
     -- ETL Audit Fields
-    ai.created_at,                       -- Record creation time
-    ai.updated_at,                       -- Record update time
+    ai.created_at AS etl_created_at,                       -- Record creation time
+    ai.updated_at AS etl_updated_at,                       -- Record update time
 
     -- ALLERGY CODES (DENORMALIZED COLUMNS)
     -- Individual code columns from allergy_intolerance_codings table

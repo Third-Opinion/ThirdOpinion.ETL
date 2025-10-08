@@ -499,7 +499,7 @@ def create_redshift_tables_sql():
     DROP TABLE IF EXISTS public.document_references CASCADE;
 
     CREATE TABLE public.document_references (
-        document_reference_id VARCHAR(255) PRIMARY KEY,
+        document_reference_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         status VARCHAR(50),
         type_code VARCHAR(50),

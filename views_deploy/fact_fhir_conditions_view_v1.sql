@@ -1,4 +1,5 @@
-CREATE VIEW fact_fhir_conditions_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_conditions_view_v1
+AUTO REFRESH NO
 AS WITH aggregated_body_sites AS (
     SELECT
         cb.condition_id,
@@ -308,8 +309,8 @@ SELECT
     c.meta_security,
     c.meta_tag,
     -- ETL Audit Fields
-    c.created_at,
-    c.updated_at,
+    c.created_at AS etl_created_at,
+    c.updated_at AS etl_updated_at,
     -- CONDITION CODES (DENORMALIZED COLUMNS)
     -- Individual code columns from condition_codes table
     -- This will create one row per condition-code combination

@@ -9,6 +9,11 @@
 # 3. Waits for each dependency to complete before proceeding
 # 4. Optionally refreshes views with data
 #
+# Usage:
+#   ./redeploy_fhir_views.sh              # Normal mode with status checks
+#   ./redeploy_fhir_views.sh --skip-status  # Skip status checks (faster menu)
+#   ./redeploy_fhir_views.sh -s           # Short form
+#
 # Dependency hierarchy:
 # - Base tables (no dependencies) are deployed first
 # - Views that depend on other views are deployed after their dependencies
@@ -28,6 +33,13 @@ DATABASE="dev"
 SECRET_ARN="arn:aws:secretsmanager:us-east-2:442042533707:secret:redshift!prod-redshift-main-ue2-awsuser-yp5Lq4"
 REGION="us-east-2"
 
+# Parse command line arguments
+SKIP_STATUS_CHECK=false
+if [ "$1" = "--skip-status" ] || [ "$1" = "-s" ]; then
+    SKIP_STATUS_CHECK=true
+    echo "Status checks disabled - menu will load faster"
+fi
+
 # Define dependency levels (views in same level can be deployed in parallel)
 # Level 0: Base views with no dependencies on other views
 DEPENDENCY_LEVEL_0=(
@@ -40,7 +52,6 @@ DEPENDENCY_LEVEL_1=(
     "fact_fhir_allergy_intolerance_view_v1"  # Depends on allergy tables only
     "fact_fhir_care_plans_view_v1"     # Depends on care plan tables only
     "fact_fhir_medication_requests_view_v1"  # Depends on medication tables only
-    "fact_fhir_observations_view_v1"   # Depends on observation tables only
     "fact_fhir_procedures_view_v1"     # Depends on procedure tables only
     "fact_fhir_diagnostic_reports_view_v1"  # Depends on diagnostic report tables only
     "fact_fhir_document_references_view_v1"  # Depends on document reference tables only
@@ -48,6 +59,7 @@ DEPENDENCY_LEVEL_1=(
 
 # Level 2: Views that depend on Level 1 views
 DEPENDENCY_LEVEL_2=(
+    "fact_fhir_observations_view_v1"   # Depends on observation tables only (large view)
     "fact_fhir_conditions_view_v1"     # May depend on encounters
     "fact_fhir_encounters_view_v1"     # May depend on conditions/patients
 )
@@ -210,22 +222,24 @@ execute_sql() {
     fi
 }
 
-# Function to check if view exists
-check_view_exists() {
+# Function to check if view exists and get stats
+check_view_stats() {
     local view_name="$1"
 
-    local sql="SELECT COUNT(*) FROM pg_views WHERE viewname = '${view_name}' AND schemaname = 'public';"
+    # Check if view exists
+    local exists_sql="SELECT COUNT(*) FROM pg_views WHERE viewname = '${view_name}' AND schemaname = 'public';"
 
     local statement_id=$(aws redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
         --database "$DATABASE" \
         --secret-arn "$SECRET_ARN" \
-        --sql "$sql" \
+        --sql "$exists_sql" \
         --region "$REGION" \
         --query Id \
         --output text)
 
     if [ -z "$statement_id" ]; then
+        echo "ERROR|0|NULL"
         return 1
     fi
 
@@ -242,19 +256,160 @@ check_view_exists() {
         timeout=$((timeout - 1))
     done
 
-    if [ "$status" = "FINISHED" ]; then
-        local count=$(aws redshift-data get-statement-result \
-            --id "$statement_id" \
+    if [ "$status" != "FINISHED" ]; then
+        echo "ERROR|0|NULL"
+        return 1
+    fi
+
+    local count=$(aws redshift-data get-statement-result \
+        --id "$statement_id" \
+        --region "$REGION" \
+        --query 'Records[0][0].longValue' \
+        --output text)
+
+    if [ "$count" != "1" ]; then
+        echo "NOT_EXISTS|0|NULL"
+        return 1
+    fi
+
+    # View exists, now get row count and max updated_at
+    # First, check if the view has an updated_at or etl_updated_at column
+    local has_updated_at=$(aws redshift-data execute-statement \
+        --cluster-identifier "$CLUSTER_ID" \
+        --database "$DATABASE" \
+        --secret-arn "$SECRET_ARN" \
+        --sql "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = '${view_name}' AND column_name IN ('updated_at', 'etl_updated_at');" \
+        --region "$REGION" \
+        --query Id \
+        --output text)
+
+    # Wait for column check
+    local check_status="SUBMITTED"
+    local check_timeout=30
+    while [ "$check_status" != "FINISHED" ] && [ "$check_status" != "FAILED" ] && [ $check_timeout -gt 0 ]; do
+        sleep 1
+        check_status=$(aws redshift-data describe-statement \
+            --id "$has_updated_at" \
+            --region "$REGION" \
+            --query Status \
+            --output text)
+        check_timeout=$((check_timeout - 1))
+    done
+
+    local stats_sql
+    if [ "$check_status" = "FINISHED" ]; then
+        local col_exists=$(aws redshift-data get-statement-result \
+            --id "$has_updated_at" \
             --region "$REGION" \
             --query 'Records[0][0].longValue' \
             --output text)
 
-        if [ "$count" = "1" ]; then
-            return 0  # View exists
+        if [ "$col_exists" -gt 0 ]; then
+            # Try etl_updated_at first, then updated_at
+            stats_sql="SELECT COUNT(*) as row_count, COALESCE(MAX(etl_updated_at), MAX(updated_at)) as max_updated_at FROM ${view_name};"
+        else
+            # No updated_at column, just get count
+            stats_sql="SELECT COUNT(*) as row_count FROM ${view_name};"
+        fi
+    else
+        # Default to trying updated_at
+        stats_sql="SELECT COUNT(*) as row_count, MAX(updated_at) as max_updated_at FROM ${view_name};"
+    fi
+
+    statement_id=$(aws redshift-data execute-statement \
+        --cluster-identifier "$CLUSTER_ID" \
+        --database "$DATABASE" \
+        --secret-arn "$SECRET_ARN" \
+        --sql "$stats_sql" \
+        --region "$REGION" \
+        --query Id \
+        --output text)
+
+    if [ -z "$statement_id" ]; then
+        echo "EXISTS|ERROR|NULL"
+        return 0
+    fi
+
+    # Wait for completion
+    status="SUBMITTED"
+    timeout=60
+    while [ "$status" != "FINISHED" ] && [ "$status" != "FAILED" ] && [ $timeout -gt 0 ]; do
+        sleep 1
+        status=$(aws redshift-data describe-statement \
+            --id "$statement_id" \
+            --region "$REGION" \
+            --query Status \
+            --output text)
+        timeout=$((timeout - 1))
+    done
+
+    if [ "$status" != "FINISHED" ]; then
+        echo "EXISTS|ERROR|NULL"
+        return 0
+    fi
+
+    # Extract row_count and max_updated_at
+    # Get the full result as JSON
+    local full_result=$(aws redshift-data get-statement-result \
+        --id "$statement_id" \
+        --region "$REGION" \
+        --output json)
+
+    # Check if we have jq available for robust JSON parsing
+    if command -v jq &> /dev/null; then
+        # Use jq for reliable JSON parsing
+        local row_count=$(echo "$full_result" | jq -r '.Records[0][0].longValue // .Records[0][0].stringValue // "0"')
+
+        # Check if there's a second column (max_updated_at)
+        local has_second_col=$(echo "$full_result" | jq -r '.Records[0] | length')
+        if [ "$has_second_col" -gt 1 ]; then
+            local max_updated=$(echo "$full_result" | jq -r '.Records[0][1].stringValue // "NULL"')
+        else
+            local max_updated="N/A"
+        fi
+    else
+        # Fallback to grep/sed parsing
+        # Try to extract longValue for row count
+        local row_count=$(echo "$full_result" | grep -o '"longValue"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | grep -o '[0-9]*$')
+
+        # If no longValue, try stringValue for row count
+        if [ -z "$row_count" ]; then
+            row_count=$(echo "$full_result" | grep -o '"stringValue"[[:space:]]*:[[:space:]]*"[0-9]*"' | head -1 | grep -o '[0-9]*')
+        fi
+
+        # Extract second field for max_updated (skip first stringValue match)
+        local max_updated=$(echo "$full_result" | grep -o '"stringValue"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -n '2p' | sed 's/.*"\([^"]*\)".*/\1/')
+
+        if [ -z "$row_count" ]; then
+            row_count="0"
+        fi
+        if [ -z "$max_updated" ]; then
+            max_updated="N/A"
         fi
     fi
 
-    return 1  # View doesn't exist
+    # Handle None/null values
+    if [ "$row_count" = "None" ] || [ "$row_count" = "null" ]; then
+        row_count="0"
+    fi
+    if [ "$max_updated" = "None" ] || [ "$max_updated" = "null" ]; then
+        max_updated="NULL"
+    fi
+
+    echo "EXISTS|$row_count|$max_updated"
+    return 0
+}
+
+# Function to check if view exists (backwards compatible)
+check_view_exists() {
+    local view_name="$1"
+    local stats=$(check_view_stats "$view_name")
+    local exists=$(echo "$stats" | cut -d'|' -f1)
+
+    if [ "$exists" = "EXISTS" ]; then
+        return 0
+    fi
+    return 1
 }
 
 # Function to drop all views in reverse dependency order
@@ -401,11 +556,29 @@ display_menu() {
         local color="$RED"
 
         if view_file_exists "$view_name"; then
-            status="[SQL Ready]"
-            color="$GREEN"
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
         fi
 
-        printf "  %2d) %-50s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
         index=$((index + 1))
     done
 
@@ -417,11 +590,29 @@ display_menu() {
         local color="$RED"
 
         if view_file_exists "$view_name"; then
-            status="[SQL Ready]"
-            color="$GREEN"
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
         fi
 
-        printf "  %2d) %-50s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
         index=$((index + 1))
     done
 
@@ -433,11 +624,29 @@ display_menu() {
         local color="$RED"
 
         if view_file_exists "$view_name"; then
-            status="[SQL Ready]"
-            color="$GREEN"
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
         fi
 
-        printf "  %2d) %-50s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
         index=$((index + 1))
     done
 
@@ -449,11 +658,29 @@ display_menu() {
         local color="$RED"
 
         if view_file_exists "$view_name"; then
-            status="[SQL Ready]"
-            color="$GREEN"
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
         fi
 
-        printf "  %2d) %-50s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
         index=$((index + 1))
     done
 

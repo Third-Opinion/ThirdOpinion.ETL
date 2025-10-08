@@ -38,7 +38,8 @@
 -- 
 -- ===================================================================
 
-CREATE VIEW fact_fhir_patients_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_patients_view_v1
+AUTO REFRESH NO
 AS
 WITH ranked_names AS (
     -- Use window function for name ranking

@@ -389,6 +389,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
+# BEGIN NOTE TO AI: do not change the following section
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
 
@@ -411,6 +412,8 @@ glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
+
+# END NOTE TO AI
 
 # Configuration - Updated to use S3/Iceberg instead of Glue Catalog
 DATABASE_NAME = ahl_database  # Using AHL Iceberg database
@@ -559,7 +562,7 @@ def create_redshift_tables_sql():
     return """
     DROP TABLE IF EXISTS public.practitioners CASCADE;
     CREATE TABLE public.practitioners (
-        practitioner_id VARCHAR(255) PRIMARY KEY,
+        practitioner_id VARCHAR(255) NOT NULL,
         resource_type VARCHAR(50),
         active BOOLEAN,
         meta_last_updated TIMESTAMP,

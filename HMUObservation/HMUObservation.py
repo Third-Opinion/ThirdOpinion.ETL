@@ -1139,7 +1139,7 @@ def create_redshift_tables_sql():
     return """
     -- Main observations table
     CREATE TABLE IF NOT EXISTS public.observations (
-        observation_id VARCHAR(255) PRIMARY KEY,
+        observation_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         encounter_id VARCHAR(255),
         specimen_id VARCHAR(255),

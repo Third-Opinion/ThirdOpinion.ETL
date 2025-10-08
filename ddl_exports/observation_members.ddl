@@ -1,4 +1,5 @@
 CREATE TABLE public.observation_members (
-    observation_id character varying(65535),
-    member_observation_id character varying(65535)
-);
+    observation_id character varying(65535) ENCODE lzo,
+    member_observation_id character varying(65535) ENCODE lzo
+)
+DISTSTYLE EVEN;

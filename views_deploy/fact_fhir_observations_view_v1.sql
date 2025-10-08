@@ -213,6 +213,10 @@ SELECT
     o.method_text,
     o.meta_last_updated,
 
+    -- ETL Audit Fields
+    o.created_at AS etl_created_at,
+    o.updated_at AS etl_updated_at,
+
     -- COMPUTED FIELDS
     CASE
         WHEN o.value_string IS NOT NULL

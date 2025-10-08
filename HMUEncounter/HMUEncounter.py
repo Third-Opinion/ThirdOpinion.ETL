@@ -584,7 +584,7 @@ def create_redshift_tables_sql():
     return """
     -- Main encounters table
     CREATE TABLE IF NOT EXISTS public.encounters (
-        encounter_id VARCHAR(255) PRIMARY KEY,
+        encounter_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255),
         status VARCHAR(50),
         resourcetype VARCHAR(50),

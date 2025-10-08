@@ -48,7 +48,8 @@
 -- 
 -- ===================================================================
 
-CREATE VIEW fact_fhir_procedures_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_procedures_view_v1
+AUTO REFRESH NO
 AS
 WITH code_counts AS (
     SELECT 
@@ -116,8 +117,8 @@ SELECT
     p.meta_last_updated,                   -- FHIR resource version
     
     -- ETL Audit Fields
-    p.created_at,
-    p.updated_at,
+    p.created_at AS etl_created_at,
+    p.updated_at AS etl_updated_at,
     -- CODE CODINGS (AGGREGATED FROM CTE)
     -- ============================================
     ac.code_codings,

@@ -407,7 +407,7 @@ def create_care_plans_table_sql():
     """Generate SQL for creating main care_plans table in Redshift"""
     return """
     CREATE TABLE IF NOT EXISTS public.care_plans (
-        care_plan_id VARCHAR(255) PRIMARY KEY,
+        care_plan_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         status VARCHAR(50),
         intent VARCHAR(50),

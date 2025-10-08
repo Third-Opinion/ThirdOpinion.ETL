@@ -33,7 +33,8 @@
 -- 
 -- ===================================================================
 
-CREATE VIEW fact_fhir_encounters_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_encounters_view_v1
+AUTO REFRESH NO
 AS
 WITH condition_counts AS (
     -- Count conditions and get primary diagnosis with prioritized code system

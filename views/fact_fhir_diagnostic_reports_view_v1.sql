@@ -55,7 +55,8 @@
 -- 
 -- ===================================================================
 
-CREATE VIEW fact_fhir_diagnostic_reports_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_diagnostic_reports_view_v1
+AUTO REFRESH NO
 AS
 WITH result_counts AS (
     SELECT 
@@ -173,8 +174,8 @@ SELECT
     dr.extensions,                        -- FHIR extensions as JSON string
     
     -- ETL Audit Fields
-    dr.created_at,
-    dr.updated_at,
+    dr.created_at AS etl_created_at,
+    dr.updated_at AS etl_updated_at,
     -- AGGREGATED DATA FROM CTEs
     -- ============================================
     ar.results,

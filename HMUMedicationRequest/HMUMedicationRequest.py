@@ -504,7 +504,7 @@ def create_redshift_tables_sql():
     return """
     -- Main medication requests table
     CREATE TABLE IF NOT EXISTS public.medication_requests (
-        medication_request_id VARCHAR(255) PRIMARY KEY,
+        medication_request_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         encounter_id VARCHAR(255),
         medication_id VARCHAR(255),

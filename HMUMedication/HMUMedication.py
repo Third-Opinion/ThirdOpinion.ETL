@@ -323,7 +323,7 @@ def create_redshift_tables_sql():
     return """
     -- Main medications table
     CREATE TABLE IF NOT EXISTS public.medications (
-        medication_id VARCHAR(255) PRIMARY KEY,
+        medication_id VARCHAR(255) NOT NULL,
         resource_type VARCHAR(50),
         code_text VARCHAR(500),
         code SUPER,

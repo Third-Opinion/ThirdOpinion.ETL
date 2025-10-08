@@ -535,7 +535,7 @@ def create_redshift_tables_sql():
     return """
     -- Main patients table
     CREATE TABLE IF NOT EXISTS public.patients (
-        patient_id VARCHAR(255) PRIMARY KEY,
+        patient_id VARCHAR(255) NOT NULL,
         active BOOLEAN,
         gender VARCHAR(10),
         birth_date DATE,

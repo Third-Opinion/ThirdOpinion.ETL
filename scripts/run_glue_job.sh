@@ -256,7 +256,13 @@ find_job_python_file() {
     if [[ -n "$mapped_folder" ]]; then
         echo -e "${BLUE}Using mapped folder: $mapped_folder${NC}" >&2
         if [[ -d "$mapped_folder" ]]; then
-            python_file=$(find "$mapped_folder" -name "*.py" | head -1)
+            # First try to find a file matching the folder name
+            local folder_name=$(basename "$mapped_folder")
+            python_file=$(find "$mapped_folder" -name "${folder_name}.py" | head -1)
+            # If not found, fall back to any .py file (excluding common utility files)
+            if [[ -z "$python_file" ]]; then
+                python_file=$(find "$mapped_folder" -name "*.py" ! -name "spark_utils.py" ! -name "fhir_*" | head -1)
+            fi
         fi
     fi
     

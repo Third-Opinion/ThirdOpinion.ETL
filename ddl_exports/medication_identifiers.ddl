@@ -1,5 +1,6 @@
 CREATE TABLE public.medication_identifiers (
-    medication_id character varying(255),
-    identifier_system character varying(255),
-    identifier_value character varying(255)
-);
+    medication_id character varying(65535) ENCODE lzo,
+    identifier_system character varying(65535) ENCODE lzo,
+    identifier_value character varying(65535) ENCODE lzo
+)
+DISTSTYLE EVEN;

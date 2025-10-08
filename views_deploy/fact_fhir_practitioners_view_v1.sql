@@ -1,4 +1,5 @@
-CREATE VIEW fact_fhir_practitioners_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_practitioners_view_v1
+AUTO REFRESH NO
 AS
 WITH ranked_names AS (
     -- Subquery to rank and select the best name per practitioner

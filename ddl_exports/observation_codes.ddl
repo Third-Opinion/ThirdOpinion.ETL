@@ -1,7 +1,8 @@
-CREATE TABLE IF NOT EXISTS public.observation_codes (
-    observation_id VARCHAR(255),
-    code_code VARCHAR(50),
-    code_system VARCHAR(255),
-    code_display VARCHAR(255),
-    code_text VARCHAR(500)
-) SORTKEY (observation_id, code_code);
+CREATE TABLE public.observation_codes (
+    observation_id character varying(65535) ENCODE lzo,
+    code_code character varying(65535) ENCODE lzo,
+    code_system character varying(65535) ENCODE lzo,
+    code_display character varying(65535) ENCODE lzo,
+    code_text character varying(65535) ENCODE lzo
+)
+DISTSTYLE EVEN;

@@ -1,4 +1,5 @@
-CREATE VIEW fact_fhir_care_plans_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_care_plans_view_v1
+AUTO REFRESH NO
 AS
 SELECT 
     -- CORE CARE PLAN DEMOGRAPHICS AND METADATA
@@ -12,9 +13,9 @@ SELECT
     -- FHIR Metadata fields for tracking and versioning
     cp.meta_last_updated,              -- Last update timestamp
 
-    -- ETL Audit fields
-    cp.created_at,                   -- Record creation timestamp
-    cp.updated_at,                   -- Record last update timestamp
+    -- ETL Audit Fields
+    cp.created_at AS etl_created_at,                   -- Record creation timestamp
+    cp.updated_at AS etl_updated_at,                   -- Record last update timestamp
     -- CARE PLAN CATEGORIES PROCESSING
     -- Constructs a JSON array containing care plan category information
     -- Uses extensive string cleaning to handle malformed data

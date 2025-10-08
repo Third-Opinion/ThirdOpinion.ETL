@@ -608,7 +608,7 @@ def create_redshift_tables_sql():
         extensions TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (diagnostic_report_id)
+        -- Removed PRIMARY KEY constraint to allow DISTKEY/SORTKEY
     ) DISTKEY (patient_id) SORTKEY (patient_id, effective_datetime)
     """
 

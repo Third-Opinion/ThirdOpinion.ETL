@@ -317,7 +317,7 @@ def create_redshift_tables_sql():
     return """
     DROP TABLE IF EXISTS public.procedures CASCADE;
     CREATE TABLE public.procedures (
-        procedure_id VARCHAR(255) PRIMARY KEY,
+        procedure_id VARCHAR(255) NOT NULL,
         resource_type VARCHAR(50),
         status VARCHAR(50),
         patient_id VARCHAR(255) NOT NULL,

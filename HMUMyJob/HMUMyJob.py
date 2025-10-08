@@ -777,7 +777,7 @@ def create_redshift_tables_sql():
     
     -- Main conditions table
     CREATE TABLE public.conditions (
-        condition_id VARCHAR(255) PRIMARY KEY,
+        condition_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         encounter_id VARCHAR(255),
         clinical_status_code VARCHAR(50),

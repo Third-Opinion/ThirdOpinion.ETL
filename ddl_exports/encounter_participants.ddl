@@ -1,8 +1,10 @@
 CREATE TABLE public.encounter_participants (
-    encounter_id character varying(255),
-    participant_type character varying(50),
-    participant_id character varying(255),
-    participant_display character varying(255),
-    period_start timestamp without time zone,
-    period_end timestamp without time zone
-);
+    encounter_id character varying(65535) ENCODE lzo,
+    meta_last_updated timestamp without time zone ENCODE az64,
+    participant_type character varying(65535) ENCODE lzo,
+    participant_id character varying(65535) ENCODE lzo,
+    participant_display character varying(65535) ENCODE lzo,
+    period_start timestamp without time zone ENCODE az64,
+    period_end timestamp without time zone ENCODE az64
+)
+DISTSTYLE EVEN;

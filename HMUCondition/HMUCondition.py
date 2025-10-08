@@ -1115,7 +1115,7 @@ def create_redshift_tables_sql():
     return """
     -- Main conditions table
     CREATE TABLE IF NOT EXISTS public.conditions (
-        condition_id VARCHAR(255) PRIMARY KEY,
+        condition_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         encounter_id VARCHAR(255),
         clinical_status_code VARCHAR(50),

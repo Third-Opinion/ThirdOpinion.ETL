@@ -399,7 +399,7 @@ def create_redshift_tables_sql():
     return """
     -- Main allergy intolerance table
     CREATE TABLE IF NOT EXISTS public.allergy_intolerance (
-        allergy_intolerance_id VARCHAR(255) PRIMARY KEY,
+        allergy_intolerance_id VARCHAR(255) NOT NULL,
         resourcetype VARCHAR(50),
         clinical_status_code VARCHAR(50),
         clinical_status_display VARCHAR(255),

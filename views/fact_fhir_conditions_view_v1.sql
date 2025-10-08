@@ -62,7 +62,8 @@
 -- - Primary vs secondary code analysis using code_rank column
 --
 -- ===================================================================
-CREATE VIEW fact_fhir_conditions_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_conditions_view_v1
+AUTO REFRESH NO
 AS WITH aggregated_body_sites AS (
     SELECT
         cb.condition_id,
@@ -372,8 +373,8 @@ SELECT
     c.meta_security,
     c.meta_tag,
     -- ETL Audit Fields
-    c.created_at,
-    c.updated_at,
+    c.created_at AS etl_created_at,
+    c.updated_at AS etl_updated_at,
     -- CONDITION CODES (DENORMALIZED COLUMNS)
     -- Individual code columns from condition_codes table
     -- This will create one row per condition-code combination
@@ -434,4 +435,4 @@ FROM
     LEFT JOIN aggregated_categories acat ON c.condition_id = acat.condition_id
     LEFT JOIN aggregated_evidence ae ON c.condition_id = ae.condition_id
     LEFT JOIN aggregated_notes an ON c.condition_id = an.condition_id
-    LEFT JOIN aggregated_stages ast ON c.condition_id = ast.condition_id;3
+    LEFT JOIN aggregated_stages ast ON c.condition_id = ast.condition_id;
