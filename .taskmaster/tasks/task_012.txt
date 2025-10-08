@@ -1,0 +1,97 @@
+# Task ID: 12
+# Title: Externalize table creation from Glue jobs to SQL DDL files
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Extract table creation logic from each HMU_*.py job into individual SQL files stored in ./ddl directory (one file per table named table_name.sql)
+# Details:
+Update Glue scripts to: 1) Check table existence during initialization, 2) Print columns from each table when initializing, 3) Assume tables exist in write_to_redshift function
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Extract DDL from HMUAllergyIntolerance.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/allergy_intolerances.sql
+### Details:
+
+
+## 2. Extract DDL from HMUCarePlan.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/care_plans.sql
+### Details:
+
+
+## 3. Extract DDL from HMUCondition.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/conditions.sql and ./ddl/condition_*.sql files
+### Details:
+
+
+## 4. Extract DDL from HMUDiagnosticReport.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/diagnostic_reports.sql and related tables
+### Details:
+
+
+## 5. Extract DDL from HMUDocumentReference.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/document_references.sql
+### Details:
+
+
+## 6. Extract DDL from HMUEncounter.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/encounters.sql and related tables
+### Details:
+
+
+## 7. Extract DDL from HMUMedication.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/medications.sql
+### Details:
+
+
+## 8. Extract DDL from HMUMedicationDispense.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/medication_dispenses.sql
+### Details:
+
+
+## 9. Extract DDL from HMUMedicationRequest.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/medication_requests.sql
+### Details:
+
+
+## 10. Extract DDL from HMUObservation.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/observations.sql and observation_*.sql files
+### Details:
+
+
+## 11. Extract DDL from HMUPatient.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/patients.sql and related tables
+### Details:
+
+
+## 12. Extract DDL from HMUPractitioner.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/practitioners.sql
+### Details:
+
+
+## 13. Extract DDL from HMUProcedure.py [pending]
+### Dependencies: None
+### Description: Extract table creation logic to ./ddl/procedures.sql
+### Details:
+
+
+## 14. Update Glue jobs to use external DDL [pending]
+### Dependencies: None
+### Description: Modify all HMU*.py jobs to check table existence, print columns, and assume tables exist in write_to_redshift
+### Details:
+
+

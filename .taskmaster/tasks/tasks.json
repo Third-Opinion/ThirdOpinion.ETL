@@ -785,11 +785,149 @@
             "parentTaskId": 11
           }
         ]
+      },
+      {
+        "id": 12,
+        "title": "Externalize table creation from Glue jobs to SQL DDL files",
+        "description": "Extract table creation logic from each HMU_*.py job into individual SQL files stored in ./ddl directory (one file per table named table_name.sql). Each Glue job creates multiple tables, so there will be multiple SQL DDL files per job. For example, HMUPractitioner.py creates 4 tables: practitioners, practitioner_addresses, practitioner_names, and practitioner_telecoms.",
+        "details": "Update Glue scripts to: 1) Check table existence during initialization, 2) Print columns from each table when initializing, 3) Assume tables exist in write_to_redshift function. The extraction should identify all CREATE TABLE statements in each Glue job and create separate SQL files for each table.",
+        "testStrategy": "",
+        "status": "done",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Extract DDL from HMUAllergyIntolerance.py",
+            "description": "Extract table creation logic to ./ddl/allergy_intolerances.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 2,
+            "title": "Extract DDL from HMUCarePlan.py",
+            "description": "Extract table creation logic to ./ddl/care_plans.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 3,
+            "title": "Extract DDL from HMUCondition.py",
+            "description": "Extract table creation logic to ./ddl/conditions.sql and ./ddl/condition_*.sql files",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 4,
+            "title": "Extract DDL from HMUDiagnosticReport.py",
+            "description": "Extract table creation logic to ./ddl/diagnostic_reports.sql and related tables",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 5,
+            "title": "Extract DDL from HMUDocumentReference.py",
+            "description": "Extract table creation logic to ./ddl/document_references.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 6,
+            "title": "Extract DDL from HMUEncounter.py",
+            "description": "Extract table creation logic to ./ddl/encounters.sql and related tables",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 7,
+            "title": "Extract DDL from HMUMedication.py",
+            "description": "Extract table creation logic to ./ddl/medications.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 8,
+            "title": "Extract DDL from HMUMedicationDispense.py",
+            "description": "Extract table creation logic to ./ddl/medication_dispenses.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 9,
+            "title": "Extract DDL from HMUMedicationRequest.py",
+            "description": "Extract table creation logic to ./ddl/medication_requests.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 10,
+            "title": "Extract DDL from HMUObservation.py",
+            "description": "Extract table creation logic to ./ddl/observations.sql and observation_*.sql files",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 11,
+            "title": "Extract DDL from HMUPatient.py",
+            "description": "Extract table creation logic to ./ddl/patients.sql and related tables",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 12,
+            "title": "Extract DDL from HMUPractitioner.py",
+            "description": "Extract table creation logic to ./ddl/practitioners.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 13,
+            "title": "Extract DDL from HMUProcedure.py",
+            "description": "Extract table creation logic to ./ddl/procedures.sql",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          },
+          {
+            "id": 14,
+            "title": "Update Glue jobs to use external DDL",
+            "description": "Modify all HMU*.py jobs to check table existence, print columns, and assume tables exist in write_to_redshift",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-09-10T00:22:35.036Z",
-      "updated": "2025-09-30T00:45:03.269Z",
+      "updated": "2025-10-08T23:13:36.101Z",
       "description": "Tasks for master context"
     }
   }
