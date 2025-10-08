@@ -224,10 +224,17 @@ get_dist_style() {
     local table_name="$1"
 
     local sql="
-    SELECT diststyle
-    FROM svv_table_info
-    WHERE \"table\" = '$table_name'
-    AND schema = '$SCHEMA';
+    SELECT
+        CASE
+            WHEN t.reldiststyle = 0 THEN 'EVEN'
+            WHEN t.reldiststyle = 1 THEN 'KEY'
+            WHEN t.reldiststyle = 8 THEN 'ALL'
+            ELSE 'AUTO'
+        END as diststyle
+    FROM pg_class t
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = '$SCHEMA'
+    AND t.relname = '$table_name';
     "
 
     local query_id=$(execute_sql "$sql" "Getting distribution style" 2>&1 | tail -1)

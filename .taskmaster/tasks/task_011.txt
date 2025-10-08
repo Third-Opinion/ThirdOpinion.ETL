@@ -1,6 +1,6 @@
 # Task ID: 11
 # Title: Refactor all Glue jobs to work with Apache Iceberg
-# Status: pending
+# Status: done
 # Dependencies: None
 # Priority: high
 # Description: Update all AWS Glue ETL jobs to use Apache Iceberg format following the HMUPatient.py template
@@ -50,85 +50,85 @@ The following Glue jobs need to be refactored and recreated:
 Test each refactored Glue job by running it against sample data to ensure proper Iceberg catalog reading and Redshift writing functionality
 
 # Subtasks:
-## 1. Refactor HMUAllergyIntolerance to use Iceberg [pending]
+## 1. Refactor HMUAllergyIntolerance to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUAllergyIntolerance.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 Update the HMUAllergyIntolerance Glue job to use Iceberg catalog with DEBUG logging
 
-## 2. Refactor HMUCarePlan to use Iceberg [pending]
+## 2. Refactor HMUCarePlan to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUCarePlan.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 3. Refactor HMUCondition to use Iceberg [pending]
+## 3. Refactor HMUCondition to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUCondition.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 4. Refactor HMUDiagnosticReport to use Iceberg [pending]
+## 4. Refactor HMUDiagnosticReport to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUDiagnosticReport.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 5. Refactor HMUDocumentReference to use Iceberg [pending]
+## 5. Refactor HMUDocumentReference to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUDocumentReference.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 6. Refactor HMUEncounter to use Iceberg [pending]
+## 6. Refactor HMUEncounter to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUEncounter.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 7. Refactor HMUMedication to use Iceberg [pending]
+## 7. Refactor HMUMedication to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUMedication.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 8. Refactor HMUMedicationDispense to use Iceberg [pending]
+## 8. Refactor HMUMedicationDispense to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUMedicationDispense.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 9. Refactor HMUMedicationRequest to use Iceberg [pending]
+## 9. Refactor HMUMedicationRequest to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUMedicationRequest.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 10. Refactor HMUObservation to use Iceberg [pending]
+## 10. Refactor HMUObservation to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUObservation.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 11. Refactor HMUPractitioner to use Iceberg [pending]
+## 11. Refactor HMUPractitioner to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUPractitioner.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 12. Refactor HMUProcedure to use Iceberg [pending]
+## 12. Refactor HMUProcedure to use Iceberg [done]
 ### Dependencies: None
 ### Description: Update HMUProcedure.py to use Iceberg catalog following HMUPatient.py template
 ### Details:
 
 
-## 13. Update shell scripts with correct Glue job names [pending]
+## 13. Update shell scripts with correct Glue job names [done]
 ### Dependencies: None
 ### Description: Find and update all shell scripts that reference Glue job names to ensure they match the actual job names
 ### Details:
 Search for all shell scripts (.sh files) in the project that reference Glue job names. Update any deployment, monitoring, testing, or orchestration scripts to use the correct job names (HMUAllergyIntolerance, HMUCarePlan, HMUCondition, etc.). Ensure consistency between scripts and actual AWS Glue job configurations.
 
-## 14. Create deployment script for Glue jobs [pending]
+## 14. Create deployment script for Glue jobs [done]
 ### Dependencies: None
 ### Description: Create a shell script to deploy all Glue jobs using HMU*.json configuration files
 ### Details:

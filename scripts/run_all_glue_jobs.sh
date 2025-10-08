@@ -9,10 +9,12 @@
 # ===================================================================
 #
 # Usage:
-#   ./run_all_glue_jobs.sh              # Upload scripts & run only failed/stopped jobs
-#   ./run_all_glue_jobs.sh --force      # Upload scripts & run all jobs regardless of status
-#   ./run_all_glue_jobs.sh --deploy     # Upload scripts, deploy jobs first, then run
-#   ./run_all_glue_jobs.sh --help       # Show this help message
+#   ./run_all_glue_jobs.sh                      # Upload scripts & run only failed/stopped jobs
+#   ./run_all_glue_jobs.sh --force              # Upload scripts & run all jobs regardless of status
+#   ./run_all_glue_jobs.sh --deploy             # Upload scripts, deploy jobs first, then run
+#   ./run_all_glue_jobs.sh --skip HMUObservation  # Skip specific job(s)
+#   ./run_all_glue_jobs.sh --skip "HMUObservation,HMUPatient"  # Skip multiple jobs
+#   ./run_all_glue_jobs.sh --help               # Show this help message
 #
 # ===================================================================
 
@@ -24,6 +26,7 @@ AWS_REGION="${AWS_REGION:-us-east-2}"
 DEPLOY_FIRST=false
 SHOW_HELP=false
 FORCE_RUN=false
+SKIP_JOBS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -34,6 +37,10 @@ while [[ $# -gt 0 ]]; do
         --force)
             FORCE_RUN=true
             shift
+            ;;
+        --skip)
+            SKIP_JOBS="$2"
+            shift 2
             ;;
         --help|-h)
             SHOW_HELP=true
@@ -61,24 +68,51 @@ if [ "$SHOW_HELP" = true ]; then
     echo "Upload Python scripts to S3 and run HMU* Glue jobs to populate Redshift tables."
     echo ""
     echo "Options:"
-    echo "  --deploy     Deploy Glue jobs from JSON templates before running"
-    echo "  --force      Run all jobs regardless of their current state"
-    echo "  --help, -h   Show this help message and exit"
+    echo "  --deploy           Deploy Glue jobs from JSON templates before running"
+    echo "  --force            Run all jobs regardless of their current state"
+    echo "  --skip JOB_NAME    Skip specific job(s), comma-separated for multiple"
+    echo "  --help, -h         Show this help message and exit"
     echo ""
     echo "Environment Variables:"
     echo "  AWS_PROFILE  AWS profile to use (default: to-prd-admin)"
     echo "  AWS_REGION   AWS region (default: us-east-2)"
     echo ""
     echo "Examples:"
-    echo "  ./run_all_glue_jobs.sh                    # Run only failed/stopped jobs"
-    echo "  ./run_all_glue_jobs.sh --force            # Run all jobs regardless of state"
-    echo "  ./run_all_glue_jobs.sh --deploy           # Deploy and run jobs"
-    echo "  AWS_PROFILE=my-profile ./run_all_glue_jobs.sh  # Use different profile"
+    echo "  ./run_all_glue_jobs.sh                              # Run only failed/stopped jobs"
+    echo "  ./run_all_glue_jobs.sh --force                      # Run all jobs regardless of state"
+    echo "  ./run_all_glue_jobs.sh --deploy                     # Deploy and run jobs"
+    echo "  ./run_all_glue_jobs.sh --skip HMUObservation        # Skip Observation job"
+    echo "  ./run_all_glue_jobs.sh --skip \"HMUObservation,HMUPatient\"  # Skip multiple jobs"
+    echo "  AWS_PROFILE=my-profile ./run_all_glue_jobs.sh       # Use different profile"
     exit 0
 fi
 
 # Array to store discovered Glue jobs
 declare -a GLUE_JOBS=()
+
+# Function to check if a job should be skipped
+should_skip_job() {
+    local job_name=$1
+
+    # If no skip list, don't skip
+    if [ -z "$SKIP_JOBS" ]; then
+        return 1
+    fi
+
+    # Convert comma-separated list to array
+    IFS=',' read -ra SKIP_ARRAY <<< "$SKIP_JOBS"
+
+    # Check if job is in skip list
+    for skip_job in "${SKIP_ARRAY[@]}"; do
+        # Trim whitespace
+        skip_job=$(echo "$skip_job" | xargs)
+        if [ "$job_name" = "$skip_job" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
 
 # Function to upload Python scripts to S3
 upload_scripts_to_s3() {
@@ -253,13 +287,28 @@ discover_glue_jobs() {
             echo -e "${GREEN}✓ Discovered ${#ALL_JOBS[@]} HMU* Glue jobs${NC}"
             echo ""
 
-            # Filter jobs based on their status (unless --force is used)
+            # Filter jobs based on their status (unless --force is used) and skip list
             if [ "$FORCE_RUN" = true ]; then
                 echo -e "${YELLOW}Force mode: Running all jobs regardless of status${NC}"
-                GLUE_JOBS=("${ALL_JOBS[@]}")
+                # Still apply skip filter even in force mode
+                for job in "${ALL_JOBS[@]}"; do
+                    if should_skip_job "$job"; then
+                        JOBS_SKIPPED+=("$job")
+                        echo -e "${BLUE}  ⊘ $job - skipped (--skip flag)${NC}"
+                    else
+                        GLUE_JOBS+=("$job")
+                    fi
+                done
             else
                 echo -e "${BLUE}Checking job statuses to determine which jobs need to run...${NC}"
                 for job in "${ALL_JOBS[@]}"; do
+                    # Check if job is in skip list first
+                    if should_skip_job "$job"; then
+                        JOBS_SKIPPED+=("$job")
+                        echo -e "${BLUE}  ⊘ $job - skipped (--skip flag)${NC}"
+                        continue
+                    fi
+
                     local status=$(get_latest_job_run_status "$job")
                     if should_run_job "$job"; then
                         GLUE_JOBS+=("$job")
@@ -466,6 +515,9 @@ echo "RUNNING ALL HMU GLUE JOBS"
 echo "====================================================================="
 echo "AWS Profile: $AWS_PROFILE"
 echo "AWS Region: $AWS_REGION"
+if [ ! -z "$SKIP_JOBS" ]; then
+    echo -e "${YELLOW}Skipping jobs: $SKIP_JOBS${NC}"
+fi
 echo "=====================================================================${NC}"
 echo ""
 
