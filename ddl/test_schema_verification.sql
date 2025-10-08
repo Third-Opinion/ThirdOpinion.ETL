@@ -6,3 +6,4 @@ CREATE TABLE public.test_schema_verification (
 )
 DISTSTYLE ALL
 SORTKEY(test_date);
+    -- Added new column for testing
