@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
+
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType
@@ -16,6 +17,79 @@ import logging
 # FHIR version comparison utilities implemented inline below
 
 # FHIR version comparison utilities are implemented inline below
+# Table utility functions (inlined for Glue compatibility)
+def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir):
+    """Check if a Redshift table exists and log its column information."""
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🔍 Checking table: public.{table_name}")
+    logger.info(f"{'='*60}")
+
+    try:
+        existing_table = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": s3_temp_dir,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": redshift_connection
+            },
+            transformation_ctx=f"check_table_{table_name}"
+        )
+
+        df = existing_table.toDF()
+        logger.info(f"✅ Table 'public.{table_name}' EXISTS")
+        logger.info(f"\n📋 Table Schema:")
+        logger.info(f"{'   Column Name':<40} {'Data Type':<20}")
+        logger.info(f"   {'-'*40} {'-'*20}")
+
+        for field in df.schema.fields:
+            logger.info(f"   {field.name:<40} {str(field.dataType):<20}")
+
+        row_count = df.count()
+        logger.info(f"\n📊 Table Statistics:")
+        logger.info(f"   Total columns: {len(df.schema.fields)}")
+        logger.info(f"   Total rows: {row_count:,}")
+
+        return True
+
+    except Exception as e:
+        logger.warning(f"⚠️  Table 'public.{table_name}' DOES NOT EXIST or cannot be accessed")
+        logger.debug(f"   Error details: {str(e)}")
+        logger.info(f"   Table will be created on first write operation")
+        return False
+
+def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir):
+    """Check existence and schema for multiple tables."""
+    logger.info(f"\n{'='*80}")
+    logger.info(f"🔍 CHECKING REDSHIFT TABLES")
+    logger.info(f"{'='*80}")
+    logger.info(f"Tables to check: {', '.join(table_names)}")
+
+    table_status = {}
+    for table_name in table_names:
+        exists = check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir)
+        table_status[table_name] = exists
+
+    logger.info(f"\n{'='*80}")
+    logger.info(f"📊 TABLE CHECK SUMMARY")
+    logger.info(f"{'='*80}")
+
+    existing_count = sum(1 for exists in table_status.values() if exists)
+    missing_count = len(table_names) - existing_count
+
+    logger.info(f"Total tables checked: {len(table_names)}")
+    logger.info(f"✅ Existing tables: {existing_count}")
+    logger.info(f"⚠️  Missing tables: {missing_count}")
+
+    if missing_count > 0:
+        missing_tables = [name for name, exists in table_status.items() if not exists]
+        logger.info(f"\nMissing tables (will be created):")
+        for table in missing_tables:
+            logger.info(f"  - {table}")
+
+    logger.info(f"{'='*80}\n")
+    return table_status
+
 
 def get_existing_versions_from_redshift(table_name, id_column):
     """Query Redshift to get existing entity timestamps for comparison"""
@@ -496,9 +570,7 @@ def transform_document_reference_content(df):
 def create_redshift_tables_sql():
     """Generate SQL for creating main document references table in Redshift"""
     return """
-    DROP TABLE IF EXISTS public.document_references CASCADE;
-
-    CREATE TABLE public.document_references (
+    CREATE TABLE IF NOT EXISTS public.document_references (
         document_reference_id VARCHAR(255) NOT NULL,
         patient_id VARCHAR(255) NOT NULL,
         status VARCHAR(50),
@@ -520,9 +592,7 @@ def create_redshift_tables_sql():
 def create_document_reference_identifiers_table_sql():
     """Generate SQL for creating document_reference_identifiers table"""
     return """
-    DROP TABLE IF EXISTS public.document_reference_identifiers CASCADE;
-    
-    CREATE TABLE public.document_reference_identifiers (
+    CREATE TABLE IF NOT EXISTS public.document_reference_identifiers (
         document_reference_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         identifier_system VARCHAR(255),
@@ -533,9 +603,7 @@ def create_document_reference_identifiers_table_sql():
 def create_document_reference_categories_table_sql():
     """Generate SQL for creating document_reference_categories table"""
     return """
-    DROP TABLE IF EXISTS public.document_reference_categories CASCADE;
-    
-    CREATE TABLE public.document_reference_categories (
+    CREATE TABLE IF NOT EXISTS public.document_reference_categories (
         document_reference_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         category_code VARCHAR(50),
@@ -547,9 +615,7 @@ def create_document_reference_categories_table_sql():
 def create_document_reference_authors_table_sql():
     """Generate SQL for creating document_reference_authors table"""
     return """
-    DROP TABLE IF EXISTS public.document_reference_authors CASCADE;
-    
-    CREATE TABLE public.document_reference_authors (
+    CREATE TABLE IF NOT EXISTS public.document_reference_authors (
         document_reference_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         author_id VARCHAR(255)
@@ -559,9 +625,7 @@ def create_document_reference_authors_table_sql():
 def create_document_reference_content_table_sql():
     """Generate SQL for creating document_reference_content table"""
     return """
-    DROP TABLE IF EXISTS public.document_reference_content CASCADE;
-
-    CREATE TABLE public.document_reference_content (
+    CREATE TABLE IF NOT EXISTS public.document_reference_content (
         document_reference_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         attachment_content_type VARCHAR(100),

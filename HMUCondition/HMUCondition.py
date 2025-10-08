@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
+
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType, ArrayType, StructType, StructField
@@ -16,6 +17,79 @@ import re
 # FHIR version comparison utilities implemented inline below
 
 # FHIR version comparison utilities are implemented inline below
+# Table utility functions (inlined for Glue compatibility)
+def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir):
+    """Check if a Redshift table exists and log its column information."""
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🔍 Checking table: public.{table_name}")
+    logger.info(f"{'='*60}")
+
+    try:
+        existing_table = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": s3_temp_dir,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": redshift_connection
+            },
+            transformation_ctx=f"check_table_{table_name}"
+        )
+
+        df = existing_table.toDF()
+        logger.info(f"✅ Table 'public.{table_name}' EXISTS")
+        logger.info(f"\n📋 Table Schema:")
+        logger.info(f"{'   Column Name':<40} {'Data Type':<20}")
+        logger.info(f"   {'-'*40} {'-'*20}")
+
+        for field in df.schema.fields:
+            logger.info(f"   {field.name:<40} {str(field.dataType):<20}")
+
+        row_count = df.count()
+        logger.info(f"\n📊 Table Statistics:")
+        logger.info(f"   Total columns: {len(df.schema.fields)}")
+        logger.info(f"   Total rows: {row_count:,}")
+
+        return True
+
+    except Exception as e:
+        logger.warning(f"⚠️  Table 'public.{table_name}' DOES NOT EXIST or cannot be accessed")
+        logger.debug(f"   Error details: {str(e)}")
+        logger.info(f"   Table will be created on first write operation")
+        return False
+
+def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir):
+    """Check existence and schema for multiple tables."""
+    logger.info(f"\n{'='*80}")
+    logger.info(f"🔍 CHECKING REDSHIFT TABLES")
+    logger.info(f"{'='*80}")
+    logger.info(f"Tables to check: {', '.join(table_names)}")
+
+    table_status = {}
+    for table_name in table_names:
+        exists = check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir)
+        table_status[table_name] = exists
+
+    logger.info(f"\n{'='*80}")
+    logger.info(f"📊 TABLE CHECK SUMMARY")
+    logger.info(f"{'='*80}")
+
+    existing_count = sum(1 for exists in table_status.values() if exists)
+    missing_count = len(table_names) - existing_count
+
+    logger.info(f"Total tables checked: {len(table_names)}")
+    logger.info(f"✅ Existing tables: {existing_count}")
+    logger.info(f"⚠️  Missing tables: {missing_count}")
+
+    if missing_count > 0:
+        missing_tables = [name for name, exists in table_status.items() if not exists]
+        logger.info(f"\nMissing tables (will be created):")
+        for table in missing_tables:
+            logger.info(f"  - {table}")
+
+    logger.info(f"{'='*80}\n")
+    return table_status
+
 
 def get_existing_versions_from_redshift(table_name, id_column):
     """Query Redshift to get existing entity timestamps for comparison"""
@@ -250,6 +324,10 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
 
         # Step 6: Write only the new/updated records
         logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
+
+        # Log the preactions SQL for debugging
+        logger.info(f"🔧 Preactions SQL for {table_name}:")
+        logger.info(selective_preactions or "(no preactions)")
 
         glueContext.write_dynamic_frame.from_options(
             frame=filtered_dynamic_frame,
@@ -1113,10 +1191,9 @@ def transform_condition_extensions(df):
 def create_redshift_tables_sql():
     """Generate SQL for creating main conditions table in Redshift with proper syntax"""
     return """
-    -- Main conditions table
     CREATE TABLE IF NOT EXISTS public.conditions (
         condition_id VARCHAR(255) NOT NULL,
-        patient_id VARCHAR(255) NOT NULL,
+        patient_id VARCHAR(255) NOT NULL DISTKEY,
         encounter_id VARCHAR(255),
         clinical_status_code VARCHAR(50),
         clinical_status_display VARCHAR(255),
@@ -1153,7 +1230,7 @@ def create_redshift_tables_sql():
         meta_tag VARCHAR(MAX),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) DISTKEY (patient_id) SORTKEY (patient_id, recorded_date);
+    ) SORTKEY (patient_id, recorded_date);
     """
 
 def create_condition_categories_table_sql():
@@ -1270,6 +1347,11 @@ def main():
         logger.info("🚀 STARTING ENHANCED FHIR CONDITION ETL PROCESS")
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Check table existence and log schemas
+        table_names = ["condition_body_sites", "condition_categories", "condition_codes", "condition_evidence", "condition_extensions", "condition_notes", "condition_stages", "conditions"]
+        check_all_tables(glueContext, table_names, REDSHIFT_CONNECTION, S3_TEMP_DIR)
+
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
         logger.info(f"🎯 Target: Redshift (7 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")

@@ -17,6 +17,79 @@ import logging
 
 # FHIR version comparison utilities are implemented inline below
 
+# Table utility functions (inlined for Glue compatibility)
+def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir):
+    """Check if a Redshift table exists and log its column information."""
+    logger.info(f"\n{'='*60}")
+    logger.info(f"🔍 Checking table: public.{table_name}")
+    logger.info(f"{'='*60}")
+
+    try:
+        existing_table = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": s3_temp_dir,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": redshift_connection
+            },
+            transformation_ctx=f"check_table_{table_name}"
+        )
+
+        df = existing_table.toDF()
+        logger.info(f"✅ Table 'public.{table_name}' EXISTS")
+        logger.info(f"\n📋 Table Schema:")
+        logger.info(f"{'   Column Name':<40} {'Data Type':<20}")
+        logger.info(f"   {'-'*40} {'-'*20}")
+
+        for field in df.schema.fields:
+            logger.info(f"   {field.name:<40} {str(field.dataType):<20}")
+
+        row_count = df.count()
+        logger.info(f"\n📊 Table Statistics:")
+        logger.info(f"   Total columns: {len(df.schema.fields)}")
+        logger.info(f"   Total rows: {row_count:,}")
+
+        return True
+
+    except Exception as e:
+        logger.warning(f"⚠️  Table 'public.{table_name}' DOES NOT EXIST or cannot be accessed")
+        logger.debug(f"   Error details: {str(e)}")
+        logger.info(f"   Table will be created on first write operation")
+        return False
+
+def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir):
+    """Check existence and schema for multiple tables."""
+    logger.info(f"\n{'='*80}")
+    logger.info(f"🔍 CHECKING REDSHIFT TABLES")
+    logger.info(f"{'='*80}")
+    logger.info(f"Tables to check: {', '.join(table_names)}")
+
+    table_status = {}
+    for table_name in table_names:
+        exists = check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir)
+        table_status[table_name] = exists
+
+    logger.info(f"\n{'='*80}")
+    logger.info(f"📊 TABLE CHECK SUMMARY")
+    logger.info(f"{'='*80}")
+
+    existing_count = sum(1 for exists in table_status.values() if exists)
+    missing_count = len(table_names) - existing_count
+
+    logger.info(f"Total tables checked: {len(table_names)}")
+    logger.info(f"✅ Existing tables: {existing_count}")
+    logger.info(f"⚠️  Missing tables: {missing_count}")
+
+    if missing_count > 0:
+        missing_tables = [name for name, exists in table_status.items() if not exists]
+        logger.info(f"\nMissing tables (will be created):")
+        for table in missing_tables:
+            logger.info(f"  - {table}")
+
+    logger.info(f"{'='*80}\n")
+    return table_status
+
 def get_bookmark_from_redshift():
     """Get the maximum meta_last_updated timestamp from Redshift practitioners table
 
@@ -560,9 +633,8 @@ def transform_practitioner_addresses(df):
 
 def create_redshift_tables_sql():
     return """
-    DROP TABLE IF EXISTS public.practitioners CASCADE;
-    CREATE TABLE public.practitioners (
-        practitioner_id VARCHAR(255) NOT NULL,
+    CREATE TABLE IF NOT EXISTS public.practitioners (
+        practitioner_id VARCHAR(255) NOT NULL DISTKEY,
         resource_type VARCHAR(50),
         active BOOLEAN,
         meta_last_updated TIMESTAMP,
@@ -574,8 +646,7 @@ def create_redshift_tables_sql():
 
 def create_practitioner_names_table_sql():
     return """
-    DROP TABLE IF EXISTS public.practitioner_names CASCADE;
-    CREATE TABLE public.practitioner_names (
+    CREATE TABLE IF NOT EXISTS public.practitioner_names (
         practitioner_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         text VARCHAR(500),
@@ -586,8 +657,7 @@ def create_practitioner_names_table_sql():
 
 def create_practitioner_telecoms_table_sql():
     return """
-    DROP TABLE IF EXISTS public.practitioner_telecoms CASCADE;
-    CREATE TABLE public.practitioner_telecoms (
+    CREATE TABLE IF NOT EXISTS public.practitioner_telecoms (
         practitioner_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         "system" VARCHAR(50),
@@ -597,8 +667,7 @@ def create_practitioner_telecoms_table_sql():
 
 def create_practitioner_addresses_table_sql():
     return """
-    DROP TABLE IF EXISTS public.practitioner_addresses CASCADE;
-    CREATE TABLE public.practitioner_addresses (
+    CREATE TABLE IF NOT EXISTS public.practitioner_addresses (
         practitioner_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
         line VARCHAR(500),
@@ -616,6 +685,11 @@ def main():
         logger.info("="*80)
         logger.info("🚀 STARTING FHIR PRACTITIONER ETL PROCESS")
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Check table existence and log schemas
+        table_names = ["practitioner_addresses", "practitioner_names", "practitioner_telecoms", "practitioners"]
+        check_all_tables(glueContext, table_names, REDSHIFT_CONNECTION, S3_TEMP_DIR)
+
         
         # Use Iceberg to read data from S3
         table_name_full = f"{catalog_nm}.{DATABASE_NAME}.{TABLE_NAME}"
@@ -722,24 +796,24 @@ def main():
 
         # Prepare preactions with TRUNCATE for initial loads
         if is_initial_load:
-            practitioners_preactions = create_redshift_tables_sql() + "; TRUNCATE TABLE public.practitioners;"
+            practitioners_preactions = "TRUNCATE TABLE public.practitioners;"
         else:
-            practitioners_preactions = create_redshift_tables_sql()
+            practitioners_preactions = ""
 
         if is_initial_load:
-            names_preactions = create_practitioner_names_table_sql() + "; TRUNCATE TABLE public.practitioner_names;"
+            names_preactions = "TRUNCATE TABLE public.practitioner_names;"
         else:
-            names_preactions = create_practitioner_names_table_sql()
+            names_preactions = ""
 
         if is_initial_load:
-            telecoms_preactions = create_practitioner_telecoms_table_sql() + "; TRUNCATE TABLE public.practitioner_telecoms;"
+            telecoms_preactions = "TRUNCATE TABLE public.practitioner_telecoms;"
         else:
-            telecoms_preactions = create_practitioner_telecoms_table_sql()
+            telecoms_preactions = ""
 
         if is_initial_load:
-            addresses_preactions = create_practitioner_addresses_table_sql() + "; TRUNCATE TABLE public.practitioner_addresses;"
+            addresses_preactions = "TRUNCATE TABLE public.practitioner_addresses;"
         else:
-            addresses_preactions = create_practitioner_addresses_table_sql()
+            addresses_preactions = ""
 
         # Write using simple append mode (bookmark pattern handles filtering)
         write_to_redshift_simple(main_resolved_frame, "practitioners", practitioners_preactions)

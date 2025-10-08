@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
+
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType
@@ -739,6 +740,11 @@ def main():
         logger.info("🚀 STARTING ENHANCED FHIR DIAGNOSTIC REPORT ETL PROCESS")
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Check table existence and log schemas
+        table_names = ["diagnostic_report_based_on", "diagnostic_report_categories", "diagnostic_report_media", "diagnostic_report_performers", "diagnostic_report_presented_forms", "diagnostic_report_results", "diagnostic_reports"]
+        check_all_tables(glueContext, table_names, REDSHIFT_CONNECTION, S3_TEMP_DIR)
+
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
         logger.info(f"🎯 Target: Redshift (7 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
