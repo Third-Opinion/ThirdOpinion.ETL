@@ -17,6 +17,102 @@ import logging
 
 # FHIR version comparison utilities are implemented inline below
 
+def get_bookmark_from_redshift():
+    """Get the maximum meta_last_updated timestamp from Redshift practitioners table
+
+    This bookmark represents the latest data already loaded into Redshift.
+    We'll only process Iceberg records newer than this timestamp.
+    """
+    logger.info("Fetching bookmark (max meta_last_updated) from Redshift practitioners table...")
+
+    try:
+        # Read the entire practitioners table (only meta_last_updated column for efficiency)
+        # Then find the max in Spark instead of using a Redshift subquery
+        bookmark_frame = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": "public.practitioners",
+                "connectionName": REDSHIFT_CONNECTION
+            },
+            transformation_ctx="read_bookmark"
+        )
+
+        # Convert to DataFrame
+        bookmark_df = bookmark_frame.toDF()
+
+        if bookmark_df.count() > 0:
+            # Select only meta_last_updated column and find max using Spark
+            max_timestamp_row = bookmark_df.select(
+                F.max(F.col("meta_last_updated")).alias("max_timestamp")
+            ).collect()[0]
+
+            max_timestamp = max_timestamp_row['max_timestamp']
+
+            if max_timestamp:
+                logger.info(f"🔖 Bookmark found: {max_timestamp}")
+                logger.info(f"   Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
+                return max_timestamp
+            else:
+                logger.info("🔖 No bookmark found (practitioners table is empty)")
+                logger.info("   This is an initial full load - will process all Iceberg records")
+                return None
+        else:
+            logger.info("🔖 No bookmark available - proceeding with full load")
+            return None
+
+    except Exception as e:
+        logger.info(f"🔖 Could not fetch bookmark (table may not exist): {str(e)}")
+        logger.info("   Proceeding with full initial load of all Iceberg records")
+        return None
+
+def filter_by_bookmark(df, bookmark_timestamp):
+    """Filter Iceberg DataFrame to only include records newer than the bookmark
+
+    Args:
+        df: Source DataFrame from Iceberg
+        bookmark_timestamp: Maximum meta_last_updated from Redshift (or None for full load)
+
+    Returns:
+        Filtered DataFrame with only new/updated records
+    """
+    if bookmark_timestamp is None:
+        logger.info("No bookmark - processing all Iceberg records (full load)")
+        return df
+
+    logger.info(f"Applying bookmark filter to Iceberg data...")
+    logger.info(f"Bookmark threshold: {bookmark_timestamp}")
+
+    # Parse meta.lastUpdated timestamp from Iceberg data
+    timestamp_expr = F.coalesce(
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        F.to_timestamp(F.col("meta").getField("lastUpdated"), "yyyy-MM-dd'T'HH:mm:ss")
+    )
+
+    # Add timestamp column temporarily for filtering
+    df_with_ts = df.withColumn("_filter_ts", timestamp_expr)
+
+    # Filter for records newer than bookmark
+    filtered_df = df_with_ts.filter(F.col("_filter_ts") > F.lit(bookmark_timestamp)).drop("_filter_ts")
+
+    # Count results
+    initial_count = df.count()
+    filtered_count = filtered_df.count()
+    skipped_count = initial_count - filtered_count
+
+    logger.info(f"✅ Bookmark filter applied:")
+    logger.info(f"  📊 Total records in Iceberg: {initial_count:,}")
+    logger.info(f"  📊 New/updated records (after bookmark): {filtered_count:,}")
+    logger.info(f"  ⏭️  Records skipped (already in Redshift): {skipped_count:,}")
+    logger.info(f"  📈 Filter efficiency: {(skipped_count/initial_count)*100:.1f}% skipped")
+
+    return filtered_df
+
 def get_existing_versions_from_redshift(table_name, id_column):
     """Query Redshift to get existing entity timestamps for comparison"""
     logger.info(f"Fetching existing timestamps from {table_name}...")
@@ -156,6 +252,37 @@ def get_entities_to_delete(df, existing_versions, id_column):
 
     logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
     return entities_to_delete
+
+def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
+    """Write DynamicFrame to Redshift without version checking
+
+    Used with bookmark pattern - since we filter at source, we can simply append all records.
+    For initial loads, uses TRUNCATE to clear existing data.
+    """
+    logger.info(f"Writing {table_name} to Redshift...")
+
+    try:
+        logger.info(f"Executing preactions for {table_name}: {preactions[:100] if preactions else 'None'}")
+        logger.info(f"Writing to table: public.{table_name}")
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": preactions or ""
+            },
+            transformation_ctx=f"write_{table_name}_to_redshift"
+        )
+
+        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
+        raise e
 
 def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
     """Version-aware write to Redshift - only processes new/updated entities"""
@@ -531,13 +658,25 @@ def main():
             practitioner_df = practitioner_df
 
         total_records = practitioner_df.count()
-        logger.info(f"📊 Read {total_records:,} raw practitioner records")
+        logger.info(f"📊 Read {total_records:,} raw practitioner records from Iceberg")
 
-        if total_records == 0:
-            logger.warning("No records found. Exiting job.")
+        # Step: Apply Bookmark Filter
+        logger.info("\n" + "=" * 50)
+        logger.info("📌 APPLYING BOOKMARK FILTER")
+        logger.info("=" * 50)
+        logger.info("Checking Redshift for existing data to enable incremental processing...")
+
+        bookmark_timestamp = get_bookmark_from_redshift()
+        practitioner_df = filter_by_bookmark(practitioner_df, bookmark_timestamp)
+
+        total_records_after_bookmark = practitioner_df.count()
+        logger.info(f"✅ Bookmark filter applied - {total_records_after_bookmark:,} records to process")
+
+        if total_records_after_bookmark == 0:
+            logger.warning("No new records to process after bookmark filter. Exiting job.")
             job.commit()
             return
-        
+
         main_practitioner_df = transform_main_practitioner_data(practitioner_df)
         main_count = main_practitioner_df.count()
         logger.info(f"✅ Transformed {main_count:,} main practitioner records")
@@ -564,17 +703,67 @@ def main():
         telecoms_resolved_frame = telecoms_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string'), ('meta_last_updated', 'cast:timestamp')])
         addresses_resolved_frame = addresses_dynamic_frame.resolveChoice(specs=[('practitioner_id', 'cast:string'), ('meta_last_updated', 'cast:timestamp')])
 
-        write_to_redshift_versioned(main_resolved_frame, "practitioners", "practitioner_id", create_redshift_tables_sql())
-        write_to_redshift_versioned(names_resolved_frame, "practitioner_names", "practitioner_id", create_practitioner_names_table_sql())
-        write_to_redshift_versioned(telecoms_resolved_frame, "practitioner_telecoms", "practitioner_id", create_practitioner_telecoms_table_sql())
-        write_to_redshift_versioned(addresses_resolved_frame, "practitioner_addresses", "practitioner_id", create_practitioner_addresses_table_sql())
+        # Write data to Redshift using bookmark pattern
+        # For initial load (no bookmark), use TRUNCATE to clear tables
+        # For incremental load, simply append new records
+        logger.info("\n" + "=" * 50)
+        logger.info("💾 WRITING DATA TO REDSHIFT")
+        logger.info("=" * 50)
+
+        is_initial_load = (bookmark_timestamp is None)
+
+        if is_initial_load:
+            logger.info("🔄 Initial load mode - will TRUNCATE existing tables before insert")
+        else:
+            logger.info("➕ Incremental load mode - will APPEND new records")
+
+        # Prepare preactions with TRUNCATE for initial loads
+        if is_initial_load:
+            practitioners_preactions = create_redshift_tables_sql() + "; TRUNCATE TABLE public.practitioners;"
+        else:
+            practitioners_preactions = create_redshift_tables_sql()
+
+        if is_initial_load:
+            names_preactions = create_practitioner_names_table_sql() + "; TRUNCATE TABLE public.practitioner_names;"
+        else:
+            names_preactions = create_practitioner_names_table_sql()
+
+        if is_initial_load:
+            telecoms_preactions = create_practitioner_telecoms_table_sql() + "; TRUNCATE TABLE public.practitioner_telecoms;"
+        else:
+            telecoms_preactions = create_practitioner_telecoms_table_sql()
+
+        if is_initial_load:
+            addresses_preactions = create_practitioner_addresses_table_sql() + "; TRUNCATE TABLE public.practitioner_addresses;"
+        else:
+            addresses_preactions = create_practitioner_addresses_table_sql()
+
+        # Write using simple append mode (bookmark pattern handles filtering)
+        write_to_redshift_simple(main_resolved_frame, "practitioners", practitioners_preactions)
+        write_to_redshift_simple(names_resolved_frame, "practitioner_names", names_preactions)
+        write_to_redshift_simple(telecoms_resolved_frame, "practitioner_telecoms", telecoms_preactions)
+        write_to_redshift_simple(addresses_resolved_frame, "practitioner_addresses", addresses_preactions)
         
         end_time = datetime.now()
+        processing_time = end_time - start_time
+
+        logger.info("\n" + "=" * 80)
+        logger.info("🎉 ETL PROCESS COMPLETED SUCCESSFULLY!")
+        logger.info("=" * 80)
+        logger.info(f"⏰ Job completed at: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"⏱️  Total processing time: {processing_time}")
+
+        logger.info("\n📊 PROCESSING STATISTICS:")
+        logger.info(f"  📥 Total records in Iceberg: {total_records:,}")
+        logger.info(f"  📌 Records after bookmark filter: {total_records_after_bookmark:,}")
+        logger.info(f"  ⏭️  Records skipped by bookmark: {total_records - total_records_after_bookmark:,}")
+        if total_records > 0:
+            logger.info(f"  📈 Bookmark efficiency: {((total_records - total_records_after_bookmark)/total_records)*100:.1f}% skipped")
+
         if USE_SAMPLE:
-            logger.info("⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
+            logger.info("\n⚠️  WARNING: THIS WAS A TEST RUN WITH SAMPLED DATA")
             logger.info(f"⚠️  Only {SAMPLE_SIZE} records were processed")
             logger.info("⚠️  Set USE_SAMPLE = False for production runs")
-        logger.info(f"🎉 ETL PROCESS COMPLETED SUCCESSFULLY in {end_time - start_time}")
         
     except Exception as e:
         logger.error(f"❌ ETL PROCESS FAILED: {str(e)}")

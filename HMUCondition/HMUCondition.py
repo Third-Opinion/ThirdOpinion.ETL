@@ -872,82 +872,82 @@ def transform_condition_codes(df):
     code_dtype = str(df.schema["code"].dataType)
     logger.info(f"Code column data type: {code_dtype}")
 
-    # If code column is StringType, we need to parse it
-    # Check if it starts with StringType (not just contains it, to avoid matching StructType)
-    if code_dtype.startswith("StringType"):
-        logger.info("Code column is StringType - using string parsing logic")
+    # # If code column is StringType, we need to parse it
+    # # Check if it starts with StringType (not just contains it, to avoid matching StructType)
+    # if code_dtype.startswith("StringType"):
+    #     logger.info("Code column is StringType - using string parsing logic")
 
-        # Parse the string representation into structured data
-        parsed_df = df.select(
-            F.col("id").alias("condition_id"),
-            F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
-            parse_code_string_udf(F.col("code")).alias("parsed_code")
-        ).filter(
-            F.col("parsed_code").isNotNull()
-        )
+    #     # Parse the string representation into structured data
+    #     parsed_df = df.select(
+    #         F.col("id").alias("condition_id"),
+    #         F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
+    #         parse_code_string_udf(F.col("code")).alias("parsed_code")
+    #     ).filter(
+    #         F.col("parsed_code").isNotNull()
+    #     )
 
-        # Debug: Check how many coding elements are in the parsed array
-        logger.info("Checking parsed code array sizes...")
-        parsed_df.select(
-            F.col("condition_id"),
-            F.size(F.col("parsed_code.coding")).alias("coding_array_size")
-        ).filter(F.col("coding_array_size") > 1).show(5, truncate=False)
+    #     # Debug: Check how many coding elements are in the parsed array
+    #     logger.info("Checking parsed code array sizes...")
+    #     parsed_df.select(
+    #         F.col("condition_id"),
+    #         F.size(F.col("parsed_code.coding")).alias("coding_array_size")
+    #     ).filter(F.col("coding_array_size") > 1).show(5, truncate=False)
 
-        # Extract text and explode the coding array - this should create one row per code
-        codes_df = parsed_df.select(
-            F.col("condition_id"),
-            F.col("meta_last_updated"),
-            F.col("parsed_code.text").alias("code_text"),
-            F.explode(F.col("parsed_code.coding")).alias("coding_item")
-        ).filter(
-            F.col("coding_item").isNotNull()
-        )
+    #     # Extract text and explode the coding array - this should create one row per code
+    #     codes_df = parsed_df.select(
+    #         F.col("condition_id"),
+    #         F.col("meta_last_updated"),
+    #         F.col("parsed_code.text").alias("code_text"),
+    #         F.explode(F.col("parsed_code.coding")).alias("coding_item")
+    #     ).filter(
+    #         F.col("coding_item").isNotNull()
+    #     )
 
-        # Extract code details from parsed data
-        codes_final = codes_df.select(
-            F.col("condition_id"),
-            F.col("meta_last_updated"),
-            F.col("coding_item.code").alias("code_code"),
-            F.col("coding_item.system").alias("code_system"),
-            F.col("coding_item.display").alias("code_display"),
-            F.col("code_text")
-        ).filter(
-            F.col("code_code").isNotNull()
-        )
+    #     # Extract code details from parsed data
+    #     codes_final = codes_df.select(
+    #         F.col("condition_id"),
+    #         F.col("meta_last_updated"),
+    #         F.col("coding_item.code").alias("code_code"),
+    #         F.col("coding_item.system").alias("code_system"),
+    #         F.col("coding_item.display").alias("code_display"),
+    #         F.col("code_text")
+    #     ).filter(
+    #         F.col("code_code").isNotNull()
+    #     )
 
-        # Debug: Check distribution of codes per condition
-        logger.info("Codes per condition distribution:")
-        codes_per_condition = codes_final.groupBy("condition_id").agg(
-            F.count("*").alias("num_codes"),
-            F.collect_list("code_system").alias("systems")
-        )
-        codes_per_condition.filter(F.col("num_codes") > 1).show(5, truncate=False)
+    #     # Debug: Check distribution of codes per condition
+    #     logger.info("Codes per condition distribution:")
+    #     codes_per_condition = codes_final.groupBy("condition_id").agg(
+    #         F.count("*").alias("num_codes"),
+    #         F.collect_list("code_system").alias("systems")
+    #     )
+    #     codes_per_condition.filter(F.col("num_codes") > 1).show(5, truncate=False)
 
-    else:
+    # else:
         # Original logic for structured data
-        logger.info("Code column is structured - using original logic")
+    logger.info("Code column is structured - using original logic")
 
-        # First explode the code.coding array - this should create one row per code
-        codes_df = df.select(
-            F.col("id").alias("condition_id"),
-            F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
-            F.col("code").getField("text").alias("code_text"),
-            F.explode(F.col("code").getField("coding")).alias("coding_item")
-        ).filter(
-            F.col("coding_item").isNotNull()
-        )
+    # First explode the code.coding array - this should create one row per code
+    codes_df = df.select(
+        F.col("id").alias("condition_id"),
+        F.col("meta").getField("lastUpdated").alias("meta_last_updated"),
+        F.col("code").getField("text").alias("code_text"),
+        F.explode(F.col("code").getField("coding")).alias("coding_item")
+    ).filter(
+        F.col("coding_item").isNotNull()
+    )
 
-        # Extract code details
-        codes_final = codes_df.select(
-            F.col("condition_id"),
-            F.col("meta_last_updated"),
-            F.col("coding_item.code").alias("code_code"),
-            F.col("coding_item.system").alias("code_system"),
-            F.col("coding_item.display").alias("code_display"),
-            F.col("code_text")
-        ).filter(
-            F.col("code_code").isNotNull()
-        )
+    # Extract code details
+    codes_final = codes_df.select(
+        F.col("condition_id"),
+        F.col("meta_last_updated"),
+        F.col("coding_item.code").alias("code_code"),
+        F.col("coding_item.system").alias("code_system"),
+        F.col("coding_item.display").alias("code_display"),
+        F.col("code_text")
+    ).filter(
+        F.col("code_code").isNotNull()
+    )
 
     return codes_final
 
@@ -1432,7 +1432,7 @@ def main():
         
         if codes_count > 0:
             logger.info("Sample of condition codes data:")
-            condition_codes_df.show(3, truncate=False)
+            condition_codes_df.show(30, truncate=False)
         
         if evidence_count > 0:
             logger.info("Sample of condition evidence data:")
@@ -1930,16 +1930,16 @@ def main():
         
         # Create all tables individually
         # Note: Each write_to_redshift call now includes DROP and CREATE to ensure proper schema
-        logger.info("📝 Dropping and recreating main conditions table...")
+        logger.info("📝 Creating main conditions table if not exists...")
         conditions_table_sql = create_redshift_tables_sql()
-        
+
         # Final debugging before write
         logger.info("🔍 Final DynamicFrame schema before Redshift write:")
         main_resolved_frame.printSchema()
         final_df = main_resolved_frame.toDF()
         logger.info(f"🔍 DynamicFrame column count: {len(final_df.columns)}")
         logger.info(f"🔍 DynamicFrame columns: {final_df.columns}")
-        
+
         # Check for extensions column specifically
         if 'extensions' in final_df.columns:
             logger.error("❌ CRITICAL: DynamicFrame still contains 'extensions' column!")
@@ -1947,44 +1947,44 @@ def main():
             raise Exception("DynamicFrame contains extensions column that should not exist")
         else:
             logger.info("✅ Confirmed: DynamicFrame does NOT contain 'extensions' column")
-        
+
         write_to_redshift_versioned(main_resolved_frame, "conditions", "condition_id", conditions_table_sql)
-        logger.info("✅ Main conditions table dropped, recreated and written successfully")
-        
-        logger.info("📝 Dropping and recreating condition categories table...")
+        logger.info("✅ Main conditions table created and data written successfully")
+
+        logger.info("📝 Creating condition categories table if not exists...")
         categories_table_sql = create_condition_categories_table_sql()
         write_to_redshift_versioned(categories_resolved_frame, "condition_categories", "condition_id", categories_table_sql, is_child_table=True)
-        logger.info("✅ Condition categories table dropped, recreated and written successfully")
+        logger.info("✅ Condition categories table created and data written successfully")
 
-        logger.info("📝 Dropping and recreating condition notes table...")
+        logger.info("📝 Creating condition notes table if not exists...")
         notes_table_sql = create_condition_notes_table_sql()
         write_to_redshift_versioned(notes_resolved_frame, "condition_notes", "condition_id", notes_table_sql, is_child_table=True)
-        logger.info("✅ Condition notes table dropped, recreated and written successfully")
+        logger.info("✅ Condition notes table created and data written successfully")
 
-        logger.info("📝 Dropping and recreating condition body sites table...")
+        logger.info("📝 Creating condition body sites table if not exists...")
         body_sites_table_sql = create_condition_body_sites_table_sql()
         write_to_redshift_versioned(body_sites_resolved_frame, "condition_body_sites", "condition_id", body_sites_table_sql, is_child_table=True)
-        logger.info("✅ Condition body sites table dropped, recreated and written successfully")
+        logger.info("✅ Condition body sites table created and data written successfully")
 
-        logger.info("📝 Dropping and recreating condition stages table...")
+        logger.info("📝 Creating condition stages table if not exists...")
         stages_table_sql = create_condition_stages_table_sql()
         write_to_redshift_versioned(stages_resolved_frame, "condition_stages", "condition_id", stages_table_sql, is_child_table=True)
-        logger.info("✅ Condition stages table dropped, recreated and written successfully")
+        logger.info("✅ Condition stages table created and data written successfully")
 
-        logger.info("📝 Dropping and recreating condition codes table...")
+        logger.info("📝 Creating condition codes table if not exists...")
         codes_table_sql = create_condition_codes_table_sql()
         write_to_redshift_versioned(codes_resolved_frame, "condition_codes", "condition_id", codes_table_sql, is_child_table=True)
-        logger.info("✅ Condition codes table dropped, recreated and written successfully")
+        logger.info("✅ Condition codes table created and data written successfully")
 
-        logger.info("📝 Dropping and recreating condition evidence table...")
+        logger.info("📝 Creating condition evidence table if not exists...")
         evidence_table_sql = create_condition_evidence_table_sql()
         write_to_redshift_versioned(evidence_resolved_frame, "condition_evidence", "condition_id", evidence_table_sql, is_child_table=True)
-        logger.info("✅ Condition evidence table dropped, recreated and written successfully")
+        logger.info("✅ Condition evidence table created and data written successfully")
 
-        logger.info("📝 Dropping and recreating condition extensions table...")
+        logger.info("📝 Creating condition extensions table if not exists...")
         extensions_table_sql = create_condition_extensions_table_sql()
         write_to_redshift_versioned(extensions_resolved_frame, "condition_extensions", "condition_id", extensions_table_sql, is_child_table=True)
-        logger.info("✅ Condition extensions table dropped, recreated and written successfully")
+        logger.info("✅ Condition extensions table created and data written successfully")
         
         # Calculate processing time
         end_time = datetime.now()

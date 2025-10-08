@@ -26,41 +26,45 @@ def get_bookmark_from_redshift():
     logger.info("Fetching bookmark (max meta_last_updated) from Redshift observations table...")
     
     try:
-        # Query Redshift for the maximum meta_last_updated timestamp
-        bookmark_query = "(SELECT MAX(meta_last_updated) as max_timestamp FROM public.observations) as bookmark"
-        
+        # Read the entire observations table (only meta_last_updated column for efficiency)
+        # Then find the max in Spark instead of using a Redshift subquery
         bookmark_frame = glueContext.create_dynamic_frame.from_options(
             connection_type="redshift",
             connection_options={
                 "redshiftTmpDir": S3_TEMP_DIR,
                 "useConnectionProperties": "true",
-                "dbtable": bookmark_query,
+                "dbtable": "public.observations",
                 "connectionName": REDSHIFT_CONNECTION
             },
             transformation_ctx="read_bookmark"
         )
-        
-        # Convert to DataFrame and get the value
+
+        # Convert to DataFrame
         bookmark_df = bookmark_frame.toDF()
-        
+
         if bookmark_df.count() > 0:
-            max_timestamp = bookmark_df.collect()[0]['max_timestamp']
-            
+            # Select only meta_last_updated column and find max using Spark
+            max_timestamp_row = bookmark_df.select(
+                F.max(F.col("meta_last_updated")).alias("max_timestamp")
+            ).collect()[0]
+
+            max_timestamp = max_timestamp_row['max_timestamp']
+
             if max_timestamp:
-                logger.info(f"✅ Bookmark found: {max_timestamp}")
-                logger.info(f"Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
+                logger.info(f"🔖 Bookmark found: {max_timestamp}")
+                logger.info(f"   Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
                 return max_timestamp
             else:
-                logger.info("No bookmark found (observations table is empty)")
-                logger.info("This is an initial full load - will process all Iceberg records")
+                logger.info("🔖 No bookmark found (observations table is empty)")
+                logger.info("   This is an initial full load - will process all Iceberg records")
                 return None
         else:
-            logger.info("No bookmark available - proceeding with full load")
+            logger.info("🔖 No bookmark available - proceeding with full load")
             return None
-            
+
     except Exception as e:
-        logger.info(f"Could not fetch bookmark (table may not exist): {str(e)}")
-        logger.info("Proceeding with full initial load of all Iceberg records")
+        logger.info(f"🔖 Could not fetch bookmark (table may not exist): {str(e)}")
+        logger.info("   Proceeding with full initial load of all Iceberg records")
         return None
 
 def get_existing_versions_from_redshift(table_name, id_column):
@@ -427,7 +431,7 @@ logger.setLevel(logging.DEBUG)
 
 # Add handler to write logs to stdout so they appear in CloudWatch
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
