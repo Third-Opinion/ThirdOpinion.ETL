@@ -16,8 +16,7 @@
         patient_id VARCHAR(255),
         encounter_id VARCHAR(255),
         meta_last_updated TIMESTAMP,
-        extensions TEXT,
+        extensions VARCHAR(MAX),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        -- Removed PRIMARY KEY constraint to allow DISTKEY/SORTKEY
     ) DISTKEY (patient_id) SORTKEY (patient_id, effective_datetime)
