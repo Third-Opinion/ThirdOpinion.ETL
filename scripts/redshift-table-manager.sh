@@ -714,47 +714,79 @@ cmd_create() {
     log_info "Creating table: $table_name"
     echo "========================================"
     
-    # Check if table exists
+    # Get row count before drop (if exists)
+    local before_count=0
     if table_exists "$table_name"; then
         log_warning "Table $table_name already exists"
+
+        # Get current row count
+        local count_sql="SELECT COUNT(*) FROM $SCHEMA.$table_name;"
+        local count_query_id=$(execute_sql "$count_sql" "Getting row count before drop" 2>&1 | tail -1)
+        if [[ "$count_query_id" =~ ^[a-z0-9-]+$ ]]; then
+            before_count=$(get_query_results "$count_query_id" 2>/dev/null | jq -r '.Records[0][0].longValue // 0' 2>/dev/null)
+        fi
+        log_info "Current row count: $before_count"
+
         read -p "Drop and recreate? (y/N): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             log_info "Aborted"
             return 0
         fi
-        
+
         log_info "Dropping existing table..."
         local drop_sql="DROP TABLE IF EXISTS $SCHEMA.$table_name CASCADE;"
         execute_sql "$drop_sql" "Dropping table"
-        
+
         if [ $? -ne 0 ]; then
             log_error "Failed to drop table"
             return 1
         fi
+
+        # Verify table was actually dropped
+        if table_exists "$table_name" 2>/dev/null; then
+            log_error "Table still exists after DROP command"
+            return 1
+        fi
+        log_success "Table dropped successfully (had $before_count rows)"
     fi
-    
+
     # Get DDL
     local ddl=$(get_table_ddl "$table_name" "$ddl_file")
-    
+
     if [ $? -ne 0 ]; then
         return 1
     fi
-    
+
     log_info "DDL to execute:"
     echo "----------------------------------------"
     echo "$ddl"
     echo "----------------------------------------"
-    
-    # Create table
-    execute_sql "$ddl" "Creating table $table_name"
-    
+
+    # Create table (remove IF NOT EXISTS to ensure it fails if table still exists)
+    local clean_ddl=$(echo "$ddl" | sed 's/IF NOT EXISTS //g')
+    execute_sql "$clean_ddl" "Creating table $table_name"
+
     if [ $? -ne 0 ]; then
         log_error "Failed to create table"
         return 1
     fi
-    
-    log_success "Table $table_name created successfully!"
+
+    # Verify table was created
+    if ! table_exists "$table_name"; then
+        log_error "Table does not exist after CREATE command"
+        return 1
+    fi
+
+    # Get row count after creation
+    local after_count=0
+    local count_sql="SELECT COUNT(*) FROM $SCHEMA.$table_name;"
+    local count_query_id=$(execute_sql "$count_sql" "Getting row count after create" 2>&1 | tail -1)
+    if [[ "$count_query_id" =~ ^[a-z0-9-]+$ ]]; then
+        after_count=$(get_query_results "$count_query_id" 2>/dev/null | jq -r '.Records[0][0].longValue // 0' 2>/dev/null)
+    fi
+
+    log_success "Table $table_name created successfully! (now has $after_count rows, had $before_count)"
     
     # Verify creation
     echo ""
@@ -1186,9 +1218,18 @@ cmd_deploy() {
         return 1
     fi
 
-    # Check if table exists
+    # Get row count before drop (if exists)
+    local before_count=0
     if table_exists "$table_name"; then
         log_warning "Table $table_name already exists"
+
+        # Get current row count
+        local count_sql="SELECT COUNT(*) FROM $SCHEMA.$table_name;"
+        local count_query_id=$(execute_sql "$count_sql" "Getting row count before drop" 2>&1 | tail -1)
+        if [[ "$count_query_id" =~ ^[a-z0-9-]+$ ]]; then
+            before_count=$(get_query_results "$count_query_id" 2>/dev/null | jq -r '.Records[0][0].longValue // 0' 2>/dev/null)
+        fi
+        log_info "Current row count: $before_count"
 
         if [ "$force" != "true" ]; then
             read -p "Drop and recreate? (y/N): " -n 1 -r
@@ -1201,13 +1242,21 @@ cmd_deploy() {
 
         log_info "Dropping existing table..."
         local drop_sql="DROP TABLE IF EXISTS $SCHEMA.$table_name CASCADE;"
-        execute_sql "$drop_sql" "Dropping table"
+        local drop_query_id=$(execute_sql "$drop_sql" "Dropping table" 2>&1 | tail -1)
 
         if [ $? -ne 0 ]; then
             log_error "Failed to drop table"
             record_deployment "$table_name" "$ddl_file" "failed" "Drop failed"
             return 1
         fi
+
+        # Verify table was actually dropped
+        if table_exists "$table_name" 2>/dev/null; then
+            log_error "Table still exists after DROP command"
+            record_deployment "$table_name" "$ddl_file" "failed" "Drop verification failed"
+            return 1
+        fi
+        log_success "Table dropped successfully (had $before_count rows)"
     fi
 
     log_info "DDL to deploy:"
@@ -1215,8 +1264,9 @@ cmd_deploy() {
     echo "$ddl"
     echo "----------------------------------------"
 
-    # Deploy
-    execute_sql "$ddl" "Creating table $table_name"
+    # Deploy (remove IF NOT EXISTS to ensure it fails if table still exists)
+    local clean_ddl=$(echo "$ddl" | sed 's/IF NOT EXISTS //g')
+    execute_sql "$clean_ddl" "Creating table $table_name"
 
     if [ $? -ne 0 ]; then
         log_error "Failed to create table"
@@ -1224,7 +1274,22 @@ cmd_deploy() {
         return 1
     fi
 
-    log_success "Table $table_name deployed successfully!"
+    # Verify table was created
+    if ! table_exists "$table_name"; then
+        log_error "Table does not exist after CREATE command"
+        record_deployment "$table_name" "$ddl_file" "failed" "Create verification failed"
+        return 1
+    fi
+
+    # Get row count after creation
+    local after_count=0
+    local count_sql="SELECT COUNT(*) FROM $SCHEMA.$table_name;"
+    local count_query_id=$(execute_sql "$count_sql" "Getting row count after create" 2>&1 | tail -1)
+    if [[ "$count_query_id" =~ ^[a-z0-9-]+$ ]]; then
+        after_count=$(get_query_results "$count_query_id" 2>/dev/null | jq -r '.Records[0][0].longValue // 0' 2>/dev/null)
+    fi
+
+    log_success "Table $table_name deployed successfully! (now has $after_count rows, had $before_count)"
 
     # Record deployment
     record_deployment "$table_name" "$ddl_file" "success" "Deployed from Git $git_sha_short"
