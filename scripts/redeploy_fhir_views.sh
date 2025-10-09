@@ -67,6 +67,9 @@ DEPENDENCY_LEVEL_2=(
 # Level 3: Reporting views that depend on fact views
 DEPENDENCY_LEVEL_3=(
     "rpt_fhir_hmu_patients_v1"         # Depends on patients, conditions, encounters
+    "rpt_fhir_adt_medications_v1"      # Depends on medication views
+    "rpt_fhir_psa_total_view_v1"       # Depends on observations
+    "rpt_fhir_testosterone_total_view_v1"  # Depends on observations
 )
 
 # Combine all views in dependency order
