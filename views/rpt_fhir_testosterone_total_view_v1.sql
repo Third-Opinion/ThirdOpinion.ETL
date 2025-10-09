@@ -1,12 +1,12 @@
-CREATE OR REPLACE VIEW public.rpt_fhir_testosterone_total_view_v1 AS
-WITH target_patients AS (
-    SELECT * FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-07-01'
-)
-)
+CREATE MATERIALIZED VIEW rpt_fhir_testosterone_total_medications_v1
+DISTSTYLE KEY 
+DISTKEY (patient_id)
+SORTKEY (patient_id, effective_datetime)
+AS
 SELECT  
-    -- fpv2.names,
-    -- fpv2.birth_date,
-    -- fpv2.gender,
+    fpv2.names,
+    fpv2.birth_date,
+    fpv2.gender,
     tp.patient_id,
     tp.observation_id,
     tp.encounter_id,
@@ -23,9 +23,9 @@ SELECT
     tp.reference_ranges, 
     tp.interpretations, 
     tp.notes
-FROM public.fact_fhir_observations_view_v2 tp
-INNER JOIN target_patients tgt ON tp.patient_id = tgt.patient_id
-INNER JOIN public.fact_fhir_patients_view_v2 fpv2 ON tp.patient_id = fpv2.patient_id
+FROM public.fact_fhir_observations_view_v1 tp
+INNER JOIN public.fact_fhir_patients_view_v1 fpv2 
+    ON tp.patient_id = fpv2.patient_id
 WHERE tp.observation_category = 'laboratory'
     AND tp.status = 'final'
     AND tp.observation_text NOT ILIKE '%ratio%'
