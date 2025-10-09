@@ -3,9 +3,9 @@
 -- Extracted: extract_ddl_from_glue_jobs.py
 
 CREATE TABLE IF NOT EXISTS public.condition_extensions (
-        condition_id VARCHAR(255) NOT NULL,
-        extension_url VARCHAR(500) NOT NULL,
-        extension_type VARCHAR(50) NOT NULL,
+        condition_id VARCHAR(255),
+        extension_url VARCHAR(500),
+        extension_type VARCHAR(50),
         value_type VARCHAR(50),
         value_string VARCHAR(MAX),
         value_datetime TIMESTAMP,
