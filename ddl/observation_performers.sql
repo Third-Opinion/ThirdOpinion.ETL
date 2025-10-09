@@ -1,9 +1,12 @@
 -- Table: observation_performers
--- Source: HMUObservation.py (create_observation_performers_table_sql)
--- Extracted: extract_ddl_from_glue_jobs.py
+-- FHIR Observation performer array - who performed/validated the observation
+-- Updated: 2025-10-09 - Added patient_id for co-location
 
 CREATE TABLE IF NOT EXISTS public.observation_performers (
-        observation_id VARCHAR(255),
-        performer_type VARCHAR(50),
-        performer_id VARCHAR(255)
-    ) SORTKEY (observation_id, performer_type)
+    observation_id VARCHAR(255) NOT NULL,
+    patient_id VARCHAR(255) NOT NULL,
+    performer_type VARCHAR(50),
+    performer_id VARCHAR(255)
+) 
+DISTKEY (patient_id)
+SORTKEY (patient_id, performer_type);

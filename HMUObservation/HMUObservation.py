@@ -1,4 +1,3 @@
-# Deployed: 2025-10-09 06:28:01 UTC
 from datetime import datetime
 import sys
 from awsglue.transforms import *
@@ -7,7 +6,6 @@ from pyspark.sql import SparkSession
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
-
 from awsglue import DynamicFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, TimestampType, DateType, BooleanType, IntegerType, DecimalType
@@ -18,79 +16,6 @@ import logging
 # FHIR version comparison utilities implemented inline below
 
 # FHIR version comparison utilities are implemented inline below
-# Table utility functions (inlined for Glue compatibility)
-def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir):
-    """Check if a Redshift table exists and log its column information."""
-    logger.info(f"\n{'='*60}")
-    logger.info(f"🔍 Checking table: public.{table_name}")
-    logger.info("=" * 60)
-
-    try:
-        existing_table = glueContext.create_dynamic_frame.from_options(
-            connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": s3_temp_dir,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": redshift_connection
-            },
-            transformation_ctx=f"check_table_{table_name}"
-        )
-
-        df = existing_table.toDF()
-        logger.info(f"✅ Table 'public.{table_name}' EXISTS")
-        logger.info(f"\n📋 Table Schema:")
-        logger.info(f"   {'Column Name':<40} {'Data Type':<20}")
-        logger.info(f"   {'-'*40} {'-'*20}")
-
-        for field in df.schema.fields:
-            logger.info(f"   {field.name:<40} {str(field.dataType):<20}")
-
-        row_count = df.count()
-        logger.info(f"\n📊 Table Statistics:")
-        logger.info(f"   Total columns: {len(df.schema.fields)}")
-        logger.info(f"   Total rows: {row_count:,}")
-
-        return True
-
-    except Exception as e:
-        logger.warning(f"⚠️  Table 'public.{table_name}' DOES NOT EXIST or cannot be accessed")
-        logger.debug(f"   Error details: {str(e)}")
-        logger.info(f"   Table will be created on first write operation")
-        return False
-
-def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir):
-    """Check existence and schema for multiple tables."""
-    logger.info(f"\n{'='*80}")
-    logger.info(f"🔍 CHECKING REDSHIFT TABLES")
-    logger.info("=" * 80)
-    logger.info(f"Tables to check: {', '.join(table_names)}")
-
-    table_status = {}
-    for table_name in table_names:
-        exists = check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir)
-        table_status[table_name] = exists
-
-    logger.info(f"\n{'='*80}")
-    logger.info(f"📊 TABLE CHECK SUMMARY")
-    logger.info("=" * 80)
-
-    existing_count = sum(1 for exists in table_status.values() if exists)
-    missing_count = len(table_names) - existing_count
-
-    logger.info(f"Total tables checked: {len(table_names)}")
-    logger.info(f"✅ Existing tables: {existing_count}")
-    logger.info(f"⚠️  Missing tables: {missing_count}")
-
-    if missing_count > 0:
-        missing_tables = [name for name, exists in table_status.items() if not exists]
-        logger.info(f"\nMissing tables (will be created):")
-        for table in missing_tables:
-            logger.info(f"  - {table}")
-
-    logger.info(f"{'='*80}\n")
-    return table_status
-
 
 def get_bookmark_from_redshift():
     """Get the maximum meta_last_updated timestamp from Redshift observations table
@@ -101,45 +26,40 @@ def get_bookmark_from_redshift():
     logger.info("Fetching bookmark (max meta_last_updated) from Redshift observations table...")
     
     try:
-        # Read the entire observations table (only meta_last_updated column for efficiency)
-        # Then find the max in Spark instead of using a Redshift subquery
+        # Use raw SQL query to get the maximum timestamp
+        # Note: For Glue's Redshift connector, we use query instead of dbtable for subqueries
         bookmark_frame = glueContext.create_dynamic_frame.from_options(
             connection_type="redshift",
             connection_options={
                 "redshiftTmpDir": S3_TEMP_DIR,
                 "useConnectionProperties": "true",
-                "dbtable": "public.observations",
+                "query": "SELECT MAX(meta_last_updated) as max_timestamp FROM public.observations",
                 "connectionName": REDSHIFT_CONNECTION
             },
             transformation_ctx="read_bookmark"
         )
-
-        # Convert to DataFrame
+        
+        # Convert to DataFrame and get the value
         bookmark_df = bookmark_frame.toDF()
-
+        
         if bookmark_df.count() > 0:
-            # Select only meta_last_updated column and find max using Spark
-            max_timestamp_row = bookmark_df.select(
-                F.max(F.col("meta_last_updated")).alias("max_timestamp")
-            ).collect()[0]
-
-            max_timestamp = max_timestamp_row['max_timestamp']
-
+            max_timestamp = bookmark_df.collect()[0]['max_timestamp']
+            
             if max_timestamp:
-                logger.info(f"🔖 Bookmark found: {max_timestamp}")
-                logger.info(f"   Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
+                logger.info(f"✅ Bookmark found: {max_timestamp}")
+                logger.info(f"Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
                 return max_timestamp
             else:
-                logger.info("🔖 No bookmark found (observations table is empty)")
-                logger.info("   This is an initial full load - will process all Iceberg records")
+                logger.info("No bookmark found (observations table is empty)")
+                logger.info("This is an initial full load - will process all Iceberg records")
                 return None
         else:
-            logger.info("🔖 No bookmark available - proceeding with full load")
+            logger.info("No bookmark available - proceeding with full load")
             return None
-
+            
     except Exception as e:
-        logger.info(f"🔖 Could not fetch bookmark (table may not exist): {str(e)}")
-        logger.info("   Proceeding with full initial load of all Iceberg records")
+        logger.info(f"Could not fetch bookmark (table may not exist): {str(e)}")
+        logger.info("Proceeding with full initial load of all Iceberg records")
         return None
 
 def get_existing_versions_from_redshift(table_name, id_column):
@@ -462,29 +382,16 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         # Step 4: Build preactions for selective deletion
         selective_preactions = preactions
         if entities_to_delete:
-            # For large deletions, use a different strategy to avoid "Statement is too large" error
-            # Redshift has a 16MB limit on SQL statements
-            num_entities = len(entities_to_delete)
-
-            # If we have too many entities (>10000), just truncate the table and re-insert everything
-            # This is more efficient than trying to batch large DELETE statements
-            if num_entities > 10000:
-                logger.info(f"Large deletion ({num_entities} entities) - will truncate table and re-insert all data")
-                delete_clause = f"TRUNCATE TABLE public.{table_name};"
-                # Convert ALL incoming data back to dynamic frame for full re-insert
-                filtered_df = df  # Use all data, not just filtered
-                to_process_count = total_records
-            else:
-                # For smaller deletions, use IN clause
-                entity_ids_str = "', '".join(entities_to_delete)
-                delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
+            # Create DELETE statements for specific entity IDs
+            entity_ids_str = "', '".join(entities_to_delete)
+            delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
 
             if selective_preactions:
                 selective_preactions = delete_clause + " " + selective_preactions
             else:
                 selective_preactions = delete_clause
 
-            logger.info(f"Will delete {num_entities} existing entities before inserting updated versions")
+            logger.info(f"Will delete {len(entities_to_delete)} existing entities before inserting updated versions")
 
         # Step 5: Convert filtered DataFrame back to DynamicFrame
         filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
@@ -519,10 +426,12 @@ logger.setLevel(logging.DEBUG)
 
 # Add handler to write logs to stdout so they appear in CloudWatch
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.INFO)
+handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+#BEGIN NOTE TO AI: do not change the following section.
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 catalog_nm = "glue_catalog"
@@ -562,6 +471,8 @@ glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
 job.init(args["JOB_NAME"], args)
+
+#END NOTE TO AI
 
 # Configuration - Updated to use S3/Iceberg instead of Glue Catalog
 DATABASE_NAME = ahl_database  # Using AHL Iceberg database
@@ -652,19 +563,7 @@ def transform_main_observation_data(df):
                F.regexp_extract(F.col("specimen").getField("reference"), r"Specimen/(.+)", 1)
               ).otherwise(None).alias("specimen_id"),
         F.col("status"),
-        F.col("code").getField("text").alias("observation_text"),
-        F.when(F.col("code").getField("coding").isNotNull() &
-               (F.size(F.col("code").getField("coding")) > 0),
-               F.col("code").getField("coding")[0].getField("code")
-              ).otherwise(None).alias("primary_code"),
-        F.when(F.col("code").getField("coding").isNotNull() &
-               (F.size(F.col("code").getField("coding")) > 0),
-               F.col("code").getField("coding")[0].getField("system")
-              ).otherwise(None).alias("primary_system"),
-        F.when(F.col("code").getField("coding").isNotNull() &
-               (F.size(F.col("code").getField("coding")) > 0),
-               F.col("code").getField("coding")[0].getField("display")
-              ).otherwise(None).alias("primary_display")
+        F.col("code").getField("text").alias("observation_text")
     ]
     
     # Add value fields - handle different value types (using actual schema field names)
@@ -769,6 +668,7 @@ def transform_observation_categories(df):
         logger.warning("category column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("category_code"),
             F.lit("").alias("category_system"),
             F.lit("").alias("category_display"),
@@ -778,6 +678,9 @@ def transform_observation_categories(df):
     # Explode the category array
     categories_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("category")).alias("category_item")
     ).filter(
         F.col("category_item").isNotNull()
@@ -787,6 +690,7 @@ def transform_observation_categories(df):
     # First get the text from category level, then explode coding
     categories_with_text = categories_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("category_item.text").alias("category_text"),
         F.col("category_item.coding").alias("coding_array")
     )
@@ -794,16 +698,18 @@ def transform_observation_categories(df):
     # Now explode the coding array
     categories_final = categories_with_text.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.explode(F.col("coding_array")).alias("coding_item"),
         F.col("category_text")
     ).select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("coding_item.code").alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.col("coding_item.display").alias("category_display"),
         F.col("category_text")
     ).filter(
-        F.col("category_code").isNotNull()
+        F.col("category_code").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return categories_final
@@ -817,6 +723,7 @@ def transform_observation_interpretations(df):
         logger.warning("interpretation column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("interpretation_code"),
             F.lit("").alias("interpretation_system"),
             F.lit("").alias("interpretation_display")
@@ -825,6 +732,9 @@ def transform_observation_interpretations(df):
     # Explode the interpretation array
     interpretations_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("interpretation")).alias("interpretation_item")
     ).filter(
         F.col("interpretation_item").isNotNull()
@@ -834,6 +744,7 @@ def transform_observation_interpretations(df):
     # First get the text from interpretation level, then explode coding
     interpretations_with_text = interpretations_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("interpretation_item.text").alias("interpretation_text"),
         F.col("interpretation_item.coding").alias("coding_array")
     )
@@ -841,16 +752,18 @@ def transform_observation_interpretations(df):
     # Now explode the coding array
     interpretations_final = interpretations_with_text.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.explode(F.col("coding_array")).alias("coding_item"),
         F.col("interpretation_text")
     ).select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("coding_item.code").alias("interpretation_code"),
         F.col("coding_item.system").alias("interpretation_system"),
         F.col("coding_item.display").alias("interpretation_display"),
         F.col("interpretation_text")
     ).filter(
-        F.col("interpretation_code").isNotNull()
+        F.col("interpretation_code").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return interpretations_final
@@ -864,6 +777,7 @@ def transform_observation_reference_ranges(df):
         logger.warning("referenceRange column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit(0.0).alias("range_low_value"),
             F.lit("").alias("range_low_unit"),
             F.lit(0.0).alias("range_high_value"),
@@ -877,6 +791,9 @@ def transform_observation_reference_ranges(df):
     # Explode the referenceRange array
     ranges_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("referenceRange")).alias("range_item")
     ).filter(
         F.col("range_item").isNotNull()
@@ -894,6 +811,7 @@ def transform_observation_reference_ranges(df):
         # Approach 1: Try the nested structure with low/high as complex types
         ranges_final = ranges_df.select(
             F.col("observation_id"),
+            F.col("patient_id"),
             # Try different paths for low value
             F.coalesce(
                 F.col("range_item.low.value.double"),
@@ -944,6 +862,7 @@ def transform_observation_reference_ranges(df):
         # Fallback: Just extract text field if available
         ranges_final = ranges_df.select(
             F.col("observation_id"),
+            F.col("patient_id"),
             F.lit(None).cast(DecimalType(15,4)).alias("range_low_value"),
             F.lit(None).alias("range_low_unit"),
             F.lit(None).cast(DecimalType(15,4)).alias("range_high_value"),
@@ -956,9 +875,10 @@ def transform_observation_reference_ranges(df):
     
     # Filter to keep only records with some data
     ranges_final = ranges_final.filter(
-        F.col("range_text").isNotNull() | 
-        F.col("range_low_value").isNotNull() | 
-        F.col("range_high_value").isNotNull()
+        (F.col("range_text").isNotNull() | 
+         F.col("range_low_value").isNotNull() | 
+         F.col("range_high_value").isNotNull()) &
+        F.col("patient_id").isNotNull()
     )
     
     return ranges_final
@@ -972,6 +892,7 @@ def transform_observation_components(df):
         logger.warning("component column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("component_code"),
             F.lit("").alias("component_system"),
             F.lit("").alias("component_display"),
@@ -989,6 +910,9 @@ def transform_observation_components(df):
     # Explode the component array
     components_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("component")).alias("component_item")
     ).filter(
         F.col("component_item").isNotNull()
@@ -998,6 +922,7 @@ def transform_observation_components(df):
     # First explode the code.coding array
     components_with_code = components_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.explode(F.col("component_item.code").getField("coding")).alias("code_coding_item"),
         F.lit(None).alias("component_text"),  # text field not available in component.code structure
         F.lit(None).alias("component_value_string"),  # valueString not available in component structure
@@ -1015,6 +940,7 @@ def transform_observation_components(df):
     # Now extract the code details
     components_final = components_with_code.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("code_coding_item.code").alias("component_code"),
         F.col("code_coding_item.system").alias("component_system"),
         F.col("code_coding_item.display").alias("component_display"),
@@ -1045,7 +971,7 @@ def transform_observation_components(df):
                F.col("data_absent_reason").getField("coding")[0].getField("display")
               ).otherwise(None).alias("component_data_absent_reason_display")
     ).filter(
-        F.col("component_code").isNotNull()
+        F.col("component_code").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return components_final
@@ -1059,6 +985,7 @@ def transform_observation_notes(df):
         logger.warning("note column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("note_text"),
             F.lit("").alias("note_author_reference"),
             F.current_timestamp().alias("note_time")
@@ -1067,6 +994,9 @@ def transform_observation_notes(df):
     # Explode the note array
     notes_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("note")).alias("note_item")
     ).filter(
         F.col("note_item").isNotNull()
@@ -1075,11 +1005,12 @@ def transform_observation_notes(df):
     # Extract note details
     notes_final = notes_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("note_item.text").alias("note_text"),
         F.lit(None).alias("note_author_reference"),  # authorReference not available in note structure
         F.lit(None).alias("note_time")  # time not available in note structure
     ).filter(
-        F.col("note_text").isNotNull()
+        F.col("note_text").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return notes_final
@@ -1093,6 +1024,7 @@ def transform_observation_performers(df):
         logger.warning("performer column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("performer_type"),
             F.lit("").alias("performer_id")
         ).filter(F.lit(False))
@@ -1100,6 +1032,9 @@ def transform_observation_performers(df):
     # Explode the performer array
     performers_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("performer")).alias("performer_item")
     ).filter(
         F.col("performer_item").isNotNull()
@@ -1108,10 +1043,11 @@ def transform_observation_performers(df):
     # Extract performer details
     performers_final = performers_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.regexp_extract(F.col("performer_item").getField("reference"), r"([^/]+)/", 1).alias("performer_type"),
         F.regexp_extract(F.col("performer_item").getField("reference"), r"/(.+)", 1).alias("performer_id")
     ).filter(
-        F.col("performer_id").isNotNull()
+        F.col("performer_id").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return performers_final
@@ -1125,15 +1061,19 @@ def transform_observation_codes(df):
         logger.warning("code column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("code_code"),
             F.lit("").alias("code_system"),
             F.lit("").alias("code_display"),
             F.lit("").alias("code_text")
         ).filter(F.lit(False))
     
-    # First extract the text from code level
+    # First extract patient_id, observation_id and text from code level
     codes_with_text = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.col("code.text").alias("code_text"),
         F.col("code.coding").alias("coding_array")
     ).filter(
@@ -1143,6 +1083,7 @@ def transform_observation_codes(df):
     # Explode the coding array
     codes_df = codes_with_text.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("code_text"),
         F.explode(F.col("coding_array")).alias("coding_item")
     ).filter(
@@ -1152,12 +1093,13 @@ def transform_observation_codes(df):
     # Extract code details
     codes_final = codes_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("coding_item.code").alias("code_code"),
         F.col("coding_item.system").alias("code_system"),
         F.col("coding_item.display").alias("code_display"),
         F.col("code_text")
     ).filter(
-        F.col("code_code").isNotNull()
+        F.col("code_code").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return codes_final
@@ -1171,12 +1113,16 @@ def transform_observation_members(df):
         logger.warning("hasmember column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("member_observation_id")
         ).filter(F.lit(False))
     
     # Explode the hasmember array
     members_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("hasmember")).alias("member_item")
     ).filter(
         F.col("member_item").isNotNull()
@@ -1185,9 +1131,10 @@ def transform_observation_members(df):
     # Extract member details
     members_final = members_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.regexp_extract(F.col("member_item").getField("reference"), r"Observation/(.+)", 1).alias("member_observation_id")
     ).filter(
-        F.col("member_observation_id").isNotNull()
+        F.col("member_observation_id").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return members_final
@@ -1201,12 +1148,16 @@ def transform_observation_derived_from(df):
         logger.warning("derivedfrom column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
+            F.lit("").alias("patient_id"),
             F.lit("").alias("derived_from_reference")
         ).filter(F.lit(False))
     
     # Explode the derivedfrom array
     derived_df = df.select(
         F.col("id").alias("observation_id"),
+        F.when(F.col("subject").isNotNull(), 
+               F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
+              ).otherwise(None).alias("patient_id"),
         F.explode(F.col("derivedfrom")).alias("derived_item")
     ).filter(
         F.col("derived_item").isNotNull()
@@ -1215,172 +1166,17 @@ def transform_observation_derived_from(df):
     # Extract derived from details
     derived_final = derived_df.select(
         F.col("observation_id"),
+        F.col("patient_id"),
         F.col("derived_item").getField("reference").alias("derived_from_reference")
     ).filter(
-        F.col("derived_from_reference").isNotNull()
+        F.col("derived_from_reference").isNotNull() & F.col("patient_id").isNotNull()
     )
     
     return derived_final
 
-def create_redshift_tables_sql():
-    """Generate SQL for creating main observations table in Redshift with proper syntax"""
-    return """
-    -- Main observations table
-    CREATE TABLE IF NOT EXISTS public.observations (
-        observation_id VARCHAR(255) NOT NULL,
-        patient_id VARCHAR(255) NOT NULL,
-        encounter_id VARCHAR(255),
-        specimen_id VARCHAR(255),
-        status VARCHAR(50),
-        observation_text VARCHAR(500),
-        primary_code VARCHAR(50),
-        primary_system VARCHAR(255),
-        primary_display VARCHAR(255),
-        value_string VARCHAR(500),
-        value_quantity_value DECIMAL(15,4),
-        value_quantity_unit VARCHAR(50),
-        value_quantity_system VARCHAR(255),
-        value_codeable_concept_code VARCHAR(50),
-        value_codeable_concept_system VARCHAR(255),
-        value_codeable_concept_display VARCHAR(255),
-        value_codeable_concept_text VARCHAR(500),
-        value_datetime TIMESTAMP,
-        value_boolean BOOLEAN,
-        data_absent_reason_code VARCHAR(50),
-        data_absent_reason_display VARCHAR(255),
-        data_absent_reason_system VARCHAR(255),
-        effective_datetime TIMESTAMP,
-        effective_period_start TIMESTAMP,
-        effective_period_end TIMESTAMP,
-        issued TIMESTAMP,
-        body_site_code VARCHAR(50),
-        body_site_system VARCHAR(255),
-        body_site_display VARCHAR(255),
-        body_site_text VARCHAR(500),
-        method_code VARCHAR(50),
-        method_system VARCHAR(255),
-        method_display VARCHAR(255),
-        method_text VARCHAR(500),
-        meta_last_updated TIMESTAMP,
-        meta_source VARCHAR(255),
-        meta_profile TEXT,
-        meta_security TEXT,
-        meta_tag TEXT,
-        extensions TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) DISTKEY (patient_id) SORTKEY (patient_id, effective_datetime)
-    """
-
-def create_observation_categories_table_sql():
-    """Generate SQL for creating observation_categories table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_categories (
-        observation_id VARCHAR(255),
-        category_code VARCHAR(50),
-        category_system VARCHAR(255),
-        category_display VARCHAR(255),
-        category_text VARCHAR(500)
-    ) SORTKEY (observation_id, category_code)
-    """
-
-def create_observation_interpretations_table_sql():
-    """Generate SQL for creating observation_interpretations table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_interpretations (
-        observation_id VARCHAR(255),
-        interpretation_code VARCHAR(50),
-        interpretation_system VARCHAR(255),
-        interpretation_display VARCHAR(255)
-    ) SORTKEY (observation_id, interpretation_code)
-    """
-
-def create_observation_reference_ranges_table_sql():
-    """Generate SQL for creating observation_reference_ranges table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_reference_ranges (
-        observation_id VARCHAR(255),
-        range_low_value DECIMAL(15,4),
-        range_low_unit VARCHAR(50),
-        range_high_value DECIMAL(15,4),
-        range_high_unit VARCHAR(50),
-        range_type_code VARCHAR(50),
-        range_type_system VARCHAR(255),
-        range_type_display VARCHAR(255),
-        range_text VARCHAR(500)
-    ) SORTKEY (observation_id, range_type_code)
-    """
-
-def create_observation_components_table_sql():
-    """Generate SQL for creating observation_components table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_components (
-        observation_id VARCHAR(255),
-        component_code VARCHAR(50),
-        component_system VARCHAR(255),
-        component_display VARCHAR(255),
-        component_text VARCHAR(500),
-        component_value_string VARCHAR(500),
-        component_value_quantity_value DECIMAL(15,4),
-        component_value_quantity_unit VARCHAR(50),
-        component_value_codeable_concept_code VARCHAR(50),
-        component_value_codeable_concept_system VARCHAR(255),
-        component_value_codeable_concept_display VARCHAR(255),
-        component_data_absent_reason_code VARCHAR(50),
-        component_data_absent_reason_display VARCHAR(255)
-    ) SORTKEY (observation_id, component_code)
-    """
-
-def create_observation_notes_table_sql():
-    """Generate SQL for creating observation_notes table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_notes (
-        observation_id VARCHAR(255),
-        note_text TEXT,
-        note_author_reference VARCHAR(255),
-        note_time TIMESTAMP
-    ) SORTKEY (observation_id, note_time)
-    """
-
-def create_observation_performers_table_sql():
-    """Generate SQL for creating observation_performers table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_performers (
-        observation_id VARCHAR(255),
-        performer_type VARCHAR(50),
-        performer_id VARCHAR(255)
-    ) SORTKEY (observation_id, performer_type)
-    """
-
-def create_observation_members_table_sql():
-    """Generate SQL for creating observation_members table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_members (
-        observation_id VARCHAR(255),
-        member_observation_id VARCHAR(255)
-    ) SORTKEY (observation_id, member_observation_id)
-    """
-
-def create_observation_codes_table_sql():
-    """Generate SQL for creating observation_codes table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_codes (
-        observation_id VARCHAR(255),
-        code_code VARCHAR(50),
-        code_system VARCHAR(255),
-        code_display VARCHAR(255),
-        code_text VARCHAR(500)
-    ) SORTKEY (observation_id, code_code)
-    """
-
-def create_observation_derived_from_table_sql():
-    """Generate SQL for creating observation_derived_from table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.observation_derived_from (
-        observation_id VARCHAR(255),
-        derived_from_reference VARCHAR(255)
-    ) SORTKEY (observation_id, derived_from_reference)
-    """
+# Note: Table creation functions removed - tables must be pre-created in Redshift
+# using create_observation_tables.sql to ensure proper DISTKEY and SORTKEY settings.
+# AWS Glue's auto-create ignores these optimization settings.
 
 
 def main():
@@ -1391,11 +1187,6 @@ def main():
         logger.info("🚀 STARTING ENHANCED FHIR OBSERVATION ETL PROCESS")
         logger.info("=" * 80)
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Check table existence and log schemas
-        table_names = ["observation_categories", "observation_codes", "observation_components", "observation_derived_from", "observation_interpretations", "observation_members", "observation_notes", "observation_performers", "observation_reference_ranges", "observations"]
-        check_all_tables(glueContext, table_names, REDSHIFT_CONNECTION, S3_TEMP_DIR)
-
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
         logger.info(f"🎯 Target: Redshift (10 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
@@ -1590,9 +1381,6 @@ def main():
             F.col("specimen_id").cast(StringType()).alias("specimen_id"),
             F.col("status").cast(StringType()).alias("status"),
             F.col("observation_text").cast(StringType()).alias("observation_text"),
-            F.col("primary_code").cast(StringType()).alias("primary_code"),
-            F.col("primary_system").cast(StringType()).alias("primary_system"),
-            F.col("primary_display").cast(StringType()).alias("primary_display"),
             F.col("value_string").cast(StringType()).alias("value_string"),
             F.col("value_quantity_value").cast(DecimalType(15,4)).alias("value_quantity_value"),
             F.col("value_quantity_unit").cast(StringType()).alias("value_quantity_unit"),
@@ -1633,6 +1421,7 @@ def main():
         # Convert other DataFrames with type casting
         codes_flat_df = observation_codes_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("code_code").cast(StringType()).alias("code_code"),
             F.col("code_system").cast(StringType()).alias("code_system"),
             F.col("code_display").cast(StringType()).alias("code_display"),
@@ -1642,6 +1431,7 @@ def main():
         
         categories_flat_df = observation_categories_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("category_code").cast(StringType()).alias("category_code"),
             F.col("category_system").cast(StringType()).alias("category_system"),
             F.col("category_display").cast(StringType()).alias("category_display"),
@@ -1651,14 +1441,17 @@ def main():
         
         interpretations_flat_df = observation_interpretations_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("interpretation_code").cast(StringType()).alias("interpretation_code"),
             F.col("interpretation_system").cast(StringType()).alias("interpretation_system"),
-            F.col("interpretation_display").cast(StringType()).alias("interpretation_display")
+            F.col("interpretation_display").cast(StringType()).alias("interpretation_display"),
+            F.col("interpretation_text").cast(StringType()).alias("interpretation_text")
         )
         interpretations_dynamic_frame = DynamicFrame.fromDF(interpretations_flat_df, glueContext, "interpretations_dynamic_frame")
         
         reference_ranges_flat_df = observation_reference_ranges_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("range_low_value").cast(DecimalType(15,4)).alias("range_low_value"),
             F.col("range_low_unit").cast(StringType()).alias("range_low_unit"),
             F.col("range_high_value").cast(DecimalType(15,4)).alias("range_high_value"),
@@ -1672,6 +1465,7 @@ def main():
         
         components_flat_df = observation_components_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("component_code").cast(StringType()).alias("component_code"),
             F.col("component_system").cast(StringType()).alias("component_system"),
             F.col("component_display").cast(StringType()).alias("component_display"),
@@ -1689,6 +1483,7 @@ def main():
         
         notes_flat_df = observation_notes_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("note_text").cast(StringType()).alias("note_text"),
             F.col("note_author_reference").cast(StringType()).alias("note_author_reference"),
             F.col("note_time").cast(TimestampType()).alias("note_time")
@@ -1697,6 +1492,7 @@ def main():
         
         performers_flat_df = observation_performers_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("performer_type").cast(StringType()).alias("performer_type"),
             F.col("performer_id").cast(StringType()).alias("performer_id")
         )
@@ -1704,12 +1500,14 @@ def main():
         
         members_flat_df = observation_members_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("member_observation_id").cast(StringType()).alias("member_observation_id")
         )
         members_dynamic_frame = DynamicFrame.fromDF(members_flat_df, glueContext, "members_dynamic_frame")
         
         derived_from_flat_df = observation_derived_from_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
+            F.col("patient_id").cast(StringType()).alias("patient_id"),
             F.col("derived_from_reference").cast(StringType()).alias("derived_from_reference")
         )
         derived_from_dynamic_frame = DynamicFrame.fromDF(derived_from_flat_df, glueContext, "derived_from_dynamic_frame")
@@ -1728,9 +1526,6 @@ def main():
                 ("specimen_id", "cast:string"),
                 ("status", "cast:string"),
                 ("observation_text", "cast:string"),
-                ("primary_code", "cast:string"),
-                ("primary_system", "cast:string"),
-                ("primary_display", "cast:string"),
                 ("value_string", "cast:string"),
                 ("value_quantity_value", "cast:decimal"),
                 ("value_quantity_unit", "cast:string"),
@@ -1770,6 +1565,7 @@ def main():
         codes_resolved_frame = codes_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("code_code", "cast:string"),
                 ("code_system", "cast:string"),
                 ("code_display", "cast:string"),
@@ -1780,6 +1576,7 @@ def main():
         categories_resolved_frame = categories_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("category_code", "cast:string"),
                 ("category_system", "cast:string"),
                 ("category_display", "cast:string"),
@@ -1790,15 +1587,18 @@ def main():
         interpretations_resolved_frame = interpretations_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("interpretation_code", "cast:string"),
                 ("interpretation_system", "cast:string"),
-                ("interpretation_display", "cast:string")
+                ("interpretation_display", "cast:string"),
+                ("interpretation_text", "cast:string")
             ]
         )
         
         reference_ranges_resolved_frame = reference_ranges_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("range_low_value", "cast:decimal"),
                 ("range_low_unit", "cast:string"),
                 ("range_high_value", "cast:decimal"),
@@ -1813,6 +1613,7 @@ def main():
         components_resolved_frame = components_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("component_code", "cast:string"),
                 ("component_system", "cast:string"),
                 ("component_display", "cast:string"),
@@ -1831,6 +1632,7 @@ def main():
         notes_resolved_frame = notes_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("note_text", "cast:string"),
                 ("note_author_reference", "cast:string"),
                 ("note_time", "cast:timestamp")
@@ -1840,6 +1642,7 @@ def main():
         performers_resolved_frame = performers_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("performer_type", "cast:string"),
                 ("performer_id", "cast:string")
             ]
@@ -1848,6 +1651,7 @@ def main():
         members_resolved_frame = members_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("member_observation_id", "cast:string")
             ]
         )
@@ -1855,6 +1659,7 @@ def main():
         derived_from_resolved_frame = derived_from_dynamic_frame.resolveChoice(
             specs=[
                 ("observation_id", "cast:string"),
+                ("patient_id", "cast:string"),
                 ("derived_from_reference", "cast:string")
             ]
         )
@@ -1938,93 +1743,86 @@ def main():
         else:
             logger.info("➕ Incremental load mode - will APPEND new records only")
         
+        # Note: Tables must be pre-created using create_observation_tables.sql
+        # to ensure proper DISTKEY and SORTKEY settings
+        
         logger.info("📝 Writing main observations table...")
-        observations_table_sql = create_redshift_tables_sql()
         if is_initial_load:
-            observations_preactions = observations_table_sql + "; TRUNCATE TABLE public.observations;"
+            observations_preactions = "TRUNCATE TABLE public.observations;"
         else:
-            observations_preactions = observations_table_sql
+            observations_preactions = ""
         write_to_redshift_simple(main_resolved_frame, "observations", observations_preactions)
         logger.info("✅ Main observations table written successfully")
         
         logger.info("📝 Writing observation codes table...")
-        codes_table_sql = create_observation_codes_table_sql()
         if is_initial_load:
-            codes_preactions = codes_table_sql + "; TRUNCATE TABLE public.observation_codes;"
+            codes_preactions = "TRUNCATE TABLE public.observation_codes;"
         else:
-            codes_preactions = codes_table_sql
+            codes_preactions = ""
         write_to_redshift_simple(codes_resolved_frame, "observation_codes", codes_preactions)
         logger.info("✅ Observation codes table written successfully")
         
         logger.info("📝 Writing observation categories table...")
-        categories_table_sql = create_observation_categories_table_sql()
         if is_initial_load:
-            categories_preactions = categories_table_sql + "; TRUNCATE TABLE public.observation_categories;"
+            categories_preactions = "TRUNCATE TABLE public.observation_categories;"
         else:
-            categories_preactions = categories_table_sql
+            categories_preactions = ""
         write_to_redshift_simple(categories_resolved_frame, "observation_categories", categories_preactions)
         logger.info("✅ Observation categories table written successfully")
         
         logger.info("📝 Writing observation interpretations table...")
-        interpretations_table_sql = create_observation_interpretations_table_sql()
         if is_initial_load:
-            interpretations_preactions = interpretations_table_sql + "; TRUNCATE TABLE public.observation_interpretations;"
+            interpretations_preactions = "TRUNCATE TABLE public.observation_interpretations;"
         else:
-            interpretations_preactions = interpretations_table_sql
+            interpretations_preactions = ""
         write_to_redshift_simple(interpretations_resolved_frame, "observation_interpretations", interpretations_preactions)
         logger.info("✅ Observation interpretations table written successfully")
         
         logger.info("📝 Writing observation reference ranges table...")
-        reference_ranges_table_sql = create_observation_reference_ranges_table_sql()
         if is_initial_load:
-            reference_ranges_preactions = reference_ranges_table_sql + "; TRUNCATE TABLE public.observation_reference_ranges;"
+            reference_ranges_preactions = "TRUNCATE TABLE public.observation_reference_ranges;"
         else:
-            reference_ranges_preactions = reference_ranges_table_sql
+            reference_ranges_preactions = ""
         write_to_redshift_simple(reference_ranges_resolved_frame, "observation_reference_ranges", reference_ranges_preactions)
         logger.info("✅ Observation reference ranges table written successfully")
         
         logger.info("📝 Writing observation components table...")
-        components_table_sql = create_observation_components_table_sql()
         if is_initial_load:
-            components_preactions = components_table_sql + "; TRUNCATE TABLE public.observation_components;"
+            components_preactions = "TRUNCATE TABLE public.observation_components;"
         else:
-            components_preactions = components_table_sql
+            components_preactions = ""
         write_to_redshift_simple(components_resolved_frame, "observation_components", components_preactions)
         logger.info("✅ Observation components table written successfully")
         
         logger.info("📝 Writing observation notes table...")
-        notes_table_sql = create_observation_notes_table_sql()
         if is_initial_load:
-            notes_preactions = notes_table_sql + "; TRUNCATE TABLE public.observation_notes;"
+            notes_preactions = "TRUNCATE TABLE public.observation_notes;"
         else:
-            notes_preactions = notes_table_sql
+            notes_preactions = ""
         write_to_redshift_simple(notes_resolved_frame, "observation_notes", notes_preactions)
         logger.info("✅ Observation notes table written successfully")
         
         logger.info("📝 Writing observation performers table...")
-        performers_table_sql = create_observation_performers_table_sql()
         if is_initial_load:
-            performers_preactions = performers_table_sql + "; TRUNCATE TABLE public.observation_performers;"
+            performers_preactions = "TRUNCATE TABLE public.observation_performers;"
         else:
-            performers_preactions = performers_table_sql
+            performers_preactions = ""
         write_to_redshift_simple(performers_resolved_frame, "observation_performers", performers_preactions)
         logger.info("✅ Observation performers table written successfully")
         
         logger.info("📝 Writing observation members table...")
-        members_table_sql = create_observation_members_table_sql()
         if is_initial_load:
-            members_preactions = members_table_sql + "; TRUNCATE TABLE public.observation_members;"
+            members_preactions = "TRUNCATE TABLE public.observation_members;"
         else:
-            members_preactions = members_table_sql
+            members_preactions = ""
         write_to_redshift_simple(members_resolved_frame, "observation_members", members_preactions)
         logger.info("✅ Observation members table written successfully")
         
         logger.info("📝 Writing observation derived from table...")
-        derived_from_table_sql = create_observation_derived_from_table_sql()
         if is_initial_load:
-            derived_from_preactions = derived_from_table_sql + "; TRUNCATE TABLE public.observation_derived_from;"
+            derived_from_preactions = "TRUNCATE TABLE public.observation_derived_from;"
         else:
-            derived_from_preactions = derived_from_table_sql
+            derived_from_preactions = ""
         write_to_redshift_simple(derived_from_resolved_frame, "observation_derived_from", derived_from_preactions)
         logger.info("✅ Observation derived from table written successfully")
         

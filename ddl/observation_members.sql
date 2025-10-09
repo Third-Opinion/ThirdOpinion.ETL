@@ -1,8 +1,11 @@
 -- Table: observation_members
--- Source: HMUObservation.py (create_observation_members_table_sql)
--- Extracted: extract_ddl_from_glue_jobs.py
+-- FHIR Observation hasMember array - grouped observation relationships
+-- Updated: 2025-10-09 - Added patient_id for co-location
 
 CREATE TABLE IF NOT EXISTS public.observation_members (
-        observation_id VARCHAR(255),
-        member_observation_id VARCHAR(255)
-    ) SORTKEY (observation_id, member_observation_id)
+    observation_id VARCHAR(255) NOT NULL,
+    patient_id VARCHAR(255) NOT NULL,
+    member_observation_id VARCHAR(255) NOT NULL
+) 
+DISTKEY (patient_id)
+SORTKEY (patient_id, member_observation_id);
