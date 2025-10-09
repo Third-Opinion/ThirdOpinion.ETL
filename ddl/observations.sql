@@ -40,10 +40,10 @@
         method_text VARCHAR(500),
         meta_last_updated TIMESTAMP,
         meta_source VARCHAR(255),
-        meta_profile TEXT,
-        meta_security TEXT,
-        meta_tag TEXT,
-        extensions TEXT,
+        meta_profile VARCHAR(MAX),
+        meta_security VARCHAR(MAX),
+        meta_tag VARCHAR(MAX),
+        extensions VARCHAR(MAX),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) DISTKEY (patient_id) INTERLEAVED SORTKEY (patient_id, effective_datetime)
