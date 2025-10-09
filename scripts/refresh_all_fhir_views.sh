@@ -34,7 +34,7 @@ echo ""
 # Only refresh latest version (v2 when available, v1 otherwise)
 VIEWS=(
     "fact_fhir_patients_view_v1"           # v1 is latest
-    "fact_fhir_encounters_view_v2"         # v2 is latest
+    "fact_fhir_encounters_view_v1"         # v2 is latest
     "fact_fhir_conditions_view_v1"         # only v1 exists
     "fact_fhir_diagnostic_reports_view_v1" # only v1 exists
     "fact_fhir_document_references_view_v1" # only v1 exists
