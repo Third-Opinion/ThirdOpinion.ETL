@@ -1,5 +1,7 @@
-CREATE VIEW rpt_fhir_hmu_patients_v1
-AS 
+CREATE MATERIALIZED VIEW rpt_fhir_hmu_patients_v1
+DISTSTYLE EVEN
+SORTKEY (last_encounter_date)
+AS
 WITH target_patients AS (
     SELECT
         DISTINCT c.patient_id,
@@ -27,5 +29,4 @@ SELECT
     last_encounter_date,
     code_code,
     code_system
-FROM target_patients
-ORDER BY last_encounter_date DESC;
+FROM target_patients;
