@@ -18,6 +18,6 @@
         meta_last_updated TIMESTAMP,
         extensions TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         -- Removed PRIMARY KEY constraint to allow DISTKEY/SORTKEY
     ) DISTKEY (patient_id) SORTKEY (patient_id, effective_datetime)
