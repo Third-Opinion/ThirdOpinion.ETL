@@ -17,8 +17,8 @@ set -e  # Exit on error
 # ============================================================================
 
 # Use either CLUSTER_ID or WORKGROUP_NAME (not both)
-CLUSTER_ID=""  # e.g., "prod-redshift-main-ue2"
-WORKGROUP_NAME="hmu2-workgroup"  # e.g., "my-serverless-workgroup"
+CLUSTER_ID="prod-redshift-main-ue2"  # e.g., "prod-redshift-main-ue2"
+WORKGROUP_NAME=""  # e.g., "hmu2-workgroup" -USE FOR TESTING
 
 DATABASE="dev"
 REGION="us-east-2"
@@ -1176,9 +1176,35 @@ cmd_deploy() {
 
     # Find DDL file
     if [ -z "$ddl_file" ]; then
-        ddl_file=$(find_ddl_file "$table_name")
-        if [ $? -ne 0 ]; then
-            log_error "No DDL file found for: $table_name"
+        ddl_file=$(find_ddl_file "$table_name") || true
+        if [ -z "$ddl_file" ]; then
+            log_error "No DDL file found for table: $table_name"
+            echo ""
+            log_info "Searched in these locations:"
+            echo "  - $DDL_DIR/${table_name}.sql"
+            echo "  - $DDL_DIR/${table_name}-ddl.sql"
+            echo "  - ./${table_name}.sql"
+            echo "  - ./${table_name}-ddl.sql"
+
+            # Find similar table names
+            echo ""
+            log_info "Similar tables available:"
+            local similar_count=0
+            for file in "$DDL_DIR"/*"${table_name:0:5}"*.sql "$DDL_DIR"/*"${table_name: -5}"*.sql; do
+                if [ -f "$file" ]; then
+                    local basename=$(basename "$file" .sql)
+                    local similar_name=$(basename "$basename" -ddl)
+                    echo "  - $similar_name"
+                    similar_count=$((similar_count + 1))
+                    if [ $similar_count -ge 5 ]; then
+                        break
+                    fi
+                fi
+            done
+
+            if [ $similar_count -eq 0 ]; then
+                log_info "Try: $0 list  (to see all available tables)"
+            fi
             return 1
         fi
     fi
