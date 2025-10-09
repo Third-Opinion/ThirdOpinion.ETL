@@ -1,4 +1,4 @@
-# Deployed: 2025-10-09 04:25:38 UTC
+# Deployed: 2025-10-09 06:01:46 UTC
 from datetime import datetime
 import sys
 from awsglue.transforms import *
@@ -690,16 +690,29 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         # Step 4: Build preactions for selective deletion
         selective_preactions = preactions
         if entities_to_delete:
-            # Create DELETE statements for specific entity IDs
-            entity_ids_str = "', '".join(entities_to_delete)
-            delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
+            # For large deletions, use a different strategy to avoid "Statement is too large" error
+            # Redshift has a 16MB limit on SQL statements
+            num_entities = len(entities_to_delete)
+
+            # If we have too many entities (>10000), just truncate the table and re-insert everything
+            # This is more efficient than trying to batch large DELETE statements
+            if num_entities > 10000:
+                logger.info(f"Large deletion ({num_entities} entities) - will truncate table and re-insert all data")
+                delete_clause = f"TRUNCATE TABLE public.{table_name};"
+                # Convert ALL incoming data back to dynamic frame for full re-insert
+                filtered_df = df  # Use all data, not just filtered
+                to_process_count = total_records
+            else:
+                # For smaller deletions, use IN clause
+                entity_ids_str = "', '".join(entities_to_delete)
+                delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
 
             if selective_preactions:
                 selective_preactions = delete_clause + " " + selective_preactions
             else:
                 selective_preactions = delete_clause
 
-            logger.info(f"Will delete {len(entities_to_delete)} existing entities before inserting updated versions")
+            logger.info(f"Will delete {num_entities} existing entities before inserting updated versions")
 
         # Step 5: Convert filtered DataFrame back to DynamicFrame
         filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
