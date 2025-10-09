@@ -46,4 +46,4 @@
         extensions TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) DISTKEY (patient_id) SORTKEY (patient_id, effective_datetime)
+    ) DISTKEY (patient_id) INTERLEAVED SORTKEY (patient_id, effective_datetime)
