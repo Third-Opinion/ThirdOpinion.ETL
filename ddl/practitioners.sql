@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS public.practitioners (
         meta_last_updated TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) SORTKEY (practitioner_id);
+    ) DISTSTYLE KEY SORTKEY (practitioner_id);
