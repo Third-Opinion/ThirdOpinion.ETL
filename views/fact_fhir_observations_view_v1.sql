@@ -209,6 +209,45 @@ primary_observation_category AS (
         ) AS observation_category
     FROM public.observation_categories oc
     WHERE oc.category_code IS NOT NULL
+),
+primary_observation_code AS (
+    SELECT
+        oc.observation_id,
+        FIRST_VALUE(oc.code_system) OVER (
+            PARTITION BY oc.observation_id
+            ORDER BY
+                CASE
+                    WHEN oc.code_system = 'http://loinc.org' THEN 1
+                    WHEN oc.code_system LIKE '%snomed%' THEN 2
+                    ELSE 3
+                END,
+                oc.code_code
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS primary_system,
+        FIRST_VALUE(oc.code_code) OVER (
+            PARTITION BY oc.observation_id
+            ORDER BY
+                CASE
+                    WHEN oc.code_system = 'http://loinc.org' THEN 1
+                    WHEN oc.code_system LIKE '%snomed%' THEN 2
+                    ELSE 3
+                END,
+                oc.code_code
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS primary_code,
+        FIRST_VALUE(oc.code_display) OVER (
+            PARTITION BY oc.observation_id
+            ORDER BY
+                CASE
+                    WHEN oc.code_system = 'http://loinc.org' THEN 1
+                    WHEN oc.code_system LIKE '%snomed%' THEN 2
+                    ELSE 3
+                END,
+                oc.code_code
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+        ) AS primary_display
+    FROM public.observation_codes oc
+    WHERE oc.code_code IS NOT NULL
 )
 SELECT
     -- CORE OBSERVATION FIELDS FROM observations TABLE
@@ -222,9 +261,9 @@ SELECT
     o.effective_period_start,
     o.effective_period_end,
     o.issued,
-    o.primary_system,
-    o.primary_code,
-    o.primary_display,
+    poc2.primary_system,
+    poc2.primary_code,
+    poc2.primary_display,
     o.value_quantity_value,
     o.value_quantity_unit,
     o.value_quantity_system,
@@ -291,6 +330,7 @@ FROM public.observations o
     LEFT JOIN aggregated_notes an ON o.observation_id = an.observation_id
     LEFT JOIN aggregated_performers ap ON o.observation_id = ap.observation_id
     LEFT JOIN primary_observation_category poc ON o.observation_id = poc.observation_id
+    LEFT JOIN primary_observation_code poc2 ON o.observation_id = poc2.observation_id
 
 WHERE o.status != 'entered-in-error'
     -- EXCLUDE VITAL SIGNS
