@@ -738,14 +738,19 @@ cmd_create() {
         local drop_sql="DROP TABLE IF EXISTS $SCHEMA.$table_name CASCADE;"
         execute_sql "$drop_sql" "Dropping table"
 
-        if [ $? -ne 0 ]; then
-            log_error "Failed to drop table"
+        local drop_status=$?
+        if [ $drop_status -ne 0 ]; then
+            log_error "Failed to drop table (exit code: $drop_status)"
             return 1
         fi
+
+        # Add a small delay to ensure DROP completes in Redshift
+        sleep 1
 
         # Verify table was actually dropped
         if table_exists "$table_name" 2>/dev/null; then
             log_error "Table still exists after DROP command"
+            log_warning "This may indicate a permission issue or the table is locked"
             return 1
         fi
         log_success "Table dropped successfully (had $before_count rows)"
@@ -1268,17 +1273,22 @@ cmd_deploy() {
 
         log_info "Dropping existing table..."
         local drop_sql="DROP TABLE IF EXISTS $SCHEMA.$table_name CASCADE;"
-        local drop_query_id=$(execute_sql "$drop_sql" "Dropping table" 2>&1 | tail -1)
+        execute_sql "$drop_sql" "Dropping table"
 
-        if [ $? -ne 0 ]; then
-            log_error "Failed to drop table"
+        local drop_status=$?
+        if [ $drop_status -ne 0 ]; then
+            log_error "Failed to drop table (exit code: $drop_status)"
             record_deployment "$table_name" "$ddl_file" "failed" "Drop failed"
             return 1
         fi
 
+        # Add a small delay to ensure DROP completes in Redshift
+        sleep 1
+
         # Verify table was actually dropped
         if table_exists "$table_name" 2>/dev/null; then
             log_error "Table still exists after DROP command"
+            log_warning "This may indicate a permission issue or the table is locked"
             record_deployment "$table_name" "$ddl_file" "failed" "Drop verification failed"
             return 1
         fi
