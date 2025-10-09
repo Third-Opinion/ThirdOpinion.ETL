@@ -19,6 +19,14 @@
 # - Views that depend on other views are deployed after their dependencies
 # ===================================================================
 
+# Ensure we're running from project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Cannot change to project root directory"
+    exit 1
+}
+
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
