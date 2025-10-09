@@ -18,9 +18,9 @@ import logging
 # Table utility functions (inlined for Glue compatibility)
 def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir):
     """Check if a Redshift table exists and log its column information."""
-    logger.info(f"{'='*60}")
+    logger.info("=" * 60)
     logger.info(f"🔍 Checking table: public.{table_name}")
-    logger.info(f"{'='*60}")
+    logger.info("=" * 60)
     try:
         existing_table = glueContext.create_dynamic_frame.from_options(
             connection_type="redshift",
@@ -30,7 +30,7 @@ def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_
         df = existing_table.toDF()
         logger.info(f"✅ Table 'public.{table_name}' EXISTS")
         logger.info(f"📋 Table Schema:")
-        logger.info(f"{'   Column Name':<40} {'Data Type':<20}")
+        logger.info(f"   {'Column Name':<40} {'Data Type':<20}")
         logger.info(f"   {'-'*40} {'-'*20}")
         for field in df.schema.fields:
             logger.info(f"   {field.name:<40} {str(field.dataType):<20}")
@@ -47,17 +47,17 @@ def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_
 
 def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir):
     """Check existence and schema for multiple tables."""
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
     logger.info(f"🔍 CHECKING REDSHIFT TABLES")
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
     logger.info(f"Tables to check: {', '.join(table_names)}")
     table_status = {}
     for table_name in table_names:
         exists = check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_temp_dir)
         table_status[table_name] = exists
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
     logger.info(f"📊 TABLE CHECK SUMMARY")
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
     existing_count = sum(1 for exists in table_status.values() if exists)
     missing_count = len(table_names) - existing_count
     logger.info(f"Total tables checked: {len(table_names)}")
@@ -68,7 +68,7 @@ def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir)
         logger.info(f"Missing tables (will be created):")
         for table in missing_tables:
             logger.info(f"  - {table}")
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
     return table_status
 
 # FHIR version comparison utilities implemented inline below

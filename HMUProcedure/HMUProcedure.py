@@ -22,7 +22,7 @@ def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_
     """Check if a Redshift table exists and log its column information."""
     logger.info(f"\n{'='*60}")
     logger.info(f"🔍 Checking table: public.{table_name}")
-    logger.info(f"{'='*60}")
+    logger.info("=" * 60)
 
     try:
         existing_table = glueContext.create_dynamic_frame.from_options(
@@ -39,7 +39,7 @@ def check_and_log_table_schema(glueContext, table_name, redshift_connection, s3_
         df = existing_table.toDF()
         logger.info(f"✅ Table 'public.{table_name}' EXISTS")
         logger.info(f"\n📋 Table Schema:")
-        logger.info(f"{'   Column Name':<40} {'Data Type':<20}")
+        logger.info(f"   {'Column Name':<40} {'Data Type':<20}")
         logger.info(f"   {'-'*40} {'-'*20}")
 
         for field in df.schema.fields:
@@ -62,7 +62,7 @@ def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir)
     """Check existence and schema for multiple tables."""
     logger.info(f"\n{'='*80}")
     logger.info(f"🔍 CHECKING REDSHIFT TABLES")
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
     logger.info(f"Tables to check: {', '.join(table_names)}")
 
     table_status = {}
@@ -72,7 +72,7 @@ def check_all_tables(glueContext, table_names, redshift_connection, s3_temp_dir)
 
     logger.info(f"\n{'='*80}")
     logger.info(f"📊 TABLE CHECK SUMMARY")
-    logger.info(f"{'='*80}")
+    logger.info("=" * 80)
 
     existing_count = sum(1 for exists in table_status.values() if exists)
     missing_count = len(table_names) - existing_count
