@@ -17,12 +17,12 @@ CREATE TABLE IF NOT EXISTS public.patients (
     multiple_birth BOOLEAN,
     birth_order INTEGER,
     managing_organization_id VARCHAR(255),
-    photos TEXT,
+    photos VARCHAR(MAX),
     meta_last_updated TIMESTAMP,
     meta_source VARCHAR(255),
-    meta_security TEXT,
-    meta_tag TEXT,
-    extensions TEXT,
+    meta_security VARCHAR(MAX),
+    meta_tag VARCHAR(MAX),
+    extensions VARCHAR(MAX),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) DISTKEY (patient_id) SORTKEY (patient_id, birth_date);
