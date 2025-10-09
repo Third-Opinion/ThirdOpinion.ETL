@@ -487,6 +487,113 @@ get_changed_ddl_files() {
     fi
 }
 
+# Get list of tables matching a prefix
+get_tables_by_prefix() {
+    local prefix="$1"
+    local tables=()
+
+    if [ ! -d "$DDL_DIR" ]; then
+        return 1
+    fi
+
+    for file in "$DDL_DIR/${prefix}"*.sql; do
+        if [ -f "$file" ]; then
+            local basename=$(basename "$file" .sql)
+            local table_name=$(basename "$basename" -ddl)
+            tables+=("$table_name")
+        fi
+    done
+
+    printf '%s\n' "${tables[@]}"
+}
+
+# Execute command for multiple tables with prefix
+execute_prefix_command() {
+    local command="$1"
+    local prefix="$2"
+    local force="$3"
+
+    log_info "Finding tables with prefix: $prefix*"
+
+    local tables=($(get_tables_by_prefix "$prefix"))
+
+    if [ ${#tables[@]} -eq 0 ]; then
+        log_error "No tables found with prefix: $prefix"
+        return 1
+    fi
+
+    log_info "Found ${#tables[@]} table(s): ${tables[*]}"
+    echo ""
+
+    local success_count=0
+    local fail_count=0
+    local current=0
+
+    for table in "${tables[@]}"; do
+        current=$((current + 1))
+        echo ""
+        log_info "[$current/${#tables[@]}] Processing: $table"
+        echo "----------------------------------------"
+
+        case "$command" in
+            deploy)
+                if [ "$force" == "true" ]; then
+                    cmd_deploy "$table" "" "true"
+                else
+                    cmd_deploy "$table" ""
+                fi
+                ;;
+            status)
+                cmd_status "$table"
+                ;;
+            verify)
+                cmd_verify "$table"
+                ;;
+            history)
+                cmd_history "$table"
+                ;;
+            diff-git)
+                cmd_diff_git "$table"
+                ;;
+            compare)
+                cmd_compare "$table" ""
+                ;;
+            compare-ddl)
+                cmd_compare_ddl "$table" ""
+                ;;
+            drop)
+                cmd_drop "$table"
+                ;;
+            *)
+                log_error "Command $command does not support --prefix"
+                return 1
+                ;;
+        esac
+
+        if [ $? -eq 0 ]; then
+            success_count=$((success_count + 1))
+        else
+            fail_count=$((fail_count + 1))
+        fi
+    done
+
+    echo ""
+    echo "========================================"
+    log_info "Prefix Operation Summary:"
+    echo "  Prefix:    $prefix*"
+    echo "  Tables:    ${#tables[@]}"
+    echo "  Success:   $success_count"
+    echo "  Failed:    $fail_count"
+
+    if [ $fail_count -eq 0 ]; then
+        log_success "All operations completed successfully!"
+        return 0
+    else
+        log_warning "Some operations failed"
+        return 1
+    fi
+}
+
 # ============================================================================
 # DEPLOYMENT TRACKING
 # ============================================================================
@@ -1524,6 +1631,7 @@ main() {
     local table_name=""
     local ddl_file=""
     local force=false
+    local prefix=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1535,6 +1643,10 @@ main() {
                 force=true
                 shift
                 ;;
+            --prefix)
+                prefix="$2"
+                shift 2
+                ;;
             *)
                 if [ -z "$table_name" ]; then
                     table_name="$1"
@@ -1543,6 +1655,12 @@ main() {
                 ;;
         esac
     done
+
+    # Validate prefix length
+    if [ -n "$prefix" ] && [ ${#prefix} -lt 3 ]; then
+        log_error "Prefix must be at least 3 characters long"
+        exit 1
+    fi
 
     # Show help if no command provided
     case "$command" in
@@ -1578,6 +1696,7 @@ Commands:
 Options:
   --ddl-file <file>   Use specific DDL file
   --force             Force deployment (skip checks)
+  --prefix <prefix>   Operate on all tables matching prefix (min 3 chars)
 
 Examples:
   # Deploy table (must be committed to Git)
@@ -1611,6 +1730,15 @@ Examples:
 
   # Force redeploy single table
   $0 deploy conditions --force
+
+  # Deploy all patient* tables
+  $0 deploy --prefix patient
+
+  # Verify all medication* tables
+  $0 verify --prefix medication
+
+  # Check status of all observation* tables
+  $0 status --prefix observation
 
 Workflow:
   1. Edit DDL file: ddl/conditions.sql
@@ -1661,6 +1789,12 @@ EOF
         log_error "AWS credentials not configured"
         echo "Run: aws configure"
         exit 1
+    fi
+
+    # Check if prefix mode is enabled
+    if [ -n "$prefix" ]; then
+        execute_prefix_command "$command" "$prefix" "$force"
+        exit $?
     fi
 
     case "$command" in
