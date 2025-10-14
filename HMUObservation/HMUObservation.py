@@ -19,12 +19,12 @@ import logging
 
 def get_bookmark_from_redshift():
     """Get the maximum meta_last_updated timestamp from Redshift observations table
-    
+
     This bookmark represents the latest data already loaded into Redshift.
     We'll only process Iceberg records newer than this timestamp.
     """
     logger.info("Fetching bookmark (max meta_last_updated) from Redshift observations table...")
-    
+
     try:
         # Use raw SQL query to get the maximum timestamp
         # Note: For Glue's Redshift connector, we use query instead of dbtable for subqueries
@@ -38,13 +38,13 @@ def get_bookmark_from_redshift():
             },
             transformation_ctx="read_bookmark"
         )
-        
+
         # Convert to DataFrame and get the value
         bookmark_df = bookmark_frame.toDF()
-        
+
         if bookmark_df.count() > 0:
             max_timestamp = bookmark_df.collect()[0]['max_timestamp']
-            
+
             if max_timestamp:
                 logger.info(f"✅ Bookmark found: {max_timestamp}")
                 logger.info(f"Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
@@ -56,7 +56,7 @@ def get_bookmark_from_redshift():
         else:
             logger.info("No bookmark available - proceeding with full load")
             return None
-            
+
     except Exception as e:
         logger.info(f"Could not fetch bookmark (table may not exist): {str(e)}")
         logger.info("Proceeding with full initial load of all Iceberg records")
@@ -484,11 +484,12 @@ def _delete_using_temp_table(observation_ids_list):
 
         logger.info(f"   Using temporary table: {temp_table_name}")
 
-        # Step 1: Create temp table and load IDs
-        # The temp table will be created automatically by Glue's write operation
-        create_and_load_sql = f"""
+        # Step 1: Create regular table (not TEMP) and load IDs
+        # Note: We can't use TEMP TABLE because Glue's COPY operation happens in a different session
+        # Regular table will be dropped after use
+        create_table_sql = f"""
         DROP TABLE IF EXISTS public.{temp_table_name};
-        CREATE TEMP TABLE {temp_table_name} (observation_id VARCHAR(255));
+        CREATE TABLE public.{temp_table_name} (observation_id VARCHAR(255));
         """
 
         glueContext.write_dynamic_frame.from_options(
@@ -499,7 +500,7 @@ def _delete_using_temp_table(observation_ids_list):
                 "useConnectionProperties": "true",
                 "dbtable": f"public.{temp_table_name}",
                 "connectionName": REDSHIFT_CONNECTION,
-                "preactions": create_and_load_sql
+                "preactions": create_table_sql
             },
             transformation_ctx="write_ids_to_temp_table"
         )
@@ -1491,7 +1492,7 @@ def main():
         logger.info("📌 STEP 1.5: APPLYING BOOKMARK FILTER")
         logger.info("=" * 50)
         logger.info("Checking Redshift for existing data to enable incremental processing...")
-        
+
         bookmark_timestamp = get_bookmark_from_redshift()
         observation_df = filter_by_bookmark(observation_df, bookmark_timestamp)
         
@@ -1531,29 +1532,45 @@ def main():
             logger.info("✅ No entered-in-error observations found - proceeding with all records")
             total_records_after_filter = total_records_after_dedup
 
+        # Check if we have any valid observations to process
+        # If all observations are entered-in-error, we skip transformation but still do deletion
+        if total_records_after_filter == 0:
+            if entered_in_error_ids:
+                logger.info("\n⚠️  All observations in this batch are entered-in-error!")
+                logger.info(f"   Total: {len(entered_in_error_ids)} observations to delete")
+                logger.info("   Skipping transformation steps - proceeding directly to deletion")
+
+                # Skip to deletion step (Step 6.5)
+                logger.info("\n" + "=" * 50)
+                logger.info("🗑️  STEP 6.5: DELETING ENTERED-IN-ERROR OBSERVATIONS")
+                logger.info("=" * 50)
+                delete_entered_in_error_records(entered_in_error_ids)
+                logger.info("✅ All entered-in-error observations deleted successfully")
+                logger.info("\n✅ Job completed successfully - no valid observations to process")
+                return
+            else:
+                logger.error("❌ No raw data found after filtering! Check the data source.")
+                return
+
         # Debug: Show sample of raw data and schema
-        if total_records_after_filter > 0:
-            logger.info("\n🔍 DATA QUALITY CHECKS:")
-            logger.info("Sample of raw observation data:")
-            observation_df.show(3, truncate=False)
-            logger.info("Raw data schema:")
-            observation_df.printSchema()
-            
-            # Check for NULL values in key fields
-            null_checks = {
-                "id": observation_df.filter(F.col("id").isNull()).count(),
-                "subject.reference": observation_df.filter(F.col("subject").isNull() | F.col("subject.reference").isNull()).count(),
-                "status": observation_df.filter(F.col("status").isNull()).count(),
-                "code": observation_df.filter(F.col("code").isNull()).count()
-            }
-            
-            logger.info("NULL value analysis in key fields:")
-            for field, null_count in null_checks.items():
-                percentage = (null_count / total_records_after_filter) * 100 if total_records_after_filter > 0 else 0
-                logger.info(f"  {field}: {null_count:,} NULLs ({percentage:.1f}%)")
-        else:
-            logger.error("❌ No raw data found after filtering! Check the data source.")
-            return
+        logger.info("\n🔍 DATA QUALITY CHECKS:")
+        logger.info("Sample of raw observation data:")
+        observation_df.show(3, truncate=False)
+        logger.info("Raw data schema:")
+        observation_df.printSchema()
+
+        # Check for NULL values in key fields
+        null_checks = {
+            "id": observation_df.filter(F.col("id").isNull()).count(),
+            "subject.reference": observation_df.filter(F.col("subject").isNull() | F.col("subject.reference").isNull()).count(),
+            "status": observation_df.filter(F.col("status").isNull()).count(),
+            "code": observation_df.filter(F.col("code").isNull()).count()
+        }
+
+        logger.info("NULL value analysis in key fields:")
+        for field, null_count in null_checks.items():
+            percentage = (null_count / total_records_after_filter) * 100 if total_records_after_filter > 0 else 0
+            logger.info(f"  {field}: {null_count:,} NULLs ({percentage:.1f}%)")
         
         # Step 2: Transform main observation data
         logger.info("\n" + "=" * 50)
