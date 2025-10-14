@@ -379,6 +379,9 @@ def delete_entered_in_error_records(observation_ids_list):
     - observation_members
     - observation_derived_from
 
+    Uses a temporary table approach to handle large numbers of IDs efficiently
+    and avoid Redshift's 16 MB SQL statement size limit.
+
     Args:
         observation_ids_list: List of observation IDs to delete
     """
@@ -388,6 +391,20 @@ def delete_entered_in_error_records(observation_ids_list):
 
     logger.info(f"🗑️  Deleting {len(observation_ids_list)} entered-in-error observation(s) from all tables...")
 
+    # Determine deletion strategy based on number of IDs
+    # For small numbers (<100), use IN clause (simpler, faster)
+    # For large numbers (>=100), use temporary table (safer, avoids query size limits)
+    BATCH_SIZE = 100
+
+    if len(observation_ids_list) < BATCH_SIZE:
+        logger.info(f"   Using IN clause method (small batch: {len(observation_ids_list)} IDs)")
+        _delete_using_in_clause(observation_ids_list)
+    else:
+        logger.info(f"   Using temporary table method (large batch: {len(observation_ids_list)} IDs)")
+        _delete_using_temp_table(observation_ids_list)
+
+def _delete_using_in_clause(observation_ids_list):
+    """Delete using IN clause - suitable for small batches (<100 IDs)"""
     # Create comma-separated list of IDs for SQL IN clause
     # Escape single quotes in IDs and wrap in quotes
     escaped_ids = ["'" + str(obs_id).replace("'", "''") + "'" for obs_id in observation_ids_list]
@@ -413,31 +430,25 @@ def delete_entered_in_error_records(observation_ids_list):
     # Combine all DELETE statements
     combined_delete_sql = " ".join(delete_statements)
 
-    logger.info(f"   Executing deletions across 10 tables...")
+    logger.info(f"   Executing deletions across 10 tables using IN clause...")
     logger.info(f"   SQL preview (first 200 chars): {combined_delete_sql[:200]}...")
 
     try:
         # Execute the DELETE statements using a dummy write with preactions
-        # This is a workaround since Glue doesn't have direct SQL execution
-        # We'll create an empty DataFrame and use preactions to run our DELETEs
-
-        # Create empty DataFrame with minimal schema
         empty_df = spark.createDataFrame([], "observation_id STRING")
         empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "empty_frame_for_delete")
 
-        # Use write operation with preactions to execute DELETE statements
-        # The write itself will insert nothing (empty frame) but preactions will run
         glueContext.write_dynamic_frame.from_options(
             frame=empty_dynamic_frame,
             connection_type="redshift",
             connection_options={
                 "redshiftTmpDir": S3_TEMP_DIR,
                 "useConnectionProperties": "true",
-                "dbtable": "public.observations",  # Target table (won't actually insert anything)
+                "dbtable": "public.observations",
                 "connectionName": REDSHIFT_CONNECTION,
                 "preactions": combined_delete_sql
             },
-            transformation_ctx="delete_entered_in_error_observations"
+            transformation_ctx="delete_entered_in_error_in_clause"
         )
 
         logger.info(f"✅ Successfully deleted {len(observation_ids_list)} entered-in-error observation(s)")
@@ -447,7 +458,124 @@ def delete_entered_in_error_records(observation_ids_list):
         logger.error(f"❌ Failed to delete entered-in-error observations: {str(e)}")
         logger.error(f"   Error type: {type(e).__name__}")
         logger.warning(f"   Continuing with job execution - manual cleanup may be required")
-        # Don't raise - we want the job to continue even if deletion fails
+
+def _delete_using_temp_table(observation_ids_list):
+    """Delete using temporary table JOIN - suitable for large batches (>=100 IDs)
+
+    This approach:
+    1. Creates a temp table with IDs to delete
+    2. Loads IDs into temp table via Glue write
+    3. Uses DELETE ... USING temp table JOIN (efficient for large datasets)
+    4. Drops temp table
+
+    Avoids Redshift's 16 MB SQL statement limit and 32,768 parameter limit.
+    """
+    try:
+        # Create DataFrame with observation IDs to delete
+        ids_data = [(obs_id,) for obs_id in observation_ids_list]
+        ids_df = spark.createDataFrame(ids_data, ["observation_id"])
+        ids_dynamic_frame = DynamicFrame.fromDF(ids_df, glueContext, "ids_to_delete")
+
+        logger.info(f"   Created DataFrame with {len(observation_ids_list)} IDs to delete")
+
+        # Temporary table name (use timestamp to ensure uniqueness)
+        from datetime import datetime
+        temp_table_name = f"tmp_delete_entered_in_error_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        logger.info(f"   Using temporary table: {temp_table_name}")
+
+        # Step 1: Create temp table and load IDs
+        # The temp table will be created automatically by Glue's write operation
+        create_and_load_sql = f"""
+        DROP TABLE IF EXISTS public.{temp_table_name};
+        CREATE TEMP TABLE {temp_table_name} (observation_id VARCHAR(255));
+        """
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=ids_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{temp_table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": create_and_load_sql
+            },
+            transformation_ctx="write_ids_to_temp_table"
+        )
+
+        logger.info(f"   ✓ Loaded {len(observation_ids_list)} IDs into temp table")
+
+        # Step 2: Execute DELETE statements using USING clause with temp table JOIN
+        # This is much more efficient than large IN clauses
+        delete_statements = [
+            # Child tables first
+            f"DELETE FROM public.observation_codes USING public.{temp_table_name} WHERE observation_codes.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_categories USING public.{temp_table_name} WHERE observation_categories.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_components USING public.{temp_table_name} WHERE observation_components.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_reference_ranges USING public.{temp_table_name} WHERE observation_reference_ranges.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_interpretations USING public.{temp_table_name} WHERE observation_interpretations.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_notes USING public.{temp_table_name} WHERE observation_notes.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_performers USING public.{temp_table_name} WHERE observation_performers.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_members USING public.{temp_table_name} WHERE observation_members.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_derived_from USING public.{temp_table_name} WHERE observation_derived_from.observation_id = {temp_table_name}.observation_id;",
+            # Main table last
+            f"DELETE FROM public.observations USING public.{temp_table_name} WHERE observations.observation_id = {temp_table_name}.observation_id;",
+            # Clean up temp table
+            f"DROP TABLE IF EXISTS public.{temp_table_name};"
+        ]
+
+        combined_delete_sql = " ".join(delete_statements)
+
+        logger.info(f"   Executing deletions across 10 tables using temp table JOIN...")
+        logger.info(f"   SQL preview (first 200 chars): {combined_delete_sql[:200]}...")
+
+        # Execute DELETE statements using preactions on a dummy write
+        empty_df = spark.createDataFrame([], "observation_id STRING")
+        empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "empty_frame_for_delete")
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=empty_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": "public.observations",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": combined_delete_sql
+            },
+            transformation_ctx="delete_entered_in_error_temp_table"
+        )
+
+        logger.info(f"✅ Successfully deleted {len(observation_ids_list)} entered-in-error observation(s)")
+        logger.info(f"   Deleted from 10 tables using temp table method")
+        logger.info(f"   Temp table {temp_table_name} dropped")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete entered-in-error observations using temp table: {str(e)}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        logger.warning(f"   Continuing with job execution - manual cleanup may be required")
+        # Try to clean up temp table if it exists
+        try:
+            cleanup_sql = f"DROP TABLE IF EXISTS public.{temp_table_name};"
+            logger.info(f"   Attempting to clean up temp table: {temp_table_name}")
+            empty_df = spark.createDataFrame([], "observation_id STRING")
+            empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "cleanup_frame")
+            glueContext.write_dynamic_frame.from_options(
+                frame=empty_dynamic_frame,
+                connection_type="redshift",
+                connection_options={
+                    "redshiftTmpDir": S3_TEMP_DIR,
+                    "useConnectionProperties": "true",
+                    "dbtable": "public.observations",
+                    "connectionName": REDSHIFT_CONNECTION,
+                    "preactions": cleanup_sql
+                },
+                transformation_ctx="cleanup_temp_table"
+            )
+            logger.info(f"   ✓ Temp table cleaned up")
+        except:
+            logger.warning(f"   Could not clean up temp table {temp_table_name} - may need manual cleanup")
 
 def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
     """Write DynamicFrame to Redshift without version checking
