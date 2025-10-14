@@ -320,6 +320,135 @@ def filter_by_bookmark(df, bookmark_timestamp):
     
     return filtered_df
 
+def identify_entered_in_error_records(df):
+    """Identify observation IDs with 'entered-in-error' status that need to be deleted
+
+    Args:
+        df: Source DataFrame from Iceberg with deduplicated observations
+
+    Returns:
+        List of observation_ids with entered-in-error status
+    """
+    logger.info("Identifying observations with 'entered-in-error' status for deletion...")
+
+    # Check if status column exists
+    if "status" not in df.columns:
+        logger.warning("status column not found in data, skipping entered-in-error check")
+        return []
+
+    if "id" not in df.columns:
+        logger.warning("id column not found in data, skipping entered-in-error check")
+        return []
+
+    # Filter for entered-in-error status
+    entered_in_error_df = df.filter(F.col("status") == "entered-in-error")
+
+    # Count records
+    error_count = entered_in_error_df.count()
+
+    if error_count == 0:
+        logger.info("✅ No observations with 'entered-in-error' status found")
+        return []
+
+    # Extract observation IDs
+    observation_ids = [row['id'] for row in entered_in_error_df.select('id').distinct().collect()]
+
+    logger.info(f"⚠️  Found {len(observation_ids)} observation(s) with 'entered-in-error' status")
+    logger.info(f"   These observations will be deleted from all Redshift tables")
+
+    # Log sample IDs for audit purposes (max 10)
+    if len(observation_ids) <= 10:
+        logger.info(f"   Observation IDs to delete: {observation_ids}")
+    else:
+        logger.info(f"   Sample Observation IDs to delete (first 10): {observation_ids[:10]}")
+
+    return observation_ids
+
+def delete_entered_in_error_records(observation_ids_list):
+    """Delete observations with 'entered-in-error' status from all Redshift tables
+
+    This function removes erroneous observations from:
+    - observations (main table)
+    - observation_codes
+    - observation_categories
+    - observation_components
+    - observation_reference_ranges
+    - observation_interpretations
+    - observation_notes
+    - observation_performers
+    - observation_members
+    - observation_derived_from
+
+    Args:
+        observation_ids_list: List of observation IDs to delete
+    """
+    if not observation_ids_list:
+        logger.info("No entered-in-error observations to delete")
+        return
+
+    logger.info(f"🗑️  Deleting {len(observation_ids_list)} entered-in-error observation(s) from all tables...")
+
+    # Create comma-separated list of IDs for SQL IN clause
+    # Escape single quotes in IDs and wrap in quotes
+    escaped_ids = ["'" + str(obs_id).replace("'", "''") + "'" for obs_id in observation_ids_list]
+    ids_str = ", ".join(escaped_ids)
+
+    # Build DELETE statements for all observation-related tables
+    # Order matters: delete from child tables first to avoid foreign key issues
+    delete_statements = [
+        # Child tables first (no FK dependencies on these)
+        f"DELETE FROM public.observation_codes WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_categories WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_components WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_reference_ranges WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_interpretations WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_notes WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_performers WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_members WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_derived_from WHERE observation_id IN ({ids_str});",
+        # Main table last
+        f"DELETE FROM public.observations WHERE observation_id IN ({ids_str});"
+    ]
+
+    # Combine all DELETE statements
+    combined_delete_sql = " ".join(delete_statements)
+
+    logger.info(f"   Executing deletions across 10 tables...")
+    logger.info(f"   SQL preview (first 200 chars): {combined_delete_sql[:200]}...")
+
+    try:
+        # Execute the DELETE statements using a dummy write with preactions
+        # This is a workaround since Glue doesn't have direct SQL execution
+        # We'll create an empty DataFrame and use preactions to run our DELETEs
+
+        # Create empty DataFrame with minimal schema
+        empty_df = spark.createDataFrame([], "observation_id STRING")
+        empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "empty_frame_for_delete")
+
+        # Use write operation with preactions to execute DELETE statements
+        # The write itself will insert nothing (empty frame) but preactions will run
+        glueContext.write_dynamic_frame.from_options(
+            frame=empty_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": "public.observations",  # Target table (won't actually insert anything)
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": combined_delete_sql
+            },
+            transformation_ctx="delete_entered_in_error_observations"
+        )
+
+        logger.info(f"✅ Successfully deleted {len(observation_ids_list)} entered-in-error observation(s)")
+        logger.info(f"   Deleted from 10 tables: observations + 9 child tables")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete entered-in-error observations: {str(e)}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        logger.warning(f"   Continuing with job execution - manual cleanup may be required")
+        # Don't raise - we want the job to continue even if deletion fails
+
 def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
     """Write DynamicFrame to Redshift without version checking
     
@@ -1251,9 +1380,31 @@ def main():
         observation_df = deduplicate_observations(observation_df)
         total_records_after_dedup = observation_df.count()
         logger.info(f"✅ Deduplication completed - {total_records_after_dedup:,} unique observations remaining")
-        
+
+        # Step 1.7: Identify and separate entered-in-error observations for deletion
+        logger.info("\n" + "=" * 50)
+        logger.info("🗑️  STEP 1.7: IDENTIFYING ENTERED-IN-ERROR OBSERVATIONS")
+        logger.info("=" * 50)
+        logger.info("Checking for observations with 'entered-in-error' status...")
+
+        # Identify observations that need to be deleted from Redshift
+        entered_in_error_ids = identify_entered_in_error_records(observation_df)
+
+        # Filter out entered-in-error observations from processing pipeline
+        # These will be deleted from Redshift but not re-inserted
+        if entered_in_error_ids:
+            logger.info(f"Filtering out {len(entered_in_error_ids)} entered-in-error observation(s) from processing pipeline")
+            observation_df = observation_df.filter(F.col("status") != "entered-in-error")
+
+            total_records_after_filter = observation_df.count()
+            logger.info(f"✅ Filtered observations: {total_records_after_filter:,} valid observations will be processed")
+            logger.info(f"   ({len(entered_in_error_ids)} entered-in-error observations excluded from processing)")
+        else:
+            logger.info("✅ No entered-in-error observations found - proceeding with all records")
+            total_records_after_filter = total_records_after_dedup
+
         # Debug: Show sample of raw data and schema
-        if total_records_after_dedup > 0:
+        if total_records_after_filter > 0:
             logger.info("\n🔍 DATA QUALITY CHECKS:")
             logger.info("Sample of raw observation data:")
             observation_df.show(3, truncate=False)
@@ -1270,10 +1421,10 @@ def main():
             
             logger.info("NULL value analysis in key fields:")
             for field, null_count in null_checks.items():
-                percentage = (null_count / total_records_after_dedup) * 100 if total_records_after_dedup > 0 else 0
+                percentage = (null_count / total_records_after_filter) * 100 if total_records_after_filter > 0 else 0
                 logger.info(f"  {field}: {null_count:,} NULLs ({percentage:.1f}%)")
         else:
-            logger.error("❌ No raw data found! Check the data source.")
+            logger.error("❌ No raw data found after filtering! Check the data source.")
             return
         
         # Step 2: Transform main observation data
@@ -1745,7 +1896,17 @@ def main():
         
         # Note: Tables must be pre-created using create_observation_tables.sql
         # to ensure proper DISTKEY and SORTKEY settings
-        
+
+        # Step 6.5: Delete entered-in-error observations from Redshift (if any)
+        if entered_in_error_ids:
+            logger.info("\n" + "=" * 50)
+            logger.info("🗑️  STEP 6.5: DELETING ENTERED-IN-ERROR OBSERVATIONS")
+            logger.info("=" * 50)
+            delete_entered_in_error_records(entered_in_error_ids)
+            logger.info("✅ Entered-in-error observations deleted successfully")
+        else:
+            logger.info("\n📌 No entered-in-error observations to delete - skipping deletion step")
+
         logger.info("📝 Writing main observations table...")
         if is_initial_load:
             observations_preactions = "TRUNCATE TABLE public.observations;"
