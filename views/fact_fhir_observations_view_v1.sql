@@ -33,7 +33,7 @@
 -- 
 -- ===================================================================
 
-CREATE VIEW fact_fhir_observations_view_v1
+CREATE MATERIALIZED VIEW fact_fhir_observations_view_v1
 AS
 WITH aggregated_codes AS (
     SELECT

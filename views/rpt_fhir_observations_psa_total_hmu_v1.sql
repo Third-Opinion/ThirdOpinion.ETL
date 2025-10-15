@@ -1,4 +1,4 @@
-CREATE OR REPLACE VIEW public.rpt_fhir_observations_psa_total_hmu_v1 AS
+CREATE MATERIALIZED VIEW rpt_fhir_observations_psa_total_hmu_v1 AS
 WITH target_patients AS (
     SELECT * FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-06-01'
 )
