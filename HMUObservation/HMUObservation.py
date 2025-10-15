@@ -1,5 +1,7 @@
 from datetime import datetime
 import sys
+import os
+import glob
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from pyspark.sql import SparkSession
@@ -677,6 +679,142 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
         raise
+
+def refresh_observation_views():
+    """
+    Refresh observation-related views after ETL completes.
+
+    This function:
+    1. Refreshes the main fact_fhir_observations_view_v1 view
+    2. Finds and refreshes any rpt_fhir_observations_* report views
+
+    Uses CREATE OR REPLACE VIEW since these are standard views, not materialized.
+    Non-blocking: logs warnings on failure but doesn't fail the ETL job.
+    """
+    logger.info("\n" + "=" * 80)
+    logger.info("🔄 REFRESHING OBSERVATION VIEWS")
+    logger.info("=" * 80)
+
+    view_refresh_start = datetime.now()
+    views_refreshed = []
+    views_failed = []
+
+    try:
+        # Define views directory - handle both local dev and Glue execution contexts
+        # In Glue, we need to use the current working directory
+        script_dir = os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.getcwd()
+        views_dir = os.path.join(os.path.dirname(script_dir), 'views')
+
+        # If views directory doesn't exist in expected location, try current directory parent
+        if not os.path.exists(views_dir):
+            views_dir = os.path.join(os.path.dirname(os.getcwd()), 'views')
+
+        logger.info(f"📂 Views directory: {views_dir}")
+
+        # List of view files to refresh in order
+        view_files = [
+            ('fact_fhir_observations_view_v1.sql', 'fact_fhir_observations_view_v1')
+        ]
+
+        # Find any rpt_fhir_observations_* view files
+        if os.path.exists(views_dir):
+            report_view_pattern = os.path.join(views_dir, 'rpt_fhir_observations_*.sql')
+            report_view_files = glob.glob(report_view_pattern)
+
+            for file_path in report_view_files:
+                view_name = os.path.basename(file_path).replace('.sql', '')
+                view_files.append((os.path.basename(file_path), view_name))
+                logger.info(f"📋 Found report view: {view_name}")
+
+        # Refresh each view
+        for sql_file, view_name in view_files:
+            try:
+                logger.info(f"\n🔄 Refreshing view: {view_name}")
+
+                # Build full path to SQL file
+                sql_path = os.path.join(views_dir, sql_file)
+
+                # Check if file exists
+                if not os.path.exists(sql_path):
+                    logger.warning(f"⚠️  SQL file not found: {sql_path}")
+                    logger.warning(f"   Skipping view refresh for {view_name}")
+                    views_failed.append(view_name)
+                    continue
+
+                # Read the SQL file
+                with open(sql_path, 'r') as f:
+                    view_sql = f.read()
+
+                logger.info(f"   SQL loaded from: {sql_path}")
+                logger.info(f"   SQL length: {len(view_sql)} characters")
+
+                # Execute the CREATE OR REPLACE VIEW statement using the pattern from delete functions
+                # Create an empty DataFrame for the dummy write
+                empty_df = spark.createDataFrame([], "dummy_col STRING")
+                empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "empty_frame_for_view_refresh")
+
+                # Use a dummy table that we'll create and drop in the same transaction
+                dummy_table = f"temp_view_refresh_{view_name}"
+
+                # Combine view creation with temp table cleanup
+                preactions_sql = f"""
+                    {view_sql};
+                    CREATE TEMP TABLE {dummy_table} (dummy_col VARCHAR(1));
+                """
+
+                postactions_sql = f"DROP TABLE IF EXISTS {dummy_table};"
+
+                logger.info(f"   Executing view refresh...")
+
+                # Execute using Glue's Redshift writer with preactions
+                glueContext.write_dynamic_frame.from_options(
+                    frame=empty_dynamic_frame.limit(0),  # Empty frame
+                    connection_type="redshift",
+                    connection_options={
+                        "redshiftTmpDir": S3_TEMP_DIR,
+                        "useConnectionProperties": "true",
+                        "dbtable": dummy_table,
+                        "connectionName": REDSHIFT_CONNECTION,
+                        "preactions": preactions_sql,
+                        "postactions": postactions_sql
+                    },
+                    transformation_ctx=f"refresh_view_{view_name}"
+                )
+
+                logger.info(f"   ✅ Successfully refreshed: {view_name}")
+                views_refreshed.append(view_name)
+
+            except Exception as e:
+                logger.warning(f"   ⚠️  Failed to refresh view {view_name}: {str(e)}")
+                logger.warning(f"   Error type: {type(e).__name__}")
+                views_failed.append(view_name)
+                # Continue with next view instead of failing
+                continue
+
+        # Summary
+        view_refresh_end = datetime.now()
+        refresh_duration = view_refresh_end - view_refresh_start
+
+        logger.info("\n" + "=" * 80)
+        logger.info("📊 VIEW REFRESH SUMMARY")
+        logger.info("=" * 80)
+        logger.info(f"✅ Successfully refreshed: {len(views_refreshed)} view(s)")
+        if views_refreshed:
+            for view in views_refreshed:
+                logger.info(f"   ✓ {view}")
+
+        if views_failed:
+            logger.warning(f"⚠️  Failed to refresh: {len(views_failed)} view(s)")
+            for view in views_failed:
+                logger.warning(f"   ✗ {view}")
+
+        logger.info(f"⏱️  View refresh duration: {refresh_duration}")
+        logger.info("=" * 80)
+
+    except Exception as e:
+        logger.warning(f"⚠️  View refresh process encountered an error: {str(e)}")
+        logger.warning("   ETL job will continue - views may need manual refresh")
+        logger.warning(f"   Error type: {type(e).__name__}")
 
 # Set up logging to write to stdout (CloudWatch)
 logger = logging.getLogger()
@@ -2131,11 +2269,18 @@ def main():
             derived_from_preactions = ""
         write_to_redshift_simple(derived_from_resolved_frame, "observation_derived_from", derived_from_preactions)
         logger.info("✅ Observation derived from table written successfully")
-        
+
+        # Refresh observation views after all tables are written
+        logger.info("\n" + "=" * 80)
+        logger.info("🔄 STEP 7: REFRESHING OBSERVATION VIEWS")
+        logger.info("=" * 80)
+        refresh_observation_views()
+        logger.info("✅ View refresh step completed")
+
         # Calculate processing time
         end_time = datetime.now()
         processing_time = end_time - start_time
-        
+
         logger.info("\n" + "=" * 80)
         logger.info("🎉 ETL PROCESS COMPLETED SUCCESSFULLY!")
         logger.info("=" * 80)
