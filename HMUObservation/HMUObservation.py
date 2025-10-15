@@ -1108,7 +1108,7 @@ def transform_observation_categories(df):
     ).select(
         F.col("observation_id"),
         F.col("patient_id"),
-        F.col("coding_item.code").alias("category_code"),
+        F.regexp_replace(F.col("coding_item.code"), '^"|"$', '').alias("category_code"),
         F.col("coding_item.system").alias("category_system"),
         F.col("coding_item.display").alias("category_display"),
         F.col("category_text")
@@ -1162,7 +1162,7 @@ def transform_observation_interpretations(df):
     ).select(
         F.col("observation_id"),
         F.col("patient_id"),
-        F.col("coding_item.code").alias("interpretation_code"),
+        F.regexp_replace(F.col("coding_item.code"), '^"|"$', '').alias("interpretation_code"),
         F.col("coding_item.system").alias("interpretation_system"),
         F.col("coding_item.display").alias("interpretation_display"),
         F.col("interpretation_text")
@@ -1345,7 +1345,7 @@ def transform_observation_components(df):
     components_final = components_with_code.select(
         F.col("observation_id"),
         F.col("patient_id"),
-        F.col("code_coding_item.code").alias("component_code"),
+        F.regexp_replace(F.col("code_coding_item.code"), '^"|"$', '').alias("component_code"),
         F.col("code_coding_item.system").alias("component_system"),
         F.col("code_coding_item.display").alias("component_display"),
         F.col("component_text"),
@@ -1498,7 +1498,7 @@ def transform_observation_codes(df):
     codes_final = codes_df.select(
         F.col("observation_id"),
         F.col("patient_id"),
-        F.col("coding_item.code").alias("code_code"),
+        F.regexp_replace(F.col("coding_item.code"), '^"|"$', '').alias("code_code"),
         F.col("coding_item.system").alias("code_system"),
         F.col("coding_item.display").alias("code_display"),
         F.col("code_text")

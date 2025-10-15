@@ -72,29 +72,33 @@ DEPENDENCY_LEVEL_2=(
     "fact_fhir_encounters_view_v1"     # May depend on conditions/patients
 )
 
-# Level 3: Reporting views that depend on fact views
+# Level 3: Base reporting view that other reports depend on
 DEPENDENCY_LEVEL_3=(
     "rpt_fhir_hmu_patients_v1"         # Depends on patients, conditions, encounters
-    "rpt_fhir_medication_requests_adt_meds_hmu_view_v1"  # Depends on medication views
-    "rpt_fhir_observations_psa_total_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_testosterone_total_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_absolute_neutrophil_count_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_platelet_count_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_hemoglobin_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_creatinine_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_egfr_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_alt_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_ast_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_total_bilirubin_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_serum_albumin_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_serum_potassium_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_hba1c_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_bmi_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_cd4_count_hmu_v1"  # Depends on observations
-    "rpt_fhir_observations_hiv_viral_load_hmu_v1"  # Depends on observations
-    "rpt_fhir_conditions_additional_malignancy_hmu_v1"  # Depends on conditions
-    "rpt_fhir_conditions_active_liver_disease_hmu_v1"  # Depends on conditions
-    "rpt_fhir_conditions_cns_metastases_hmu_v1"  # Depends on conditions
+)
+
+# Level 4: Advanced reporting views that depend on Level 3 views
+DEPENDENCY_LEVEL_4=(
+    "rpt_fhir_medication_requests_adt_meds_hmu_view_v1"  # Depends on medication views and hmu_patients
+    "rpt_fhir_observations_psa_total_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_testosterone_total_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_absolute_neutrophil_count_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_platelet_count_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_hemoglobin_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_creatinine_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_egfr_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_alt_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_ast_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_total_bilirubin_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_serum_albumin_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_serum_potassium_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_hba1c_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_bmi_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_cd4_count_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_hiv_viral_load_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_conditions_additional_malignancy_hmu_v1"  # Depends on conditions and hmu_patients
+    "rpt_fhir_conditions_active_liver_disease_hmu_v1"  # Depends on conditions and hmu_patients
+    "rpt_fhir_conditions_cns_metastases_hmu_v1"  # Depends on conditions and hmu_patients
 )
 
 # Combine all views in dependency order
@@ -103,6 +107,7 @@ for view in "${DEPENDENCY_LEVEL_0[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_1[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_2[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_3[@]}"; do VIEW_NAMES+=("$view"); done
+for view in "${DEPENDENCY_LEVEL_4[@]}"; do VIEW_NAMES+=("$view"); done
 
 # Function to print colored output
 print_status() {
@@ -158,6 +163,13 @@ get_dependency_level() {
     for view in "${DEPENDENCY_LEVEL_3[@]}"; do
         if [ "$view" = "$view_name" ]; then
             echo "3"
+            return
+        fi
+    done
+
+    for view in "${DEPENDENCY_LEVEL_4[@]}"; do
+        if [ "$view" = "$view_name" ]; then
+            echo "4"
             return
         fi
     done
@@ -488,29 +500,37 @@ drop_all_views() {
     print_status "========================================" "$BLUE"
 
     # Drop in reverse order (highest dependency level first)
-    print_status "\nDropping Level 3 views (Reporting)..." "$YELLOW"
+    print_status "\nDropping Level 4 views (Advanced reporting)..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+    done
+
+    print_status "\nDropping Level 3 views (Base reporting)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
-        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 
     print_status "\nDropping Level 2 views (Complex fact views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_2[@]}"; do
-        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 
     print_status "\nDropping Level 1 views (Base fact views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_1[@]}"; do
-        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 
     print_status "\nDropping Level 0 views (Independent views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_0[@]}"; do
-        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
+
+    print_status "✓ All views dropped" "$GREEN"
 }
 
 # Function to create a single view
@@ -730,8 +750,42 @@ display_menu() {
 
     echo
     # Display Level 3
-    print_status "  Level 3 - Reporting Views:" "$CYAN"
+    print_status "  Level 3 - Base Reporting View:" "$CYAN"
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
+        local status="[Not Found]"
+        local color="$RED"
+
+        if view_file_exists "$view_name"; then
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
+        fi
+
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        index=$((index + 1))
+    done
+
+    echo
+    # Display Level 4
+    print_status "  Level 4 - Advanced Reporting Views:" "$CYAN"
+    for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
         local status="[Not Found]"
         local color="$RED"
 
@@ -800,6 +854,7 @@ redeploy_all_views() {
     deploy_views_by_level 1 "${DEPENDENCY_LEVEL_1[@]}"
     deploy_views_by_level 2 "${DEPENDENCY_LEVEL_2[@]}"
     deploy_views_by_level 3 "${DEPENDENCY_LEVEL_3[@]}"
+    deploy_views_by_level 4 "${DEPENDENCY_LEVEL_4[@]}"
 
     print_status "\n========================================" "$BLUE"
     print_status "✓ All views redeployed in dependency order" "$GREEN"
@@ -862,17 +917,34 @@ redeploy_reporting_views() {
     print_status "     REDEPLOYING REPORTING VIEWS" "$BLUE"
     print_status "========================================" "$BLUE"
 
-    # Drop and recreate reporting views
-    for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
+    # Drop Level 4 and Level 3 reporting views in reverse order
+    print_status "\nDropping Level 4 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
         if [[ $view_name == rpt_* ]]; then
-            execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
-            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+            execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
         fi
     done
 
-    print_status "\nCreating reporting views..." "$YELLOW"
-
+    print_status "\nDropping Level 3 reporting views..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        fi
+    done
+
+    print_status "\nCreating reporting views in dependency order..." "$YELLOW"
+
+    # Create Level 3 first (base reporting)
+    for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
+        if [[ $view_name == rpt_* ]] && view_file_exists "$view_name"; then
+            create_view "$view_name"
+        fi
+    done
+
+    # Then create Level 4 (advanced reporting)
+    for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
         if [[ $view_name == rpt_* ]] && view_file_exists "$view_name"; then
             create_view "$view_name"
         fi
