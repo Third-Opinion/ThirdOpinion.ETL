@@ -582,16 +582,23 @@ def _delete_using_temp_table(observation_ids_list):
 
 def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
     """Write DynamicFrame to Redshift without version checking
-    
+
     Used with bookmark pattern - since we filter at source, we can simply append all records.
     For initial loads, uses TRUNCATE to clear existing data.
+
+    Returns:
+        int: Number of records written
     """
     logger.info(f"Writing {table_name} to Redshift...")
-    
+
     try:
+        # Get record count before writing
+        record_count = dynamic_frame.count()
+
         logger.info(f"Executing preactions for {table_name}: {preactions[:100] if preactions else 'None'}")
         logger.info(f"Writing to table: public.{table_name}")
-        
+        logger.info(f"Records to write: {record_count:,}")
+
         glueContext.write_dynamic_frame.from_options(
             frame=dynamic_frame,
             connection_type="redshift",
@@ -604,9 +611,10 @@ def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
             },
             transformation_ctx=f"write_{table_name}_to_redshift"
         )
-        
-        logger.info(f"✅ Successfully wrote {table_name} to Redshift")
-        
+
+        logger.info(f"✅ Successfully wrote {record_count:,} records to {table_name}")
+        return record_count
+
     except Exception as e:
         logger.error(f"❌ Failed to write {table_name} to Redshift: {str(e)}")
         raise e
@@ -2181,21 +2189,28 @@ def main():
         # to ensure proper DISTKEY and SORTKEY settings
 
         # Step 6.5: Delete entered-in-error observations from Redshift (if any)
+        # Track deletions for view refresh decision
+        records_deleted = 0
         if entered_in_error_ids:
             logger.info("\n" + "=" * 50)
             logger.info("🗑️  STEP 6.5: DELETING ENTERED-IN-ERROR OBSERVATIONS")
             logger.info("=" * 50)
             delete_entered_in_error_records(entered_in_error_ids)
-            logger.info("✅ Entered-in-error observations deleted successfully")
+            records_deleted = len(entered_in_error_ids)
+            logger.info(f"✅ Entered-in-error observations deleted successfully ({records_deleted:,} observations)")
         else:
             logger.info("\n📌 No entered-in-error observations to delete - skipping deletion step")
+
+        # Track total records written for view refresh decision
+        total_records_written = 0
 
         logger.info("📝 Writing main observations table...")
         if is_initial_load:
             observations_preactions = "TRUNCATE TABLE public.observations;"
         else:
             observations_preactions = ""
-        write_to_redshift_simple(main_resolved_frame, "observations", observations_preactions)
+        records_written = write_to_redshift_simple(main_resolved_frame, "observations", observations_preactions)
+        total_records_written += records_written
         logger.info("✅ Main observations table written successfully")
         
         logger.info("📝 Writing observation codes table...")
@@ -2203,79 +2218,99 @@ def main():
             codes_preactions = "TRUNCATE TABLE public.observation_codes;"
         else:
             codes_preactions = ""
-        write_to_redshift_simple(codes_resolved_frame, "observation_codes", codes_preactions)
+        records_written = write_to_redshift_simple(codes_resolved_frame, "observation_codes", codes_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation codes table written successfully")
-        
+
         logger.info("📝 Writing observation categories table...")
         if is_initial_load:
             categories_preactions = "TRUNCATE TABLE public.observation_categories;"
         else:
             categories_preactions = ""
-        write_to_redshift_simple(categories_resolved_frame, "observation_categories", categories_preactions)
+        records_written = write_to_redshift_simple(categories_resolved_frame, "observation_categories", categories_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation categories table written successfully")
-        
+
         logger.info("📝 Writing observation interpretations table...")
         if is_initial_load:
             interpretations_preactions = "TRUNCATE TABLE public.observation_interpretations;"
         else:
             interpretations_preactions = ""
-        write_to_redshift_simple(interpretations_resolved_frame, "observation_interpretations", interpretations_preactions)
+        records_written = write_to_redshift_simple(interpretations_resolved_frame, "observation_interpretations", interpretations_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation interpretations table written successfully")
-        
+
         logger.info("📝 Writing observation reference ranges table...")
         if is_initial_load:
             reference_ranges_preactions = "TRUNCATE TABLE public.observation_reference_ranges;"
         else:
             reference_ranges_preactions = ""
-        write_to_redshift_simple(reference_ranges_resolved_frame, "observation_reference_ranges", reference_ranges_preactions)
+        records_written = write_to_redshift_simple(reference_ranges_resolved_frame, "observation_reference_ranges", reference_ranges_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation reference ranges table written successfully")
-        
+
         logger.info("📝 Writing observation components table...")
         if is_initial_load:
             components_preactions = "TRUNCATE TABLE public.observation_components;"
         else:
             components_preactions = ""
-        write_to_redshift_simple(components_resolved_frame, "observation_components", components_preactions)
+        records_written = write_to_redshift_simple(components_resolved_frame, "observation_components", components_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation components table written successfully")
-        
+
         logger.info("📝 Writing observation notes table...")
         if is_initial_load:
             notes_preactions = "TRUNCATE TABLE public.observation_notes;"
         else:
             notes_preactions = ""
-        write_to_redshift_simple(notes_resolved_frame, "observation_notes", notes_preactions)
+        records_written = write_to_redshift_simple(notes_resolved_frame, "observation_notes", notes_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation notes table written successfully")
-        
+
         logger.info("📝 Writing observation performers table...")
         if is_initial_load:
             performers_preactions = "TRUNCATE TABLE public.observation_performers;"
         else:
             performers_preactions = ""
-        write_to_redshift_simple(performers_resolved_frame, "observation_performers", performers_preactions)
+        records_written = write_to_redshift_simple(performers_resolved_frame, "observation_performers", performers_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation performers table written successfully")
-        
+
         logger.info("📝 Writing observation members table...")
         if is_initial_load:
             members_preactions = "TRUNCATE TABLE public.observation_members;"
         else:
             members_preactions = ""
-        write_to_redshift_simple(members_resolved_frame, "observation_members", members_preactions)
+        records_written = write_to_redshift_simple(members_resolved_frame, "observation_members", members_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation members table written successfully")
-        
+
         logger.info("📝 Writing observation derived from table...")
         if is_initial_load:
             derived_from_preactions = "TRUNCATE TABLE public.observation_derived_from;"
         else:
             derived_from_preactions = ""
-        write_to_redshift_simple(derived_from_resolved_frame, "observation_derived_from", derived_from_preactions)
+        records_written = write_to_redshift_simple(derived_from_resolved_frame, "observation_derived_from", derived_from_preactions)
+        total_records_written += records_written
         logger.info("✅ Observation derived from table written successfully")
 
-        # Refresh observation views after all tables are written
-        logger.info("\n" + "=" * 80)
-        logger.info("🔄 STEP 7: REFRESHING OBSERVATION VIEWS")
-        logger.info("=" * 80)
-        refresh_observation_views()
-        logger.info("✅ View refresh step completed")
+        # Refresh observation views only if there were any changes (writes or deletes)
+        total_changes = total_records_written + records_deleted
+
+        if total_changes > 0:
+            logger.info("\n" + "=" * 80)
+            logger.info("🔄 STEP 7: REFRESHING OBSERVATION VIEWS")
+            logger.info("=" * 80)
+            logger.info(f"📊 Changes detected: {total_records_written:,} records written, {records_deleted:,} records deleted")
+            logger.info(f"   Total changes: {total_changes:,}")
+            refresh_observation_views()
+            logger.info("✅ View refresh step completed")
+        else:
+            logger.info("\n" + "=" * 80)
+            logger.info("⏭️  STEP 7: SKIPPING VIEW REFRESH")
+            logger.info("=" * 80)
+            logger.info("📌 No changes to observation tables - views are already up to date")
+            logger.info("   No records written or deleted in this ETL run")
 
         # Calculate processing time
         end_time = datetime.now()

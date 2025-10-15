@@ -75,9 +75,26 @@ DEPENDENCY_LEVEL_2=(
 # Level 3: Reporting views that depend on fact views
 DEPENDENCY_LEVEL_3=(
     "rpt_fhir_hmu_patients_v1"         # Depends on patients, conditions, encounters
-    "rpt_fhir_adt_medications_v1"      # Depends on medication views
-    "rpt_fhir_psa_total_view_v1"       # Depends on observations
-    "rpt_fhir_testosterone_total_view_v1"  # Depends on observations
+    "rpt_fhir_medication_requests_adt_meds_hmu_view_v1"  # Depends on medication views
+    "rpt_fhir_observations_psa_total_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_testosterone_total_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_absolute_neutrophil_count_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_platelet_count_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_hemoglobin_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_creatinine_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_egfr_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_alt_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_ast_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_total_bilirubin_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_serum_albumin_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_serum_potassium_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_hba1c_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_bmi_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_cd4_count_hmu_v1"  # Depends on observations
+    "rpt_fhir_observations_hiv_viral_load_hmu_v1"  # Depends on observations
+    "rpt_fhir_conditions_additional_malignancy_hmu_v1"  # Depends on conditions
+    "rpt_fhir_conditions_active_liver_disease_hmu_v1"  # Depends on conditions
+    "rpt_fhir_conditions_cns_metastases_hmu_v1"  # Depends on conditions
 )
 
 # Combine all views in dependency order
@@ -146,6 +163,47 @@ get_dependency_level() {
     done
 
     echo "-1"  # Unknown
+}
+
+# Function to execute SQL and wait for completion (silent version for DROP commands)
+execute_sql_silent() {
+    local sql="$1"
+    local description="$2"
+
+    # Execute the statement (don't print anything)
+    local statement_id=$(aws redshift-data execute-statement \
+        --cluster-identifier "$CLUSTER_ID" \
+        --database "$DATABASE" \
+        --secret-arn "$SECRET_ARN" \
+        --sql "$sql" \
+        --region "$REGION" \
+        --query Id \
+        --output text 2>/dev/null)
+
+    if [ -z "$statement_id" ]; then
+        return 1
+    fi
+
+    # Wait for completion silently
+    local status="SUBMITTED"
+    local wait_count=0
+    local max_wait=60  # 1 minute timeout for drops
+
+    while [ "$status" != "FINISHED" ] && [ "$status" != "FAILED" ] && [ "$status" != "ABORTED" ] && [ $wait_count -lt $max_wait ]; do
+        sleep 1
+        status=$(aws redshift-data describe-statement \
+            --id "$statement_id" \
+            --region "$REGION" \
+            --query Status \
+            --output text 2>/dev/null)
+        wait_count=$((wait_count + 1))
+    done
+
+    if [ "$status" = "FINISHED" ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Function to execute SQL and wait for completion
@@ -432,22 +490,26 @@ drop_all_views() {
     # Drop in reverse order (highest dependency level first)
     print_status "\nDropping Level 3 views (Reporting)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 
     print_status "\nDropping Level 2 views (Complex fact views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_2[@]}"; do
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 
     print_status "\nDropping Level 1 views (Base fact views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_1[@]}"; do
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 
     print_status "\nDropping Level 0 views (Independent views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_0[@]}"; do
-        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+        execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
     done
 }
 
@@ -530,9 +592,14 @@ redeploy_view() {
         return 1
     fi
 
-    # Step 1: Drop existing view
+    # Step 1: Drop existing view (detect if regular view or materialized view)
     print_status "\nStep 1: Dropping existing view (if exists)..." "$YELLOW"
-    execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping view $view_name"
+
+    # Try to drop both types silently (one will succeed, one will fail - that's OK)
+    execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+    execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+
+    print_status "✓ Drop completed (if view existed)" "$GREEN"
 
     # Step 2: Create new view
     print_status "\nStep 2: Creating new view from $sql_file..." "$YELLOW"
@@ -748,19 +815,22 @@ redeploy_fact_views() {
     # Drop fact views in reverse order
     for view_name in "${DEPENDENCY_LEVEL_2[@]}"; do
         if [[ $view_name == fact_* ]]; then
-            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+            execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
         fi
     done
 
     for view_name in "${DEPENDENCY_LEVEL_1[@]}"; do
         if [[ $view_name == fact_* ]]; then
-            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+            execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
         fi
     done
 
     for view_name in "${DEPENDENCY_LEVEL_0[@]}"; do
         if [[ $view_name == fact_* ]]; then
-            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+            execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
         fi
     done
 
@@ -795,7 +865,8 @@ redeploy_reporting_views() {
     # Drop and recreate reporting views
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
         if [[ $view_name == rpt_* ]]; then
-            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping $view_name"
+            execute_sql "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
         fi
     done
 

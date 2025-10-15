@@ -1,4 +1,4 @@
-CREATE OR REPLACE VIEW public.rpt_fhir_psa_patients_v1 AS
+CREATE OR REPLACE VIEW public.rpt_fhir_observations_psa_total_hmu_v1 AS
 WITH target_patients AS (
     SELECT * FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-06-01'
 )
@@ -55,5 +55,4 @@ WHERE tp.observation_category = 'laboratory'
         OR tp.observation_text ILIKE '%PSA%' 
         OR tp.observation_text ILIKE '%prostate specific a%'
     )
-    AND tp.effective_datetime >= '2024-01-01'
     AND tp.has_value = true;

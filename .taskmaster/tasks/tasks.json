@@ -2,7 +2,7 @@
   "master": {
     "tasks": [
       {
-        "id": 1,
+        "id": "1",
         "title": "Analyze existing table schemas and relationships",
         "description": "Review all DDL files in ddl_exports/ to understand table structures, relationships, and data patterns for the 8 required FHIR entities",
         "details": "Use the Read tool to examine key DDL files for care_plans, conditions, diagnostic_reports, document_references, medication_requests, observations, practitioners, and procedures. Document primary keys, foreign keys, and relationship patterns. Map out the normalized table structure for each entity to understand how to join tables in materialized views. Create a comprehensive data dictionary showing table relationships and key fields needed for fact views.",
@@ -18,7 +18,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 1
+            "parentTaskId": 1,
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -27,7 +28,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 1
+            "parentTaskId": 1,
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -36,7 +38,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 1
+            "parentTaskId": 1,
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -45,7 +48,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 1
+            "parentTaskId": 1,
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -54,19 +58,23 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 1
+            "parentTaskId": 1,
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 4,
+        "recommendedSubtasks": 6,
+        "expansionPrompt": "Break down schema analysis by FHIR entity groupings: 1) Care Plans tables analysis, 2) Conditions tables analysis, 3) Diagnostic Reports tables analysis, 4) Document References tables analysis, 5) Medication Requests tables analysis, 6) Observations tables analysis, 7) Practitioners tables analysis, 8) Procedures tables analysis. For each entity, document table structures, relationships, primary/foreign keys, and create entity-specific data dictionaries showing join patterns needed for materialized views."
       },
       {
-        "id": 2,
+        "id": "2",
         "title": "Create fact_fhir_care_plans_view_v1 materialized view",
         "description": "Implement materialized view for care plans entity following PRD specifications with scheduled refresh pattern",
         "details": "Create materialized view joining care_plans table with care_plan_categories, care_plan_goals, care_plan_identifiers, and care_plan_care_teams. Use JSON_PARSE and LISTAGG for aggregating related data. Include REGEXP_REPLACE for data sanitization. Remove AUTO REFRESH and implement for scheduled refresh. Include all core care plan fields, aggregated categories, goals, and care team information as JSON structures using SUPER data type.",
         "testStrategy": "Verify view creates successfully, test query performance, validate JSON structure output, and confirm data integrity through row count comparisons with source tables.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -77,7 +85,8 @@
             "dependencies": [],
             "details": "Review existing fact_fhir_patients_view_v1 and fact_fhir_encounters_view_v1 to understand JSON aggregation patterns. Design the view schema including core care_plans fields, aggregated categories, goals, identifiers, and care team information. Define the SUPER data type structure for JSON fields and establish the overall view architecture.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -88,7 +97,8 @@
             ],
             "details": "Implement LEFT JOINs from care_plans table to care_plan_categories, care_plan_goals, care_plan_identifiers, and care_plan_care_teams. Establish proper join conditions and ensure all related data is captured. Include any necessary filtering for active records and proper data relationships.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -99,7 +109,8 @@
             ],
             "details": "Use JSON_PARSE and LISTAGG following established patterns from existing views to aggregate care_plan_categories, care_plan_goals, and care_plan_care_teams into JSON structures. Implement proper grouping and ensure SUPER data type compatibility for the aggregated JSON fields.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -110,19 +121,23 @@
             ],
             "details": "Create the final materialized view with REGEXP_REPLACE for data sanitization. Remove AUTO REFRESH configuration for scheduled refresh pattern. Test query performance, validate JSON structure output, and perform data integrity checks through row count comparisons with source tables. Ensure the view follows the established naming convention and performance standards.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Create subtasks for: 1) Design care plans view structure based on existing patient/encounter view patterns, 2) Implement core care_plans table joins with care_plan_categories, care_plan_goals, care_plan_identifiers, and care_plan_care_teams, 3) Develop JSON aggregation logic using JSON_PARSE and LISTAGG following established patterns, 4) Create view with data sanitization using REGEXP_REPLACE and test query performance and data integrity."
       },
       {
-        "id": 3,
+        "id": "3",
         "title": "Create fact_fhir_conditions_view_v1 materialized view",
         "description": "Implement materialized view for conditions entity with comprehensive condition data aggregation",
         "details": "Create materialized view joining conditions table with condition_body_sites, condition_categories, condition_codes, condition_evidence, condition_extensions, condition_notes, and condition_stages. Aggregate condition codes, body sites, and clinical status information. Use LISTAGG for multiple values and JSON_PARSE for complex nested structures. Include onset/abatement dates, clinical status, verification status, and all coded elements.",
         "testStrategy": "Test view creation, validate condition code aggregation, verify clinical status handling, and ensure proper null handling for optional condition attributes.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -133,7 +148,8 @@
             "dependencies": [],
             "details": "Review the conditions table schema focusing on key columns like clinical_status, verification_status, onset/abatement dates, and severity. Document relationships with condition_body_sites, condition_categories, condition_codes, condition_evidence, condition_extensions, condition_notes, and condition_stages tables. Identify primary/foreign key relationships, cardinality, and data types. Create a comprehensive mapping document showing how data flows between tables and which columns will be needed for the materialized view.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -144,7 +160,8 @@
             ],
             "details": "Study fact_fhir_encounters_view_v1 and fact_fhir_patients_view_v1 to understand the established patterns for column naming, data aggregation, and JSON structure. Design the fact_fhir_conditions_view_v1 structure with appropriate column selection from the main conditions table. Plan the JOIN strategy for all 7 related tables, determining LEFT vs INNER joins based on data requirements. Define the output columns including aggregated fields for codes, body sites, categories, and evidence.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -155,7 +172,8 @@
             ],
             "details": "Implement LISTAGG aggregations for condition_codes (including system, code, display), condition_body_sites, condition_categories, and condition_evidence. Use JSON_PARSE for nested structures like clinical_status, verification_status, and onset/abatement complex types. Create proper GROUP BY clauses and handle NULL values appropriately. Ensure JSON output is properly formatted and follows the same patterns as other views. Handle multiple codes per condition and proper concatenation with appropriate delimiters.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -166,7 +184,8 @@
             ],
             "details": "Add NULL handling for all optional attributes including onset/abatement dates, severity, and stage information. Implement data type conversions where necessary, especially for date fields and coded elements. Add validation for clinical_status and verification_status values against FHIR specifications. Create sanitization logic for text fields in notes and evidence descriptions. Ensure proper handling of edge cases like conditions without codes or body sites. Add CASE statements for conditional logic where needed.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -177,19 +196,23 @@
             ],
             "details": "Create and execute the CREATE MATERIALIZED VIEW statement in Redshift. Run validation queries to verify condition code aggregation is working correctly. Test clinical status and verification status handling with various data scenarios. Validate proper NULL handling for optional condition attributes. Check JSON aggregation output for correctness and proper formatting. Compare row counts between source tables and view results. Test performance with sample queries and verify indexes are properly utilized. Document any data quality issues or anomalies found during testing.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Break into subtasks: 1) Design conditions view structure analyzing the complex conditions main table (40+ columns), 2) Implement joins with 7 related condition tables (body_sites, categories, codes, evidence, extensions, notes, stages), 3) Handle complex nested data structures for clinical status, verification status, and onset/abatement dates, 4) Develop comprehensive JSON aggregation for codes, body sites, and evidence using LISTAGG and JSON_PARSE, 5) Implement data validation and testing for complex condition hierarchies and optional attributes."
       },
       {
-        "id": 4,
+        "id": "4",
         "title": "Create fact_fhir_diagnostic_reports_view_v1 materialized view",
         "description": "Implement materialized view for diagnostic reports with results and performer aggregation",
         "details": "Create materialized view joining diagnostic_reports with diagnostic_report_results, diagnostic_report_performers, diagnostic_report_categories, diagnostic_report_media, diagnostic_report_presented_forms, and diagnostic_report_based_on. Aggregate results as JSON array, include performer information, and handle media attachments. Use JSON_PARSE for structured data and LISTAGG for lists. Include status, issued date, effective period, and all coded categories.",
         "testStrategy": "Validate view creation, test results aggregation accuracy, verify performer data integrity, and confirm proper handling of media and presented forms.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -200,7 +223,8 @@
             "dependencies": [],
             "details": "Examine diagnostic_reports base table schema including columns, data types, and constraints. Analyze related tables: diagnostic_report_results (result values and references), diagnostic_report_performers (practitioner/organization references), diagnostic_report_categories (category codings), diagnostic_report_media (attachments and images), diagnostic_report_presented_forms (report documents), and diagnostic_report_based_on (source orders/requests). Document foreign key relationships, cardinality, and identify required aggregation patterns for each related table.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -211,7 +235,8 @@
             ],
             "details": "Design view columns including: diagnostic_report_id, status, issued_date, effective_period_start/end, conclusion text, and aggregated fields. Plan JSON structure for results array containing observation references, values, and interpretation codes. Design performer aggregation to include practitioner/organization details with roles. Define category aggregation strategy using LISTAGG. Structure media and presented_forms handling with proper null checks. Document column naming conventions consistent with existing views.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -222,7 +247,8 @@
             ],
             "details": "Implement CREATE MATERIALIZED VIEW statement with base diagnostic_reports table. Add LEFT JOINs for all 6 related tables using appropriate foreign keys. Implement JSON_PARSE aggregation for results array including observation_reference, value_quantity, value_codeable_concept, and interpretation. Create performer JSON aggregation with practitioner/organization references and display names. Use LISTAGG for categories with proper delimiters. Implement media attachment handling with content_type and url fields. Add presented_forms aggregation for report documents.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -233,7 +259,8 @@
             ],
             "details": "Add TRIM and NULLIF functions for text fields to handle empty strings and whitespace. Implement proper NULL handling for all aggregated fields using COALESCE. Add WHERE clauses to filter out invalid or test data if needed. Create appropriate indexes on foreign key columns in source tables. Add SORTKEY and DISTKEY specifications for optimal query performance. Implement date formatting consistency for issued_date and effective_period fields. Add proper error handling for JSON_PARSE operations.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -244,19 +271,23 @@
             ],
             "details": "Create test queries to validate view creation without errors. Test results aggregation by comparing JSON array contents with source diagnostic_report_results records. Verify performer information completeness and accuracy against diagnostic_report_performers. Validate category aggregation using sample reports with multiple categories. Test media and presented_forms handling including null cases. Measure query performance with different data volumes. Verify all status values are properly represented. Test edge cases like reports without results or performers.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Create subtasks for: 1) Design diagnostic reports view following existing patterns, 2) Implement joins with 6 related tables (results, performers, categories, media, presented_forms, based_on), 3) Develop JSON aggregation for results array and performer information using established JSON_PARSE patterns, 4) Handle media attachments and presented forms with proper null handling and test view performance."
       },
       {
-        "id": 5,
+        "id": "5",
         "title": "Create fact_fhir_document_references_view_v1 materialized view",
         "description": "Implement materialized view for document references with content and author aggregation",
         "details": "Create materialized view joining document_references with document_reference_content, document_reference_authors, document_reference_categories, and document_reference_identifiers. Aggregate content metadata, author information, and categories. Include document status, creation date, document type, and security labels. Use JSON_PARSE for content structure and LISTAGG for multiple authors and categories.",
         "testStrategy": "Test view creation, validate content aggregation, verify author data completeness, and ensure proper handling of document security metadata.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -267,7 +298,8 @@
             "dependencies": [],
             "details": "Review the document_references base table schema including primary keys, foreign keys, and data types. Analyze document_reference_content for content metadata structure, document_reference_authors for author information fields, document_reference_categories for category classification, and document_reference_identifiers for identifier types. Document the cardinality relationships (one-to-many) between base table and related tables. Identify fields needed for aggregation including document status, creation date, document type, and security labels.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -278,7 +310,8 @@
             ],
             "details": "Create the view design with LEFT OUTER JOINs from document_references to document_reference_content, document_reference_authors, document_reference_categories, and document_reference_identifiers. Plan LISTAGG strategy for multiple authors and categories with appropriate delimiters. Design JSON structure for content metadata aggregation. Define the column selection including document_reference_id as primary key, document status, creation date, document type, security labels, and aggregated fields. Ensure consistency with existing view patterns from fact_fhir_patients_view_v1 and fact_fhir_encounters_view_v1.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -289,7 +322,8 @@
             ],
             "details": "Implement JSON_PARSE for document_reference_content to extract and structure content metadata as JSON objects. Create LISTAGG expressions for document_reference_authors to concatenate multiple authors with appropriate formatting (e.g., author names, roles). Implement LISTAGG for document_reference_categories to aggregate category codes and display values. Handle NULL values and empty aggregations gracefully. Apply GROUP BY clause correctly for all non-aggregated columns. Ensure proper handling of security metadata fields including confidentiality levels and access restrictions.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -300,19 +334,23 @@
             ],
             "details": "Execute CREATE MATERIALIZED VIEW statement in Redshift and verify successful creation. Test with sample queries to validate content aggregation produces valid JSON structures. Verify author data completeness by checking LISTAGG results include all authors per document. Test category aggregation for documents with multiple categories. Validate security metadata handling including proper representation of confidentiality levels and security labels. Check for performance with appropriate DISTKEY and SORTKEY selection. Verify handling of edge cases such as documents without authors, content, or categories. Document any data quality issues or missing relationships.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 4,
+        "recommendedSubtasks": 4,
+        "expansionPrompt": "Break down into: 1) Design document references view structure, 2) Implement joins with 4 related tables (content, authors, categories, identifiers), 3) Develop JSON aggregation for content metadata and author information using LISTAGG and JSON_PARSE, 4) Handle document security metadata and test content structure validation."
       },
       {
-        "id": 6,
+        "id": "6",
         "title": "Create fact_fhir_medication_requests_view_v1 materialized view",
         "description": "Implement materialized view for medication requests with dosage and category aggregation",
         "details": "Create materialized view joining medication_requests with medication_request_dosage_instructions, medication_request_categories, medication_request_notes, and medication_request_identifiers. Join with medications table for medication details. Aggregate dosage instructions as JSON, include prescriber information, fulfillment status, and categories. Handle dispense requests, substitution preferences, and prior authorizations.",
         "testStrategy": "Validate view creation, test dosage instruction aggregation, verify medication data joins correctly, and confirm proper handling of prescription workflow statuses.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -323,7 +361,8 @@
             "dependencies": [],
             "details": "Document table schemas, identify primary/foreign keys, analyze data types and relationships. Review existing medication_requests data to understand dosage instruction patterns, timing complexities, and prescription workflow states. Examine medications table structure for medication details integration. Document any data quality issues or missing relationships that need handling.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -334,7 +373,8 @@
             ],
             "details": "Design LEFT JOINs for medication_request_dosage_instructions, medication_request_categories, medication_request_notes, medication_request_identifiers, and medications tables. Plan JSON aggregation structure for complex dosage instructions including timing patterns, quantity, and frequency. Define grouping strategy and handle one-to-many relationships. Include prescriber information fields, fulfillment status tracking, and category aggregation logic.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -345,7 +385,8 @@
             ],
             "details": "Implement JSON_PARSE and JSON_STRINGIFY for dosage instruction objects. Create nested JSON structures for timing patterns (daily, weekly, PRN), dosage quantities, routes of administration, and duration. Use LISTAGG with proper delimiters for multiple dosage instructions per medication request. Handle special cases like tapered doses, split doses, and complex timing schedules. Ensure proper null handling and data type conversions.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -356,7 +397,8 @@
             ],
             "details": "Add columns for dispense_request details including quantity, expected supply duration, and number of refills. Implement substitution_allowed flag and substitution reason handling. Create logic for prior_authorization status and authorization numbers. Track prescription workflow states (active, completed, cancelled, entered-in-error, draft). Include fulfillment status tracking and last dispensed date calculations. Handle special authorization requirements and controlled substance indicators.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -367,19 +409,23 @@
             ],
             "details": "Create test cases for complex dosage patterns including PRN medications, tapered doses, and multiple daily administrations. Validate JSON aggregation produces valid, parseable structures. Test prescription workflow state transitions and prior authorization handling. Verify medication details from medications table join correctly. Test performance with large datasets and optimize if needed. Validate edge cases like missing dosage instructions, null prescriber information, and incomplete fulfillment data.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 5,
+        "expansionPrompt": "Create subtasks: 1) Design medication requests view with complex dosage requirements, 2) Implement joins with 4 medication request tables plus medications table for medication details, 3) Develop complex JSON aggregation for dosage instructions with timing and quantity patterns, 4) Handle prescription workflow statuses, fulfillment tracking, and prior authorizations, 5) Test dosage instruction accuracy and prescription workflow logic."
       },
       {
-        "id": 7,
+        "id": "7",
         "title": "Create fact_fhir_observations_view_v1 materialized view",
         "description": "Implement materialized view for observations with components and reference ranges using enhanced aggregation patterns",
         "details": "Create materialized view joining observations with observation_components, observation_categories, observation_performers, observation_reference_ranges, observation_interpretations, observation_notes, observation_derived_from, and observation_members. Use MAX/MIN for vital signs pivoting as shown in PRD example. Aggregate components as JSON, include reference ranges, and handle observation relationships. Implement the blood pressure systolic/diastolic pattern from PRD specifications.",
         "testStrategy": "Test view creation, validate vital signs pivoting logic, verify component aggregation accuracy, and ensure reference ranges are properly associated with observations.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -390,7 +436,8 @@
             "dependencies": [],
             "details": "Analyze observations table structure including all 44 columns. Document relationships with observation_components, observation_categories, observation_performers, observation_reference_ranges, observation_interpretations, observation_notes, observation_derived_from, and observation_members tables. Identify primary and foreign keys, data types, and cardinality of relationships. Review existing data patterns for vital signs, especially blood pressure measurements with systolic/diastolic components.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -401,7 +448,8 @@
             ],
             "details": "Design SQL structure for vital signs pivoting using MAX(CASE WHEN component_code = 'systolic' THEN value END) and MIN(CASE WHEN component_code = 'diastolic' THEN value END) patterns. Define the main SELECT statement structure with proper GROUP BY clauses. Plan the pivoting logic for common vital signs: blood pressure (systolic/diastolic), temperature, pulse, respiratory rate, and oxygen saturation. Ensure the design accommodates both single-value and multi-component observations.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -412,7 +460,8 @@
             ],
             "details": "Implement JSON_ARRAYAGG or similar functions to aggregate observation_components data into structured JSON arrays. Each component should include: code, display, value, unit, interpretation, and reference range. Handle numeric, string, and coded value types. Ensure proper NULL handling and data type conversions. Create nested JSON structures that preserve component relationships and ordering.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -423,7 +472,8 @@
             ],
             "details": "Join observation_reference_ranges table and aggregate reference range data (low, high, normal range text) as JSON. Include observation_interpretations data with proper code mappings (H, L, N, etc.). Ensure reference ranges are correctly associated with specific components when applicable. Handle age-specific and context-specific reference ranges. Aggregate interpretation codes and display text using LISTAGG or JSON functions.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -434,7 +484,8 @@
             ],
             "details": "Join observation_derived_from to track parent-child observation relationships. Handle observation_members for panel/battery observations. Implement proper aggregation for observation_performers, observation_categories, and observation_notes. Add all remaining columns including status, effective dates, issued date, and method. Ensure proper NULL handling for optional relationships. Complete the CREATE MATERIALIZED VIEW statement with all joins and aggregations.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 6,
@@ -445,19 +496,23 @@
             ],
             "details": "Create test queries to validate blood pressure systolic/diastolic pivoting returns correct MAX/MIN values. Test component JSON aggregation for multi-component observations (CBC panels, metabolic panels). Verify reference ranges are properly associated with observations and components. Test observation relationship tracking (derived_from, members). Validate performance with sample data and ensure no data loss during aggregation. Document any edge cases or data quality issues discovered during testing.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 6,
+        "expansionPrompt": "Break into subtasks: 1) Design observations view with complex component relationships and main table analysis (44 columns), 2) Implement joins with 8 related observation tables, 3) Develop vital signs pivoting logic using MAX/MIN functions for blood pressure patterns as specified in PRD, 4) Create comprehensive JSON aggregation for components, reference ranges, and interpretations, 5) Handle observation relationships (derived_from, members) and complex reference range logic, 6) Test vital signs pivoting accuracy and component aggregation integrity."
       },
       {
-        "id": 8,
+        "id": "8",
         "title": "Create fact_fhir_practitioners_view_v1 materialized view",
         "description": "Implement materialized view for practitioners with names, addresses, and telecom aggregation",
         "details": "Create materialized view joining practitioners with practitioner_names, practitioner_addresses, and practitioner_telecoms. Use similar name ranking logic as in existing patient view. Aggregate addresses and contact information. Include practitioner qualifications, specialties, and active status. Use JSON_PARSE for structured contact data and address information.",
         "testStrategy": "Test view creation, validate name ranking logic consistency with patient view, verify address and telecom aggregation, and confirm practitioner qualification data integrity.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -468,7 +523,8 @@
             "dependencies": [],
             "details": "Examine the schema and relationships of all practitioner tables. Document the structure of practitioner_names, practitioner_addresses, and practitioner_telecoms tables. Review fact_fhir_patients_view_v1 to understand the name ranking logic implementation that should be adapted. Identify practitioner-specific fields like qualifications, specialties, and active status. Document the JSON_PARSE patterns used in existing views for structured contact data.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -479,7 +535,8 @@
             ],
             "details": "Write the CREATE MATERIALIZED VIEW statement joining practitioners with practitioner_names using adapted name ranking logic from patient view. Implement LEFT JOINs with practitioner_addresses and practitioner_telecoms tables. Use JSON_PARSE for structured contact data and address information following established patterns. Apply LISTAGG for aggregating multiple addresses and telecom entries. Include practitioner-specific fields: qualifications, specialties, and active status. Ensure proper NULL handling and data type conversions.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -490,19 +547,23 @@
             ],
             "details": "Create and execute the materialized view in the database. Test name ranking logic by comparing results with similar patterns in patient view for consistency. Validate address aggregation produces correct JSON structures. Verify telecom aggregation handles multiple contact methods properly. Test edge cases: practitioners with no names, multiple addresses, or missing telecom data. Confirm practitioner qualifications and specialties are correctly included. Document query performance metrics and any optimization opportunities.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 3,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Create subtasks for: 1) Design practitioners view reusing name ranking logic from existing patient view, 2) Implement joins with 3 practitioner tables (names, addresses, telecoms) and adapt existing name ranking patterns, 3) Aggregate addresses and telecom information using established JSON_PARSE patterns and test name ranking consistency."
       },
       {
-        "id": 9,
+        "id": "9",
         "title": "Create fact_fhir_procedures_view_v1 materialized view",
         "description": "Implement materialized view for procedures with code codings and identifier aggregation",
         "details": "Create materialized view joining procedures with procedure_code_codings and procedure_identifiers. Aggregate procedure codes, include performer information, procedure dates, and status. Handle procedure relationships, outcomes, and complications. Use JSON_PARSE for coded elements and LISTAGG for multiple code codings per procedure.",
         "testStrategy": "Test view creation, validate procedure code aggregation, verify date handling for performed procedures, and ensure proper status and outcome tracking.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "done",
         "subtasks": [
@@ -513,7 +574,8 @@
             "dependencies": [],
             "details": "Review procedures table schema including performer fields, status columns, date fields (performed_period_start, performed_period_end), and outcome columns. Analyze procedure_code_codings table structure for code aggregation using LISTAGG. Examine procedure_identifiers table for identifier aggregation patterns. Document any JSON fields that need JSON_PARSE treatment. Identify relationships with other entities like encounters or patients.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -524,7 +586,8 @@
             ],
             "details": "Design LEFT JOINs from procedures to procedure_code_codings and procedure_identifiers. Define LISTAGG aggregation for procedure codes with proper delimiters and ordering. Structure identifier aggregation similar to other views. Plan JSON_PARSE usage for coded elements like status_reason or outcome. Include all required fields: procedure dates, performer information, status, outcomes, and complications. Define proper GROUP BY clauses for aggregations.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -535,7 +598,8 @@
             ],
             "details": "Implement the full SQL for fact_fhir_procedures_view_v1. Use LISTAGG(DISTINCT ...) for procedure code aggregations from procedure_code_codings. Apply JSON_PARSE where needed for structured fields. Extract performer information (could be practitioner references or inline data). Handle procedure dates properly (performed_period_start/end). Include status tracking and outcome/complication fields. Ensure proper NULL handling in aggregations. Add appropriate column aliases for clarity.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -546,26 +610,30 @@
             ],
             "details": "Test materialized view creation and refresh. Validate LISTAGG aggregation produces correct procedure code lists without duplicates. Verify procedures with multiple code_codings aggregate properly. Test procedures with no related codes or identifiers (NULL handling). Validate performer information extraction and date field population. Compare row counts between base table and view. Test a sample of procedures to ensure status, outcomes, and complications are captured correctly. Document any performance considerations for the aggregations.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 4,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Break down into: 1) Design procedures view structure, 2) Implement joins with 2 procedure tables (code_codings, identifiers) and aggregate procedure codes using LISTAGG, 3) Handle procedure dates, performer information, and outcomes with proper status tracking and test code aggregation accuracy."
       },
       {
-        "id": 10,
+        "id": "10",
         "title": "Upgrade existing views to V2 and implement scheduled refresh infrastructure",
         "description": "Convert existing patient and encounter views to V2 with enhanced features, remove AUTO REFRESH, and set up scheduled refresh system",
         "details": "Update fact_fhir_patients_view_v1.sql to V2 with window functions, LISTAGG, and subqueries as specified in PRD appendix. Update fact_fhir_encounters_view_v1.sql to V2 with duration calculations, participant aggregations, and diagnosis/procedure counts. Remove AUTO REFRESH from all views. Create AWS Lambda function for scheduled refresh, implement CloudWatch Events rule for hourly execution, and create deployment scripts with AWS CLI commands for all 10 materialized views.",
         "testStrategy": "Test V2 view functionality with window functions, validate scheduled refresh execution, verify Lambda function operation, confirm CloudWatch Events scheduling, and run end-to-end deployment validation script to ensure all views refresh successfully.",
         "priority": "high",
         "dependencies": [
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9"
         ],
         "status": "done",
         "subtasks": [
@@ -576,7 +644,8 @@
             "dependencies": [],
             "details": "Examine PRD specifications for fact_fhir_patients_view_v2 requirements including window functions for patient ranking, LISTAGG for aggregating identifiers and addresses, and subquery patterns for related data. Review fact_fhir_encounters_view_v2 requirements for duration calculations, participant aggregations, diagnosis/procedure counts. Document all new fields, aggregation logic, and performance considerations. Create implementation checklist for each view upgrade.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -587,7 +656,8 @@
             ],
             "details": "Modify fact_fhir_patients_view_v1.sql to create V2 version. Add window functions for patient ranking by last updated timestamp, implement LISTAGG for concatenating multiple identifiers and addresses into single fields, create subqueries for counting related resources (encounters, conditions, observations). Add new calculated fields like age_at_last_encounter, total_encounter_count, active_condition_count. Ensure proper NULL handling and data type conversions for SUPER fields.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -598,7 +668,8 @@
             ],
             "details": "Modify fact_fhir_encounters_view_v1.sql to create V2 version. Add duration calculation using DATEDIFF between period_start and period_end, implement participant aggregation using LISTAGG to combine all participants into JSON array, add diagnosis and procedure counts using subqueries. Include new fields for length_of_stay, participant_count, primary_diagnosis, and procedure_list. Implement proper handling of emergency vs scheduled encounters.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -610,7 +681,8 @@
             ],
             "details": "Modify all 10 materialized view SQL files to remove AUTO REFRESH YES clause: fact_fhir_patients_view, fact_fhir_encounters_view, fact_fhir_care_plans_view, fact_fhir_conditions_view, fact_fhir_diagnostic_reports_view, fact_fhir_document_references_view, fact_fhir_medication_requests_view, fact_fhir_observations_view, fact_fhir_practitioners_view, fact_fhir_procedures_view. Replace with NO AUTO REFRESH or omit the clause entirely. Document the change in each file header.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -621,7 +693,8 @@
             ],
             "details": "Create Python Lambda function using boto3 to connect to Redshift via Data API. Implement refresh logic for all 10 materialized views in sequence with proper error handling and retry logic. Add CloudWatch logging for each refresh operation including start time, completion time, and row counts. Include configuration for Redshift cluster identifier, database name, and IAM role. Implement timeout handling and notification on failures via SNS.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 6,
@@ -632,7 +705,8 @@
             ],
             "details": "Create CloudWatch Events rule with cron expression for hourly execution (0 * * * ? *). Configure IAM role for Lambda with permissions for redshift-data:ExecuteStatement, redshift-data:DescribeStatement, redshift-data:GetStatementResult, logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents, and SNS publish permissions. Create event target linking the rule to Lambda function. Set up CloudWatch dashboard for monitoring refresh execution metrics.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           },
           {
             "id": 7,
@@ -644,12 +718,16 @@
             ],
             "details": "Create shell script with AWS CLI commands to deploy Lambda function, create CloudWatch Events rule, and set up IAM roles. Include commands to create/update all 10 materialized views without AUTO REFRESH. Develop test script to validate Lambda execution, verify all views refresh successfully, check refresh timestamps, and validate row counts. Create rollback script for emergency scenarios. Document deployment process and create runbook for operations team.",
             "status": "done",
-            "testStrategy": ""
+            "testStrategy": "",
+            "parentId": "undefined"
           }
-        ]
+        ],
+        "complexity": 8,
+        "recommendedSubtasks": 8,
+        "expansionPrompt": "Create comprehensive subtasks: 1) Analyze PRD V2 specifications for patients and encounters views with window functions and enhanced aggregations, 2) Upgrade fact_fhir_patients_view_v1.sql to V2 with window functions, LISTAGG, and subqueries, 3) Upgrade fact_fhir_encounters_view_v1.sql to V2 with duration calculations and participant aggregations, 4) Remove AUTO REFRESH from all 10 materialized views, 5) Design AWS Lambda function for scheduled refresh with error handling and logging, 6) Implement CloudWatch Events rule for hourly execution with proper IAM permissions, 7) Create deployment scripts with AWS CLI commands for all 10 views, 8) Develop end-to-end testing and validation scripts for scheduled refresh system."
       },
       {
-        "id": 11,
+        "id": "11",
         "title": "Refactor all Glue jobs to work with Apache Iceberg",
         "description": "Update all AWS Glue ETL jobs to use Apache Iceberg format following the HMUPatient.py template",
         "details": "Refactor all AWS Glue ETL jobs to work with Apache Iceberg format, following the pattern established in HMUPatient/HMUPatient.py. Each job needs to be updated to: \n1) Read from S3 using Iceberg catalog instead of Glue Catalog\n2) Configure Spark session with Iceberg extensions\n3) Use the correct S3 bucket paths and database names for the Iceberg tables\n4) Set logging level to DEBUG for better troubleshooting\n5) Update table read operations to use spark.table() with fully qualified Iceberg table names\n6) Review and ensure naming consistency across all jobs for aliased fields and new fields\n   - Check for consistent snake_case vs camelCase usage\n   - Ensure similar transformations use the same field names across all jobs\n   - Verify consistent naming patterns for FHIR resource fields\n   - Standardize alias naming conventions for transformed columns\n   - Document any naming inconsistencies found and fix them\n7) Update shell scripts that manage Glue tasks to have the correct job names\n   - Update any deployment scripts (deploy_glue_jobs.sh, etc.)\n   - Update any monitoring or testing scripts\n   - Ensure job names in scripts match the actual Glue job names\n   - Update any batch processing or orchestration scripts\n8) Create a deployment script to recreate all Glue jobs from JSON configurations\n   - Create script to use AWS CLI to create Glue jobs from HMU*.json files\n   - All existing Glue jobs have been deleted and need to be recreated\n   - Script should iterate through all HMU*/HMU*.json files\n   - Use aws glue create-job command with proper parameters\n   - Include error handling and logging in the script\n\nThe JSON configuration files have already been updated. \n\nThe following Glue jobs need to be refactored and recreated:\n- HMUAllergyIntolerance\n- HMUCarePlan  \n- HMUCondition\n- HMUDiagnosticReport\n- HMUDocumentReference\n- HMUEncounter\n- HMUMedication\n- HMUMedicationDispense\n- HMUMedicationRequest\n- HMUObservation\n- HMUPatient\n- HMUPractitioner\n- HMUProcedure",
@@ -665,7 +743,8 @@
             "details": "Update the HMUAllergyIntolerance Glue job to use Iceberg catalog with DEBUG logging",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -674,7 +753,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -683,7 +763,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -692,7 +773,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -701,7 +783,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 6,
@@ -710,7 +793,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 7,
@@ -719,7 +803,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 8,
@@ -728,7 +813,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 9,
@@ -737,7 +823,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 10,
@@ -746,7 +833,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 11,
@@ -755,7 +843,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 12,
@@ -764,7 +853,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 13,
@@ -773,7 +863,8 @@
             "details": "Search for all shell scripts (.sh files) in the project that reference Glue job names. Update any deployment, monitoring, testing, or orchestration scripts to use the correct job names (HMUAllergyIntolerance, HMUCarePlan, HMUCondition, etc.). Ensure consistency between scripts and actual AWS Glue job configurations.",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           },
           {
             "id": 14,
@@ -782,12 +873,13 @@
             "details": "Create deploy_glue_jobs.sh script that:\\n- Iterates through all HMU*/HMU*.json files\\n- Uses AWS CLI to create each Glue job (aws glue create-job --cli-input-json)\\n- Handles both creation and update scenarios (check if job exists first)\\n- Includes proper error handling and logging\\n- Sets correct AWS profile/region\\n- Since all jobs have been deleted, focus on creation first\\n- Should handle HMUPatient as well as the other 12 jobs",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 11
+            "parentTaskId": 11,
+            "parentId": "undefined"
           }
         ]
       },
       {
-        "id": 12,
+        "id": "12",
         "title": "Externalize table creation from Glue jobs to SQL DDL files",
         "description": "Extract table creation logic from each HMU_*.py job into individual SQL files stored in ./ddl directory (one file per table named table_name.sql). Each Glue job creates multiple tables, so there will be multiple SQL DDL files per job. For example, HMUPractitioner.py creates 4 tables: practitioners, practitioner_addresses, practitioner_names, and practitioner_telecoms.",
         "details": "Update Glue scripts to: 1) Check table existence during initialization, 2) Print columns from each table when initializing, 3) Assume tables exist in write_to_redshift function. The extraction should identify all CREATE TABLE statements in each Glue job and create separate SQL files for each table.",
@@ -803,7 +895,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 2,
@@ -812,7 +905,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 3,
@@ -821,7 +915,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 4,
@@ -830,7 +925,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 5,
@@ -839,7 +935,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 6,
@@ -848,7 +945,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 7,
@@ -857,7 +955,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 8,
@@ -866,7 +965,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 9,
@@ -875,7 +975,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 10,
@@ -884,7 +985,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 11,
@@ -893,7 +995,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 12,
@@ -902,7 +1005,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 13,
@@ -911,7 +1015,8 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           },
           {
             "id": 14,
@@ -920,15 +1025,98 @@
             "details": "",
             "status": "done",
             "dependencies": [],
-            "parentTaskId": 12
+            "parentTaskId": 12,
+            "parentId": "undefined"
           }
         ]
+      },
+      {
+        "id": "13",
+        "title": "Refactor HMU observation SQL queries to follow testosterone pattern",
+        "description": "Update all SQL queries in hmu_sql directory that target observations table to follow the pattern established in rpt_fhir_observations_testosterone_total_hmu_view_v1.sql, converting them to materialized views with standardized naming and removing value filters.",
+        "details": "This task involves refactoring the observation-based queries in the hmu_sql directory to align with the new pattern:\n\n1. **Identify target files** - The following files need to be updated as they query the observations table:\n   - 02_absolute_neutrophil_count.sql\n   - 03_platelet_count.sql\n   - 04_hemoglobin.sql\n   - 05_creatinine.sql (includes both creatinine and eGFR observations)\n   - 06_alt.sql\n   - 07_ast.sql\n   - 08_total_bilirubin.sql\n   - 09_serum_albumin.sql\n   - 10_serum_potassium.sql\n   - 13_hba1c.sql\n   - 14_hiv_uncontrolled.sql (CD4 count and viral load observations)\n   - 15_bmi.sql\n\n2. **Pattern to follow** (from rpt_fhir_observations_testosterone_total_hmu_view_v1.sql):\n   - Convert from SELECT queries to CREATE MATERIALIZED VIEW statements\n   - Remove code checks (oc.code_code IN ...) and unit checks from WHERE clauses\n   - Keep status filter (status IN ('final', 'amended', 'corrected'))\n   - Keep text/display matching for test identification\n   - Remove value_quantity_value threshold filters (e.g., >= 1500, > 40)\n   - Include data_quality_flag column to identify records with both value_string and value_quantity_value\n   - Add filter to exclude records where both value fields are NULL\n   - Select comprehensive columns including all value fields\n\n3. **Naming convention**: \n   - rpt_fhir_observations_absolute_neutrophil_count_hmu_view_v1.sql\n   - rpt_fhir_observations_platelet_count_hmu_view_v1.sql\n   - rpt_fhir_observations_hemoglobin_hmu_view_v1.sql\n   - rpt_fhir_observations_creatinine_hmu_view_v1.sql\n   - rpt_fhir_observations_egfr_hmu_view_v1.sql (separate from creatinine)\n   - rpt_fhir_observations_alt_hmu_view_v1.sql\n   - rpt_fhir_observations_ast_hmu_view_v1.sql\n   - rpt_fhir_observations_total_bilirubin_hmu_view_v1.sql\n   - rpt_fhir_observations_serum_albumin_hmu_view_v1.sql\n   - rpt_fhir_observations_serum_potassium_hmu_view_v1.sql\n   - rpt_fhir_observations_hba1c_hmu_view_v1.sql\n   - rpt_fhir_observations_cd4_count_hmu_view_v1.sql\n   - rpt_fhir_observations_hiv_viral_load_hmu_view_v1.sql\n   - rpt_fhir_observations_bmi_hmu_view_v1.sql\n\n4. **Key changes per file**:\n   - Remove value_quantity_value comparison filters\n   - Remove value_quantity_unit validation from WHERE clause\n   - Add comprehensive column selection including all value types\n   - Add data_quality_flag CASE statement\n   - Add exclusion for records with both value fields NULL\n   - Keep laboratory category filter where applicable\n   - Preserve test-specific text matching patterns\n\n5. **Special considerations**:\n   - File 05_creatinine.sql contains both creatinine and eGFR - split into two views\n   - File 14_hiv_uncontrolled.sql contains CD4 count and viral load - split into two views\n   - Files 12, 11, 16 don't query observations table directly - skip these\n   - Preserve observation_codes join for code matching where needed\n   - Maintain observation_categories join for laboratory category filter",
+        "testStrategy": "1. Verify each new materialized view file is created with correct naming convention\n2. Test that CREATE MATERIALIZED VIEW syntax is valid for each view\n3. Confirm all value threshold filters have been removed from WHERE clauses\n4. Validate data_quality_flag column is present and correctly identifies records with both value fields\n5. Check that records with both value fields NULL are excluded\n6. Run sample queries against each view to ensure they return data\n7. Compare column selection with template to ensure all required fields are included\n8. Verify that test-specific text matching patterns are preserved\n9. Confirm that files 11, 12, and 16 are not modified as they don't query observations",
+        "status": "done",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Analyze existing HMU SQL files and testosterone pattern",
+            "description": "Review all SQL files in hmu_sql directory to identify observation-based queries and understand the testosterone pattern template to follow for refactoring",
+            "dependencies": [],
+            "details": "Examine hmu_sql directory files (02-15) to identify which ones query the observations table. Study rpt_fhir_observations_testosterone_total_hmu_view_v1.sql to understand the materialized view pattern including column selection, data_quality_flag implementation, and filtering approach. Document the specific changes needed for each file.",
+            "status": "done",
+            "testStrategy": "Verify all observation-based SQL files are identified and the pattern requirements are documented",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-15T00:46:32.035Z"
+          },
+          {
+            "id": 2,
+            "title": "Refactor laboratory test observation queries (ANC, Platelet, Hemoglobin)",
+            "description": "Convert absolute neutrophil count, platelet count, and hemoglobin SQL queries to materialized views following the testosterone pattern",
+            "dependencies": [
+              1
+            ],
+            "details": "Create rpt_fhir_observations_absolute_neutrophil_count_hmu_view_v1.sql, rpt_fhir_observations_platelet_count_hmu_view_v1.sql, and rpt_fhir_observations_hemoglobin_hmu_view_v1.sql as materialized views. Remove value threshold filters, add data_quality_flag column, include comprehensive value columns, and maintain laboratory category filtering where applicable.",
+            "status": "done",
+            "testStrategy": "Test CREATE MATERIALIZED VIEW syntax validity and verify removal of value filters",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-15T00:47:08.026Z"
+          },
+          {
+            "id": 3,
+            "title": "Refactor liver and kidney function test queries",
+            "description": "Convert creatinine, eGFR, ALT, AST, total bilirubin, serum albumin, and serum potassium queries to materialized views",
+            "dependencies": [
+              1
+            ],
+            "details": "Create separate materialized views for creatinine and eGFR from file 05. Convert ALT, AST, total bilirubin, serum albumin, and serum potassium queries. Apply standardized naming convention with rpt_fhir_observations_ prefix. Remove all value_quantity_value comparison filters and unit validation from WHERE clauses while preserving test-specific text matching.",
+            "status": "done",
+            "testStrategy": "Validate proper separation of creatinine/eGFR views and confirm data_quality_flag implementation",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-15T00:48:07.778Z"
+          },
+          {
+            "id": 4,
+            "title": "Refactor HIV and diabetes monitoring queries",
+            "description": "Convert HbA1c, CD4 count, HIV viral load, and BMI queries to materialized views following the established pattern",
+            "dependencies": [
+              1
+            ],
+            "details": "Split file 14_hiv_uncontrolled.sql into separate rpt_fhir_observations_cd4_count_hmu_view_v1.sql and rpt_fhir_observations_hiv_viral_load_hmu_view_v1.sql views. Create views for HbA1c and BMI. Ensure all views include comprehensive value columns, data_quality_flag, and exclude records where both value fields are NULL.",
+            "status": "done",
+            "testStrategy": "Test proper splitting of HIV monitoring views and verify all value fields are included",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-15T00:48:47.595Z"
+          },
+          {
+            "id": 5,
+            "title": "Validate all refactored views and clean up old files",
+            "description": "Test all newly created materialized views for syntax validity, naming consistency, and pattern compliance, then organize file structure",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Run syntax validation on all 14 new materialized view files. Verify naming convention consistency (rpt_fhir_observations_*_hmu_view_v1.sql). Confirm data_quality_flag is present in all views. Check that value threshold filters are removed while text/display matching is preserved. Archive or remove original hmu_sql files after successful validation.",
+            "status": "done",
+            "testStrategy": "Execute CREATE MATERIALIZED VIEW statements in test environment and verify successful creation",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-15T05:48:50.485Z"
+          }
+        ],
+        "updatedAt": "2025-10-15T05:48:50.485Z"
       }
     ],
     "metadata": {
-      "created": "2025-09-10T00:22:35.036Z",
-      "updated": "2025-10-08T23:13:36.101Z",
-      "description": "Tasks for master context"
+      "version": "1.0.0",
+      "lastModified": "2025-10-15T05:48:50.486Z",
+      "taskCount": 13,
+      "completedCount": 13,
+      "tags": [
+        "master"
+      ]
     }
   }
 }

@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW rpt_fhir_adt_medications_v1 
+CREATE MATERIALIZED VIEW rpt_fhir_medication_requests_adt_meds_hmu_view_v1 
 DISTSTYLE KEY 
 DISTKEY (patient_id)
 SORTKEY (patient_id, last_encounter_date)
@@ -48,7 +48,7 @@ WITH target_patients AS (
           OR medication_display ILIKE '%flutamide%'
           OR medication_display ILIKE '%zoladex%'
       )
-      AND mpv.authored_on >= '2024-01-01'
+    --   AND mpv.authored_on >= '2024-01-01'
   GROUP BY
       tp.patient_id,
       tp.last_encounter_date,

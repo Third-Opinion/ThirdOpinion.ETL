@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW rpt_fhir_testosterone_total_medications_v1
+CREATE MATERIALIZED VIEW rpt_fhir_observations_testosterone_total_hmu_v1
 DISTSTYLE KEY 
 DISTKEY (patient_id)
 SORTKEY (patient_id, effective_datetime)
@@ -34,5 +34,4 @@ WHERE tp.observation_category = 'laboratory'
         tp.observation_text ILIKE '%testosterone%' 
         OR tp.observation_text ILIKE '%testost%' 
     )
-    AND tp.effective_datetime >= '2024-01-01'
     AND tp.has_value = true;
