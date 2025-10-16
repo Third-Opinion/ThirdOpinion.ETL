@@ -12,6 +12,14 @@ LEFT JOIN test_LT_50  observation_text,
     combined_value,
     effective_datetime,
 
+Prosate Cancer NTC123445 Dashboard
+1) rpt_fhir_hmu_patients -> Top of funnel 8k Patient 
+1.1) Filter on lastEncouter,
+2) Filter CS cs CR. 
+4) PSA Progression, true|false
+5) ADT Yes|NO 
+
+
 New datasource names test_LT_50 for testosterne < 50
 ---- SQL View in Quicksight
 WITH filtered_data AS (
