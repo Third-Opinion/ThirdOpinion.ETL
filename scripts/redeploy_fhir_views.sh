@@ -595,6 +595,302 @@ deploy_views_by_level() {
     print_status "  Level $level complete: $success_count successful, $fail_count failed" "$GREEN"
 }
 
+# Function to refresh a materialized view
+refresh_view() {
+    local view_name="$1"
+
+    print_status "\n→ Refreshing view: $view_name" "$YELLOW"
+
+    # Check if view exists and is materialized
+    local check_sql="SELECT COUNT(*) FROM pg_matviews WHERE matviewname = '${view_name}' AND schemaname = 'public';"
+
+    local statement_id=$(aws redshift-data execute-statement \
+        --cluster-identifier "$CLUSTER_ID" \
+        --database "$DATABASE" \
+        --secret-arn "$SECRET_ARN" \
+        --sql "$check_sql" \
+        --region "$REGION" \
+        --query Id \
+        --output text 2>&1)
+
+    if [ -z "$statement_id" ] || [[ "$statement_id" == *"error"* ]] || [[ "$statement_id" == *"Error"* ]]; then
+        print_status "  ✗ Failed to execute check query: $statement_id" "$RED"
+        return 1
+    fi
+
+    # Wait for check to complete with better status tracking
+    local status="SUBMITTED"
+    local timeout=60
+    local check_count=0
+    while [ "$status" != "FINISHED" ] && [ "$status" != "FAILED" ] && [ "$status" != "ABORTED" ] && [ $timeout -gt 0 ]; do
+        sleep 2
+        check_count=$((check_count + 1))
+
+        local describe_output=$(aws redshift-data describe-statement \
+            --id "$statement_id" \
+            --region "$REGION" \
+            2>&1)
+
+        status=$(echo "$describe_output" | grep -o '"Status": "[^"]*"' | cut -d'"' -f4)
+
+        if [ -z "$status" ]; then
+            print_status "  ⚠ Could not get statement status (attempt $check_count)" "$YELLOW"
+            status="UNKNOWN"
+        fi
+
+        timeout=$((timeout - 2))
+    done
+
+    if [ "$status" = "FAILED" ] || [ "$status" = "ABORTED" ]; then
+        local error_msg=$(aws redshift-data describe-statement \
+            --id "$statement_id" \
+            --region "$REGION" \
+            --query Error \
+            --output text 2>/dev/null)
+        print_status "  ✗ Check query failed: $error_msg" "$RED"
+        return 1
+    fi
+
+    if [ "$status" != "FINISHED" ]; then
+        print_status "  ✗ Check query timed out (status: $status)" "$RED"
+        return 1
+    fi
+
+    # Get result
+    local result_output=$(aws redshift-data get-statement-result \
+        --id "$statement_id" \
+        --region "$REGION" \
+        2>&1)
+
+    local is_materialized=$(echo "$result_output" | grep -o '"longValue": [0-9]*' | head -1 | awk '{print $2}')
+
+    if [ -z "$is_materialized" ]; then
+        # Try alternative parsing
+        is_materialized=$(echo "$result_output" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('Records', [[{}]])[0][0].get('longValue', 0))" 2>/dev/null || echo "0")
+    fi
+
+    if [ "$is_materialized" != "1" ]; then
+        print_status "  ⊙ View is not materialized (regular view), skipping refresh" "$YELLOW"
+        return 2  # Return special code for "skipped (not materialized)"
+    fi
+
+    # Refresh the materialized view
+    print_status "  → Executing REFRESH MATERIALIZED VIEW..." "$CYAN"
+    execute_sql "REFRESH MATERIALIZED VIEW public.$view_name;" "Refreshing materialized view $view_name"
+    return $?
+}
+
+# Function to deploy views by level with mode (1=drop+create, 2=create if missing, 3=refresh if present, 4=deploy all)
+deploy_level_with_mode() {
+    local level="$1"
+    local mode="$2"
+    shift 2
+    local views=("$@")
+
+    local level_name=""
+    case $level in
+        0) level_name="Independent Views" ;;
+        1) level_name="Base Fact Views" ;;
+        2) level_name="Complex Fact Views" ;;
+        3) level_name="Base Reporting View" ;;
+        4) level_name="Advanced Reporting Views" ;;
+    esac
+
+    print_status "\n========================================" "$BLUE"
+    case $mode in
+        1)
+            print_status "     DROP & CREATE - Level $level ($level_name)" "$BLUE"
+            print_status "========================================" "$BLUE"
+
+            # Drop views in this level
+            for view_name in "${views[@]}"; do
+                execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+                execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+            done
+
+            # Create views
+            local success_count=0
+            local fail_count=0
+            for view_name in "${views[@]}"; do
+                if view_file_exists "$view_name"; then
+                    print_status "\nCreating: $view_name" "$YELLOW"
+                    create_view "$view_name"
+                    if [ $? -eq 0 ]; then
+                        success_count=$((success_count + 1))
+                    else
+                        fail_count=$((fail_count + 1))
+                    fi
+                fi
+            done
+            print_status "\n✓ Level $level complete: $success_count successful, $fail_count failed" "$GREEN"
+            ;;
+
+        2)
+            print_status "     CREATE IF MISSING - Level $level ($level_name)" "$BLUE"
+            print_status "========================================" "$BLUE"
+
+            local success_count=0
+            local fail_count=0
+            local skipped_count=0
+
+            for view_name in "${views[@]}"; do
+                if view_file_exists "$view_name"; then
+                    if check_view_exists "$view_name"; then
+                        print_status "  ⊙ Skipping $view_name (already exists)" "$YELLOW"
+                        skipped_count=$((skipped_count + 1))
+                    else
+                        print_status "\nCreating: $view_name" "$YELLOW"
+                        create_view "$view_name"
+                        if [ $? -eq 0 ]; then
+                            success_count=$((success_count + 1))
+                        else
+                            fail_count=$((fail_count + 1))
+                        fi
+                    fi
+                fi
+            done
+            print_status "\n✓ Level $level complete: $success_count created, $skipped_count skipped, $fail_count failed" "$GREEN"
+            ;;
+
+        3)
+            print_status "     REFRESH IF PRESENT - Level $level ($level_name)" "$BLUE"
+            print_status "========================================" "$BLUE"
+
+            local success_count=0
+            local fail_count=0
+            local skipped_count=0
+
+            for view_name in "${views[@]}"; do
+                if check_view_exists "$view_name"; then
+                    refresh_view "$view_name"
+                    local result=$?
+                    if [ $result -eq 0 ]; then
+                        success_count=$((success_count + 1))
+                    elif [ $result -eq 2 ]; then
+                        skipped_count=$((skipped_count + 1))
+                    else
+                        fail_count=$((fail_count + 1))
+                    fi
+                else
+                    print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                    skipped_count=$((skipped_count + 1))
+                fi
+            done
+            print_status "\n✓ Level $level complete: $success_count refreshed, $skipped_count skipped, $fail_count failed" "$GREEN"
+            ;;
+
+        4)
+            print_status "     DEPLOY ALL - Level $level ($level_name)" "$BLUE"
+            print_status "     (Create if missing, Refresh if present)" "$BLUE"
+            print_status "========================================" "$BLUE"
+
+            local created_count=0
+            local refreshed_count=0
+            local skipped_count=0
+            local fail_count=0
+
+            for view_name in "${views[@]}"; do
+                if view_file_exists "$view_name"; then
+                    if check_view_exists "$view_name"; then
+                        print_status "\nRefreshing existing: $view_name" "$YELLOW"
+                        refresh_view "$view_name"
+                        local result=$?
+                        if [ $result -eq 0 ]; then
+                            refreshed_count=$((refreshed_count + 1))
+                        elif [ $result -eq 2 ]; then
+                            skipped_count=$((skipped_count + 1))
+                        else
+                            fail_count=$((fail_count + 1))
+                        fi
+                    else
+                        print_status "\nCreating new: $view_name" "$YELLOW"
+                        create_view "$view_name"
+                        if [ $? -eq 0 ]; then
+                            created_count=$((created_count + 1))
+                        else
+                            fail_count=$((fail_count + 1))
+                        fi
+                    fi
+                fi
+            done
+            print_status "\n✓ Level $level complete: $created_count created, $refreshed_count refreshed, $skipped_count skipped (not materialized), $fail_count failed" "$GREEN"
+            ;;
+
+        5)
+            print_status "     DROP ONLY - Level $level ($level_name)" "$BLUE"
+            print_status "========================================" "$BLUE"
+
+            local dropped_count=0
+            local fail_count=0
+
+            for view_name in "${views[@]}"; do
+                print_status "\nDropping: $view_name" "$YELLOW"
+
+                # Try dropping as materialized view first
+                execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+                local mat_result=$?
+
+                # Then try dropping as regular view
+                execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+                local view_result=$?
+
+                if [ $mat_result -eq 0 ] || [ $view_result -eq 0 ]; then
+                    dropped_count=$((dropped_count + 1))
+                    print_status "  ✓ Dropped $view_name" "$GREEN"
+                else
+                    fail_count=$((fail_count + 1))
+                    print_status "  ✗ Failed to drop $view_name" "$RED"
+                fi
+            done
+            print_status "\n✓ Level $level complete: $dropped_count dropped, $fail_count failed" "$GREEN"
+            ;;
+    esac
+}
+
+# Function to show level-specific menu
+deploy_level_menu() {
+    local level="$1"
+    shift
+    local views=("$@")
+
+    local level_name=""
+    case $level in
+        0) level_name="Independent Views" ;;
+        1) level_name="Base Fact Views" ;;
+        2) level_name="Complex Fact Views" ;;
+        3) level_name="Base Reporting View" ;;
+        4) level_name="Advanced Reporting Views" ;;
+    esac
+
+    echo
+    print_status "========================================" "$CYAN"
+    print_status "  Level $level - $level_name" "$CYAN"
+    print_status "========================================" "$CYAN"
+    echo
+    print_status "Select deployment mode:" "$YELLOW"
+    print_status "  1) Drop and Create all views in this level" "$YELLOW"
+    print_status "  2) Create views if missing (skip existing)" "$YELLOW"
+    print_status "  3) Refresh materialized views if present" "$YELLOW"
+    print_status "  4) Deploy all (create if missing, refresh if present)" "$YELLOW"
+    print_status "  5) Drop only (remove all views in this level)" "$YELLOW"
+    print_status "  B) Back to main menu" "$YELLOW"
+    echo
+
+    read -p "Select mode: " mode
+
+    case $mode in
+        1|2|3|4|5)
+            deploy_level_with_mode "$level" "$mode" "${views[@]}"
+            ;;
+        [Bb])
+            return 0
+            ;;
+        *)
+            print_status "Invalid selection" "$RED"
+            ;;
+    esac
+}
+
 # Function to redeploy a single view
 redeploy_view() {
     local view_name="$1"
@@ -817,6 +1113,13 @@ display_menu() {
     done
 
     echo
+    print_status "📊 LEVEL Operations:" "$YELLOW"
+    print_status "  L0) Deploy Level 0 views (with mode options)" "$YELLOW"
+    print_status "  L1) Deploy Level 1 views (with mode options)" "$YELLOW"
+    print_status "  L2) Deploy Level 2 views (with mode options)" "$YELLOW"
+    print_status "  L3) Deploy Level 3 views (with mode options)" "$YELLOW"
+    print_status "  L4) Deploy Level 4 views (with mode options)" "$YELLOW"
+    echo
     print_status "🔧 BULK Operations:" "$YELLOW"
     print_status "  A) Redeploy ALL views (drops all, then creates in dependency order)" "$YELLOW"
     print_status "  F) Redeploy FACT views only" "$YELLOW"
@@ -990,6 +1293,21 @@ main() {
                 else
                     print_status "Invalid selection: $choice" "$RED"
                 fi
+                ;;
+            [Ll]0)
+                deploy_level_menu 0 "${DEPENDENCY_LEVEL_0[@]}"
+                ;;
+            [Ll]1)
+                deploy_level_menu 1 "${DEPENDENCY_LEVEL_1[@]}"
+                ;;
+            [Ll]2)
+                deploy_level_menu 2 "${DEPENDENCY_LEVEL_2[@]}"
+                ;;
+            [Ll]3)
+                deploy_level_menu 3 "${DEPENDENCY_LEVEL_3[@]}"
+                ;;
+            [Ll]4)
+                deploy_level_menu 4 "${DEPENDENCY_LEVEL_4[@]}"
                 ;;
             [Aa])
                 redeploy_all_views

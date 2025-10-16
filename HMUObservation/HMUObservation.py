@@ -1323,56 +1323,62 @@ def transform_observation_components(df):
     )
     
     # Extract component details - handle nested structures properly
-    # First explode the code.coding array
+    # First explode the code.coding array while keeping the full component_item
     components_with_code = components_df.select(
         F.col("observation_id"),
         F.col("patient_id"),
-        F.explode(F.col("component_item.code").getField("coding")).alias("code_coding_item"),
-        F.lit(None).alias("component_text"),  # text field not available in component.code structure
-        F.lit(None).alias("component_value_string"),  # valueString not available in component structure
-        # Handle valueQuantity.value safely - extract decimal value directly
-        F.when(F.col("component_item.valueQuantity").isNotNull(),
-               F.col("component_item.valueQuantity").getField("value")
-              ).otherwise(None).alias("component_value_quantity_value"),
-        F.when(F.col("component_item.valueQuantity").isNotNull(),
-               F.col("component_item.valueQuantity").getField("unit")
-              ).otherwise(None).alias("component_value_quantity_unit"),
-        F.col("component_item.valueCodeableConcept").alias("value_codeable_concept"),
-        F.col("component_item.dataAbsentReason").alias("data_absent_reason")
+        F.col("component_item"),  # Keep the full component item for special case handling
+        F.explode(F.col("component_item.code").getField("coding")).alias("code_coding_item")
     )
     
-    # Now extract the code details
+    # Now extract the code details and handle special case for ThirdOpinion.io
     components_final = components_with_code.select(
         F.col("observation_id"),
         F.col("patient_id"),
         F.regexp_replace(F.col("code_coding_item.code"), '^"|"$', '').alias("component_code"),
         F.col("code_coding_item.system").alias("component_system"),
         F.col("code_coding_item.display").alias("component_display"),
-        F.col("component_text"),
-        F.col("component_value_string"),
-        F.col("component_value_quantity_value"),
-        F.col("component_value_quantity_unit"),
+
+        # Special case: When system is ThirdOpinion.io, use code.text instead of regular text
+        F.when(F.col("code_coding_item.system") == "https://thirdopinion.io/result-code",
+               F.col("component_item.code.text")
+        ).otherwise(
+               F.col("component_item.code.text")  # Standard case - also uses code.text
+        ).alias("component_text"),
+
+        # Special case: When system is ThirdOpinion.io, use valueDateTime instead of valueString
+        F.when(F.col("code_coding_item.system") == "https://thirdopinion.io/result-code",
+               F.col("component_item.valueDateTime")
+        ).otherwise(
+               F.col("component_item.valueString")  # Standard case
+        ).alias("component_value_string"),
+
+        # Extract standard value fields
+        F.col("component_item.valueQuantity.value").alias("component_value_quantity_value"),
+        F.col("component_item.valueQuantity.unit").alias("component_value_quantity_unit"),
+
         # Handle valueCodeableConcept - safely get first coding element
-        F.when((F.col("value_codeable_concept").getField("coding").isNotNull()) & 
-               (F.size(F.col("value_codeable_concept").getField("coding")) > 0),
-               F.col("value_codeable_concept").getField("coding")[0].getField("code")
+        F.when((F.col("component_item.valueCodeableConcept.coding").isNotNull()) &
+               (F.size(F.col("component_item.valueCodeableConcept.coding")) > 0),
+               F.col("component_item.valueCodeableConcept.coding")[0].getField("code")
               ).otherwise(None).alias("component_value_codeable_concept_code"),
-        F.when((F.col("value_codeable_concept").getField("coding").isNotNull()) & 
-               (F.size(F.col("value_codeable_concept").getField("coding")) > 0),
-               F.col("value_codeable_concept").getField("coding")[0].getField("system")
+        F.when((F.col("component_item.valueCodeableConcept.coding").isNotNull()) &
+               (F.size(F.col("component_item.valueCodeableConcept.coding")) > 0),
+               F.col("component_item.valueCodeableConcept.coding")[0].getField("system")
               ).otherwise(None).alias("component_value_codeable_concept_system"),
-        F.when((F.col("value_codeable_concept").getField("coding").isNotNull()) & 
-               (F.size(F.col("value_codeable_concept").getField("coding")) > 0),
-               F.col("value_codeable_concept").getField("coding")[0].getField("display")
+        F.when((F.col("component_item.valueCodeableConcept.coding").isNotNull()) &
+               (F.size(F.col("component_item.valueCodeableConcept.coding")) > 0),
+               F.col("component_item.valueCodeableConcept.coding")[0].getField("display")
               ).otherwise(None).alias("component_value_codeable_concept_display"),
+
         # Handle dataAbsentReason - safely get first coding element
-        F.when((F.col("data_absent_reason").getField("coding").isNotNull()) & 
-               (F.size(F.col("data_absent_reason").getField("coding")) > 0),
-               F.col("data_absent_reason").getField("coding")[0].getField("code")
+        F.when((F.col("component_item.dataAbsentReason.coding").isNotNull()) &
+               (F.size(F.col("component_item.dataAbsentReason.coding")) > 0),
+               F.col("component_item.dataAbsentReason.coding")[0].getField("code")
               ).otherwise(None).alias("component_data_absent_reason_code"),
-        F.when((F.col("data_absent_reason").getField("coding").isNotNull()) & 
-               (F.size(F.col("data_absent_reason").getField("coding")) > 0),
-               F.col("data_absent_reason").getField("coding")[0].getField("display")
+        F.when((F.col("component_item.dataAbsentReason.coding").isNotNull()) &
+               (F.size(F.col("component_item.dataAbsentReason.coding")) > 0),
+               F.col("component_item.dataAbsentReason.coding")[0].getField("display")
               ).otherwise(None).alias("component_data_absent_reason_display")
     ).filter(
         F.col("component_code").isNotNull() & F.col("patient_id").isNotNull()
@@ -1655,6 +1661,25 @@ def main():
         observation_df = deduplicate_observations(observation_df)
         total_records_after_dedup = observation_df.count()
         logger.info(f"✅ Deduplication completed - {total_records_after_dedup:,} unique observations remaining")
+
+        # Show first 10 records after deduplication
+        logger.info("\n📋 First 10 records after deduplication:")
+        logger.info("-" * 80)
+        try:
+            first_10_records = observation_df.select("id", "patient_id", "code_text", "value_quantity_value", "value_quantity_unit", "effective_datetime", "status", "meta_last_updated").limit(10).collect()
+            for i, record in enumerate(first_10_records, 1):
+                logger.info(f"{i:2d}. ID: {record.id}")
+                logger.info(f"    Patient: {record.patient_id}")
+                logger.info(f"    Code: {record.code_text}")
+                logger.info(f"    Value: {record.value_quantity_value} {record.value_quantity_unit if record.value_quantity_unit else ''}")
+                logger.info(f"    Effective: {record.effective_datetime}")
+                logger.info(f"    Status: {record.status}")
+                logger.info(f"    Last Updated: {record.meta_last_updated}")
+                if i < len(first_10_records):
+                    logger.info("")
+        except Exception as e:
+            logger.warning(f"Could not display sample records: {str(e)}")
+        logger.info("-" * 80)
 
         # Step 1.7: Identify and separate entered-in-error observations for deletion
         logger.info("\n" + "=" * 50)
@@ -2299,12 +2324,12 @@ def main():
 
         if total_changes > 0:
             logger.info("\n" + "=" * 80)
-            logger.info("🔄 STEP 7: REFRESHING OBSERVATION VIEWS")
+            logger.info("🔄 STEP 7: REFRESHING OBSERVATION VIEWS (DISABLED)")
             logger.info("=" * 80)
             logger.info(f"📊 Changes detected: {total_records_written:,} records written, {records_deleted:,} records deleted")
             logger.info(f"   Total changes: {total_changes:,}")
-            refresh_observation_views()
-            logger.info("✅ View refresh step completed")
+            # refresh_observation_views()  # DISABLED - Use redeploy_fhir_views.sh script instead
+            logger.info("⚠️  View refresh disabled - use redeploy_fhir_views.sh script to refresh views manually")
         else:
             logger.info("\n" + "=" * 80)
             logger.info("⏭️  STEP 7: SKIPPING VIEW REFRESH")
