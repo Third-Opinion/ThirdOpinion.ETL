@@ -410,6 +410,170 @@ def delete_entered_in_error_records(observation_ids_list):
         logger.info(f"   Using temporary table method (large batch: {len(observation_ids_list)} IDs)")
         _delete_using_temp_table(observation_ids_list)
 
+def delete_child_records_for_observations(observation_ids_list):
+    """Delete child table records for specific observation IDs (not the observations themselves)
+
+    This is used when updating observations to remove old child records before inserting new ones.
+    Does NOT delete from the main observations table.
+
+    Args:
+        observation_ids_list: List of observation_id values to clean up child records for
+    """
+    logger.info(f"Deleting child records for {len(observation_ids_list)} observation(s)...")
+
+    # Use small batch or large batch method based on size
+    BATCH_SIZE = 100
+
+    if len(observation_ids_list) < BATCH_SIZE:
+        logger.info(f"   Using IN clause method (small batch: {len(observation_ids_list)} IDs)")
+        _delete_child_records_in_clause(observation_ids_list)
+    else:
+        logger.info(f"   Using temporary table method (large batch: {len(observation_ids_list)} IDs)")
+        _delete_child_records_temp_table(observation_ids_list)
+
+def _delete_child_records_in_clause(observation_ids_list):
+    """Delete child records only using IN clause"""
+    # Create comma-separated list of IDs for SQL IN clause
+    escaped_ids = ["'" + str(obs_id).replace("'", "''") + "'" for obs_id in observation_ids_list]
+    ids_str = ", ".join(escaped_ids)
+
+    # Build DELETE statements for child tables ONLY (not main observations table)
+    delete_statements = [
+        f"DELETE FROM public.observation_codes WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_categories WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_components WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_reference_ranges WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_interpretations WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_notes WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_performers WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_members WHERE observation_id IN ({ids_str});",
+        f"DELETE FROM public.observation_derived_from WHERE observation_id IN ({ids_str});"
+    ]
+
+    # Combine all DELETE statements
+    combined_delete_sql = " ".join(delete_statements)
+
+    logger.info(f"   Executing child table deletions using IN clause...")
+    logger.info(f"   SQL preview (first 200 chars): {combined_delete_sql[:200]}...")
+
+    # Skip actual deletion in TEST_MODE
+    if TEST_MODE:
+        logger.info(f"⚠️  TEST MODE: Skipping child record deletion for {len(observation_ids_list)} observation(s)")
+        logger.info(f"   IDs that would have child records deleted: {observation_ids_list[:10]}{'...' if len(observation_ids_list) > 10 else ''}")
+        return
+
+    try:
+        # Execute the DELETE statements using a dummy write with preactions
+        empty_df = spark.createDataFrame([], "observation_id STRING")
+        empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "empty_frame_for_child_delete")
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=empty_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": "public.observations",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": combined_delete_sql
+            },
+            transformation_ctx="delete_child_records_preaction"
+        )
+
+        logger.info(f"   ✓ Successfully deleted child records for {len(observation_ids_list)} observation(s)")
+
+    except Exception as e:
+        logger.error(f"   ✗ Failed to delete child records: {str(e)}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        raise
+
+def _delete_child_records_temp_table(observation_ids_list):
+    """Delete child records only using temporary table JOIN"""
+    # Skip actual deletion in TEST_MODE
+    if TEST_MODE:
+        logger.info(f"⚠️  TEST MODE: Skipping child record deletion for {len(observation_ids_list)} observation(s) using temp table method")
+        logger.info(f"   IDs that would have child records deleted: {observation_ids_list[:10]}{'...' if len(observation_ids_list) > 10 else ''}")
+        return
+
+    try:
+        # Create DataFrame with observation IDs
+        ids_data = [(obs_id,) for obs_id in observation_ids_list]
+        ids_df = spark.createDataFrame(ids_data, ["observation_id"])
+        ids_dynamic_frame = DynamicFrame.fromDF(ids_df, glueContext, "ids_for_child_delete")
+
+        logger.info(f"   Created DataFrame with {len(observation_ids_list)} IDs")
+
+        # Temporary table name
+        from datetime import datetime
+        temp_table_name = f"tmp_delete_child_records_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        logger.info(f"   Using temporary table: {temp_table_name}")
+
+        # Step 1: Create temp table and load IDs
+        create_table_sql = f"""
+        DROP TABLE IF EXISTS public.{temp_table_name};
+        CREATE TABLE public.{temp_table_name} (observation_id VARCHAR(255));
+        """
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=ids_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{temp_table_name}",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": create_table_sql
+            },
+            transformation_ctx="write_ids_to_temp_table_child_delete"
+        )
+
+        logger.info(f"   ✓ Loaded {len(observation_ids_list)} IDs into temp table")
+
+        # Step 2: Execute DELETE statements for child tables ONLY
+        delete_statements = [
+            f"DELETE FROM public.observation_codes USING public.{temp_table_name} WHERE observation_codes.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_categories USING public.{temp_table_name} WHERE observation_categories.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_components USING public.{temp_table_name} WHERE observation_components.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_reference_ranges USING public.{temp_table_name} WHERE observation_reference_ranges.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_interpretations USING public.{temp_table_name} WHERE observation_interpretations.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_notes USING public.{temp_table_name} WHERE observation_notes.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_performers USING public.{temp_table_name} WHERE observation_performers.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_members USING public.{temp_table_name} WHERE observation_members.observation_id = {temp_table_name}.observation_id;",
+            f"DELETE FROM public.observation_derived_from USING public.{temp_table_name} WHERE observation_derived_from.observation_id = {temp_table_name}.observation_id;",
+            # Clean up temp table
+            f"DROP TABLE IF EXISTS public.{temp_table_name};"
+        ]
+
+        combined_delete_sql = " ".join(delete_statements)
+
+        logger.info(f"   Executing child table deletions using temp table JOIN...")
+
+        # Execute DELETE statements
+        empty_df = spark.createDataFrame([], "observation_id STRING")
+        empty_dynamic_frame = DynamicFrame.fromDF(empty_df, glueContext, "empty_frame_for_child_delete")
+
+        glueContext.write_dynamic_frame.from_options(
+            frame=empty_dynamic_frame,
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": "public.observations",
+                "connectionName": REDSHIFT_CONNECTION,
+                "preactions": combined_delete_sql
+            },
+            transformation_ctx="delete_child_records_temp_table"
+        )
+
+        logger.info(f"   ✓ Successfully deleted child records for {len(observation_ids_list)} observation(s)")
+        logger.info(f"   ✓ Temp table cleaned up")
+
+    except Exception as e:
+        logger.error(f"   ✗ Failed to delete child records via temp table: {str(e)}")
+        logger.error(f"   Error type: {type(e).__name__}")
+        raise
+
 def _delete_using_in_clause(observation_ids_list):
     """Delete using IN clause - suitable for small batches (<100 IDs)"""
     # Create comma-separated list of IDs for SQL IN clause
@@ -643,7 +807,17 @@ def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
         raise e
 
 def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
-    """Version-aware write to Redshift - only processes new/updated entities"""
+    """Version-aware write to Redshift - only processes new/updated entities
+
+    Args:
+        dynamic_frame: Data to write
+        table_name: Target table name
+        id_column: Column name to use for version comparison
+        preactions: SQL to run before write (e.g., TRUNCATE for initial load)
+
+    Returns:
+        int: Number of records written
+    """
     logger.info(f"Writing {table_name} to Redshift with version checking...")
 
     try:
@@ -653,7 +827,12 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
 
         if total_records == 0:
             logger.info(f"No records to process for {table_name}")
-            return
+            return 0
+
+        # Skip version checking if in TEST_MODE
+        if TEST_MODE:
+            logger.info(f"⚠️  TEST MODE: Skipping write to {table_name} (would have written {total_records:,} records with version checking)")
+            return total_records
 
         # Step 1: Get existing versions from Redshift
         existing_versions = get_existing_versions_from_redshift(table_name, id_column)
@@ -665,7 +844,7 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
 
         if to_process_count == 0:
             logger.info(f"✅ All {total_records} records in {table_name} are up to date - no changes needed")
-            return
+            return 0
 
         # Step 3: Get entities that need old version cleanup
         entities_to_delete = get_entities_to_delete(filtered_df, existing_versions, id_column)
@@ -705,6 +884,7 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
 
         logger.info(f"✅ Successfully wrote {to_process_count} records to {table_name} in Redshift")
         logger.info(f"📊 Version summary: {to_process_count} processed, {skipped_count} skipped (same version)")
+        return to_process_count
 
     except Exception as e:
         logger.error(f"❌ Failed to write {table_name} to Redshift with versioning: {str(e)}")
@@ -863,7 +1043,7 @@ logger.addHandler(handler)
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
 
 # Check for TEST_MODE parameter (optional)
-TEST_MODE = True
+TEST_MODE = False
 try:
     test_mode_args = getResolvedOptions(sys.argv, ["TEST_MODE"])
     TEST_MODE = test_mode_args.get("TEST_MODE", "false").lower() in ["true", "1", "yes"]
@@ -1703,25 +1883,6 @@ def main():
         total_records_after_dedup = observation_df.count()
         logger.info(f"✅ Deduplication completed - {total_records_after_dedup:,} unique observations remaining")
 
-        # Show first 10 records after deduplication
-        logger.info("\n📋 First 10 records after deduplication:")
-        logger.info("-" * 80)
-        try:
-            first_10_records = observation_df.select("id", "patient_id", "code_text", "value_quantity_value", "value_quantity_unit", "effective_datetime", "status", "meta_last_updated").limit(10).collect()
-            for i, record in enumerate(first_10_records, 1):
-                logger.info(f"{i:2d}. ID: {record.id}")
-                logger.info(f"    Patient: {record.patient_id}")
-                logger.info(f"    Code: {record.code_text}")
-                logger.info(f"    Value: {record.value_quantity_value} {record.value_quantity_unit if record.value_quantity_unit else ''}")
-                logger.info(f"    Effective: {record.effective_datetime}")
-                logger.info(f"    Status: {record.status}")
-                logger.info(f"    Last Updated: {record.meta_last_updated}")
-                if i < len(first_10_records):
-                    logger.info("")
-        except Exception as e:
-            logger.warning(f"Could not display sample records: {str(e)}")
-        logger.info("-" * 80)
-
         # Step 1.7: Identify and separate entered-in-error observations for deletion
         logger.info("\n" + "=" * 50)
         logger.info("🗑️  STEP 1.7: IDENTIFYING ENTERED-IN-ERROR OBSERVATIONS")
@@ -1792,11 +1953,36 @@ def main():
         main_observation_df = transform_main_observation_data(observation_df)
         main_count = main_observation_df.count()
         logger.info(f"✅ Transformed {main_count:,} main observation records")
-        
+
         if main_count == 0:
             logger.error("❌ No main observation records after transformation! Check filtering criteria.")
             return
-        
+
+        # Show first 10 records after transformation
+        logger.info("\n📋 First 10 transformed observation records:")
+        logger.info("-" * 80)
+        try:
+            first_10_records = main_observation_df.select(
+                "observation_id", "patient_id", "code_text",
+                "value_quantity_value", "value_quantity_unit",
+                "effective_datetime", "status", "meta_last_updated"
+            ).limit(10).collect()
+
+            for i, record in enumerate(first_10_records, 1):
+                logger.info(f"{i:2d}. ID: {record.observation_id}")
+                logger.info(f"    Patient: {record.patient_id}")
+                logger.info(f"    Code: {record.code_text if record.code_text else 'N/A'}")
+                value_str = f"{record.value_quantity_value} {record.value_quantity_unit}" if record.value_quantity_value else "N/A"
+                logger.info(f"    Value: {value_str}")
+                logger.info(f"    Effective: {record.effective_datetime if record.effective_datetime else 'N/A'}")
+                logger.info(f"    Status: {record.status}")
+                logger.info(f"    Last Updated: {record.meta_last_updated}")
+                if i < len(first_10_records):
+                    logger.info("")
+        except Exception as e:
+            logger.warning(f"Could not display sample records: {str(e)}")
+        logger.info("-" * 80)
+
         # Step 3: Transform multi-valued data (all supporting tables)
         logger.info("\n" + "=" * 50)
         logger.info("🔄 STEP 3: TRANSFORMING MULTI-VALUED DATA")
@@ -2275,9 +2461,32 @@ def main():
             observations_preactions = "TRUNCATE TABLE public.observations;"
         else:
             observations_preactions = ""
-        records_written = write_to_redshift_simple(main_resolved_frame, "observations", observations_preactions)
+        records_written = write_to_redshift_versioned(main_resolved_frame, "observations", "observation_id", observations_preactions)
         total_records_written += records_written
         logger.info("✅ Main observations table written successfully")
+
+        # Step 6.6: Clean up child table records for observations being updated/replaced
+        # When we update an observation, we need to delete its old child records first
+        # to avoid duplicates (since child tables can have multiple rows per observation_id)
+        if not is_initial_load and records_written > 0:
+            logger.info("\n" + "=" * 50)
+            logger.info("🧹 STEP 6.6: CLEANING UP CHILD RECORDS FOR UPDATED OBSERVATIONS")
+            logger.info("=" * 50)
+            logger.info(f"Preparing to clean child records for {records_written:,} observation(s)")
+
+            # Get the observation_ids that were actually written (new or updated)
+            main_df = main_resolved_frame.toDF()
+            observation_ids_written = main_df.select("observation_id").distinct().rdd.flatMap(lambda x: x).collect()
+
+            if observation_ids_written:
+                logger.info(f"Deleting old child records for {len(observation_ids_written)} observation(s)")
+                # Reuse the deletion logic but for child tables only
+                delete_child_records_for_observations(observation_ids_written)
+                logger.info(f"✅ Child records cleaned up for updated observations")
+            else:
+                logger.info("No observation IDs to clean up")
+        else:
+            logger.info("\n📌 Skipping child record cleanup (initial load or no records written)")
         
         logger.info("📝 Writing observation codes table...")
         if is_initial_load:
