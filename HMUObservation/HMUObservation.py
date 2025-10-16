@@ -27,6 +27,11 @@ def get_bookmark_from_redshift():
     """
     logger.info("Fetching bookmark (max meta_last_updated) from Redshift observations table...")
 
+    # In TEST_MODE, skip Redshift read and process all records
+    if TEST_MODE:
+        logger.info("⚠️  TEST MODE: Skipping Redshift bookmark check - will process all records")
+        return None
+
     try:
         # Use raw SQL query to get the maximum timestamp
         # Note: For Glue's Redshift connector, we use query instead of dbtable for subqueries
@@ -435,6 +440,12 @@ def _delete_using_in_clause(observation_ids_list):
     logger.info(f"   Executing deletions across 10 tables using IN clause...")
     logger.info(f"   SQL preview (first 200 chars): {combined_delete_sql[:200]}...")
 
+    # Skip actual deletion in TEST_MODE
+    if TEST_MODE:
+        logger.info(f"⚠️  TEST MODE: Skipping deletion of {len(observation_ids_list)} observation(s)")
+        logger.info(f"   IDs that would be deleted: {observation_ids_list[:10]}{'...' if len(observation_ids_list) > 10 else ''}")
+        return
+
     try:
         # Execute the DELETE statements using a dummy write with preactions
         empty_df = spark.createDataFrame([], "observation_id STRING")
@@ -472,6 +483,12 @@ def _delete_using_temp_table(observation_ids_list):
 
     Avoids Redshift's 16 MB SQL statement limit and 32,768 parameter limit.
     """
+    # Skip actual deletion in TEST_MODE
+    if TEST_MODE:
+        logger.info(f"⚠️  TEST MODE: Skipping deletion of {len(observation_ids_list)} observation(s) using temp table method")
+        logger.info(f"   IDs that would be deleted: {observation_ids_list[:10]}{'...' if len(observation_ids_list) > 10 else ''}")
+        return
+
     try:
         # Create DataFrame with observation IDs to delete
         ids_data = [(obs_id,) for obs_id in observation_ids_list]
@@ -598,6 +615,12 @@ def write_to_redshift_simple(dynamic_frame, table_name, preactions=""):
         logger.info(f"Executing preactions for {table_name}: {preactions[:100] if preactions else 'None'}")
         logger.info(f"Writing to table: public.{table_name}")
         logger.info(f"Records to write: {record_count:,}")
+
+        # Skip actual write if in TEST_MODE
+        if TEST_MODE:
+            logger.info(f"⚠️  TEST MODE: Skipping write to {table_name} (would have written {record_count:,} records)")
+            logger.info(f"   Preactions that would execute: {preactions[:200] if preactions else 'None'}")
+            return record_count
 
         glueContext.write_dynamic_frame.from_options(
             frame=dynamic_frame,
@@ -838,6 +861,15 @@ logger.addHandler(handler)
 #BEGIN NOTE TO AI: do not change the following section.
 
 args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+
+# Check for TEST_MODE parameter (optional)
+TEST_MODE = True
+try:
+    test_mode_args = getResolvedOptions(sys.argv, ["TEST_MODE"])
+    TEST_MODE = test_mode_args.get("TEST_MODE", "false").lower() in ["true", "1", "yes"]
+except:
+    TEST_MODE = False
+
 catalog_nm = "glue_catalog"
 
 s3_bucket = "s3://7df690fd40c734f8937daf02f39b2ec3-457560472834-group/datalake/hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view/"
@@ -1596,9 +1628,18 @@ def main():
         logger.info("=" * 80)
         logger.info("🚀 STARTING ENHANCED FHIR OBSERVATION ETL PROCESS")
         logger.info("=" * 80)
+
+        # Display TEST MODE banner if enabled
+        if TEST_MODE:
+            logger.info("")
+            logger.info("⚠️" * 40)
+            logger.info("⚠️  TEST MODE ENABLED - NO DATA WILL BE WRITTEN TO REDSHIFT  ⚠️")
+            logger.info("⚠️" * 40)
+            logger.info("")
+
         logger.info(f"⏰ Job started at: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
-        logger.info(f"🎯 Target: Redshift (10 tables)")
+        logger.info(f"🎯 Target: {'DRY RUN (no writes)' if TEST_MODE else 'Redshift (10 tables)'}")
         logger.info("📋 Reading all available columns from Glue Catalog")
         logger.info("🔄 Process: 9 steps (Read → Bookmark Filter → Deduplicate → Transform → Convert → Resolve → Validate → Write)")
         
