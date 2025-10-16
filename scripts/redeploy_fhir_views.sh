@@ -10,9 +10,14 @@
 # 4. Optionally refreshes views with data
 #
 # Usage:
-#   ./redeploy_fhir_views.sh              # Normal mode with status checks
-#   ./redeploy_fhir_views.sh --skip-status  # Skip status checks (faster menu)
-#   ./redeploy_fhir_views.sh -s           # Short form
+#   ./redeploy_fhir_views.sh              # Fast mode (status checks skipped by default)
+#   ./redeploy_fhir_views.sh --with-status  # Show deployment status (slower menu)
+#   ./redeploy_fhir_views.sh -w           # Short form for with-status
+#
+# New Features:
+#   - Select individual views by number (e.g., "9") to get action menu
+#   - Action menu allows: Drop+Create, Create if Missing, Refresh, Drop Only, View SQL
+#   - Group operations still available (L0-L4, A, F, R)
 #
 # Dependency hierarchy:
 # - Base tables (no dependencies) are deployed first
@@ -42,10 +47,13 @@ SECRET_ARN="arn:aws:secretsmanager:us-east-2:442042533707:secret:redshift!prod-r
 REGION="us-east-2"
 
 # Parse command line arguments
-SKIP_STATUS_CHECK=false
-if [ "$1" = "--skip-status" ] || [ "$1" = "-s" ]; then
-    SKIP_STATUS_CHECK=true
-    echo "Status checks disabled - menu will load faster"
+# Default to SKIP status checks for faster loading
+SKIP_STATUS_CHECK=true
+if [ "$1" = "--with-status" ] || [ "$1" = "-w" ]; then
+    SKIP_STATUS_CHECK=false
+    echo "Status checks enabled - menu will show detailed view statistics"
+else
+    echo "💡 Tip: Use --with-status or -w to see deployment status (slower)"
 fi
 
 # Define dependency levels (views in same level can be deployed in parallel)
@@ -77,11 +85,15 @@ DEPENDENCY_LEVEL_3=(
     "rpt_fhir_hmu_patients_v1"         # Depends on patients, conditions, encounters
 )
 
-# Level 4: Advanced reporting views that depend on Level 3 views
+# Level 4: Key reporting views - Medication and primary observation reports
 DEPENDENCY_LEVEL_4=(
     "rpt_fhir_medication_requests_adt_meds_hmu_view_v1"  # Depends on medication views and hmu_patients
     "rpt_fhir_observations_psa_total_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_testosterone_total_hmu_v1"  # Depends on observations and hmu_patients
+)
+
+# Level 5: Additional observation reporting views
+DEPENDENCY_LEVEL_5=(
     "rpt_fhir_observations_absolute_neutrophil_count_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_platelet_count_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_hemoglobin_hmu_v1"  # Depends on observations and hmu_patients
@@ -96,6 +108,11 @@ DEPENDENCY_LEVEL_4=(
     "rpt_fhir_observations_bmi_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_cd4_count_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_hiv_viral_load_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_psa_progression_hmu_v1"  # Depends on observations and hmu_patients
+)
+
+# Level 6: Condition reporting views
+DEPENDENCY_LEVEL_6=(
     "rpt_fhir_conditions_additional_malignancy_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_active_liver_disease_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_cns_metastases_hmu_v1"  # Depends on conditions and hmu_patients
@@ -108,6 +125,8 @@ for view in "${DEPENDENCY_LEVEL_1[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_2[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_3[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_4[@]}"; do VIEW_NAMES+=("$view"); done
+for view in "${DEPENDENCY_LEVEL_5[@]}"; do VIEW_NAMES+=("$view"); done
+for view in "${DEPENDENCY_LEVEL_6[@]}"; do VIEW_NAMES+=("$view"); done
 
 # Function to print colored output
 print_status() {
@@ -170,6 +189,20 @@ get_dependency_level() {
     for view in "${DEPENDENCY_LEVEL_4[@]}"; do
         if [ "$view" = "$view_name" ]; then
             echo "4"
+            return
+        fi
+    done
+
+    for view in "${DEPENDENCY_LEVEL_5[@]}"; do
+        if [ "$view" = "$view_name" ]; then
+            echo "5"
+            return
+        fi
+    done
+
+    for view in "${DEPENDENCY_LEVEL_6[@]}"; do
+        if [ "$view" = "$view_name" ]; then
+            echo "6"
             return
         fi
     done
@@ -500,7 +533,19 @@ drop_all_views() {
     print_status "========================================" "$BLUE"
 
     # Drop in reverse order (highest dependency level first)
-    print_status "\nDropping Level 4 views (Advanced reporting)..." "$YELLOW"
+    print_status "\nDropping Level 6 views (Condition reporting)..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_6[@]}"; do
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+    done
+
+    print_status "\nDropping Level 5 views (Additional observation reporting)..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_5[@]}"; do
+        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+    done
+
+    print_status "\nDropping Level 4 views (Key reporting)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
         execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
         execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
@@ -601,8 +646,8 @@ refresh_view() {
 
     print_status "\n→ Refreshing view: $view_name" "$YELLOW"
 
-    # Check if view exists and is materialized
-    local check_sql="SELECT COUNT(*) FROM pg_matviews WHERE matviewname = '${view_name}' AND schemaname = 'public';"
+    # Check if view exists and is materialized (Redshift uses svv_tables)
+    local check_sql="SELECT COUNT(*) FROM svv_tables WHERE table_name = '${view_name}' AND table_schema = 'public' AND table_type = 'MATERIALIZED VIEW';"
 
     local statement_id=$(aws redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \
@@ -693,7 +738,9 @@ deploy_level_with_mode() {
         1) level_name="Base Fact Views" ;;
         2) level_name="Complex Fact Views" ;;
         3) level_name="Base Reporting View" ;;
-        4) level_name="Advanced Reporting Views" ;;
+        4) level_name="Key Reporting Views" ;;
+        5) level_name="Additional Observation Reports" ;;
+        6) level_name="Condition Reports" ;;
     esac
 
     print_status "\n========================================" "$BLUE"
@@ -859,7 +906,9 @@ deploy_level_menu() {
         1) level_name="Base Fact Views" ;;
         2) level_name="Complex Fact Views" ;;
         3) level_name="Base Reporting View" ;;
-        4) level_name="Advanced Reporting Views" ;;
+        4) level_name="Key Reporting Views" ;;
+        5) level_name="Additional Observation Reports" ;;
+        6) level_name="Condition Reports" ;;
     esac
 
     echo
@@ -891,7 +940,77 @@ deploy_level_menu() {
     esac
 }
 
-# Function to redeploy a single view
+# Function to show view action menu
+view_action_menu() {
+    local view_name="$1"
+    local sql_file=$(get_view_file "$view_name")
+    local level=$(get_dependency_level "$view_name")
+
+    echo
+    print_status "========================================" "$CYAN"
+    print_status "  View: $view_name" "$CYAN"
+    print_status "  Level: $level | SQL: $sql_file" "$CYAN"
+    print_status "========================================" "$CYAN"
+    echo
+    print_status "Select action:" "$YELLOW"
+    print_status "  1) Drop and Create (full redeploy)" "$YELLOW"
+    print_status "  2) Create if missing" "$YELLOW"
+    print_status "  3) Refresh if present (materialized views only)" "$YELLOW"
+    print_status "  4) Drop only" "$YELLOW"
+    print_status "  5) View SQL file" "$YELLOW"
+    print_status "  B) Back to main menu" "$YELLOW"
+    echo
+
+    read -p "Select action: " action
+
+    case $action in
+        1)
+            redeploy_view "$view_name"
+            ;;
+        2)
+            if check_view_exists "$view_name"; then
+                print_status "  ⊙ View already exists, skipping" "$YELLOW"
+            else
+                print_status "\nCreating view: $view_name" "$YELLOW"
+                # Drop first (just in case)
+                execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+                execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+                create_view "$view_name"
+            fi
+            ;;
+        3)
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+            else
+                print_status "  ✗ View does not exist, cannot refresh" "$RED"
+            fi
+            ;;
+        4)
+            print_status "\nDropping view: $view_name" "$YELLOW"
+            execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+            print_status "  ✓ View dropped" "$GREEN"
+            ;;
+        5)
+            if [ -n "$sql_file" ] && [ -f "$sql_file" ]; then
+                print_status "\nSQL File: $sql_file" "$CYAN"
+                print_status "----------------------------------------" "$CYAN"
+                head -50 "$sql_file"
+                print_status "\n... (showing first 50 lines)" "$YELLOW"
+            else
+                print_status "  ✗ SQL file not found" "$RED"
+            fi
+            ;;
+        [Bb])
+            return 0
+            ;;
+        *)
+            print_status "Invalid selection" "$RED"
+            ;;
+    esac
+}
+
+# Function to redeploy a single view (full drop and create)
 redeploy_view() {
     local view_name="$1"
     local sql_file=$(get_view_file "$view_name")
@@ -1080,8 +1199,76 @@ display_menu() {
 
     echo
     # Display Level 4
-    print_status "  Level 4 - Advanced Reporting Views:" "$CYAN"
+    print_status "  Level 4 - Key Reporting Views:" "$CYAN"
     for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
+        local status="[Not Found]"
+        local color="$RED"
+
+        if view_file_exists "$view_name"; then
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
+        fi
+
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        index=$((index + 1))
+    done
+
+    echo
+    # Display Level 5
+    print_status "  Level 5 - Additional Observation Reports:" "$CYAN"
+    for view_name in "${DEPENDENCY_LEVEL_5[@]}"; do
+        local status="[Not Found]"
+        local color="$RED"
+
+        if view_file_exists "$view_name"; then
+            if [ "$SKIP_STATUS_CHECK" = false ]; then
+                local stats=$(check_view_stats "$view_name")
+                local exists=$(echo "$stats" | cut -d'|' -f1)
+                local row_count=$(echo "$stats" | cut -d'|' -f2)
+                local max_updated=$(echo "$stats" | cut -d'|' -f3)
+
+                if [ "$exists" = "EXISTS" ]; then
+                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
+                    color="$GREEN"
+                elif [ "$exists" = "NOT_EXISTS" ]; then
+                    status="[SQL Ready, Not Deployed]"
+                    color="$YELLOW"
+                else
+                    status="[SQL Ready, Status Unknown]"
+                    color="$YELLOW"
+                fi
+            else
+                status="[SQL Ready]"
+                color="$GREEN"
+            fi
+        fi
+
+        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
+        index=$((index + 1))
+    done
+
+    echo
+    # Display Level 6
+    print_status "  Level 6 - Condition Reports:" "$CYAN"
+    for view_name in "${DEPENDENCY_LEVEL_6[@]}"; do
         local status="[Not Found]"
         local color="$RED"
 
@@ -1119,6 +1306,8 @@ display_menu() {
     print_status "  L2) Deploy Level 2 views (with mode options)" "$YELLOW"
     print_status "  L3) Deploy Level 3 views (with mode options)" "$YELLOW"
     print_status "  L4) Deploy Level 4 views (with mode options)" "$YELLOW"
+    print_status "  L5) Deploy Level 5 views (with mode options)" "$YELLOW"
+    print_status "  L6) Deploy Level 6 views (with mode options)" "$YELLOW"
     echo
     print_status "🔧 BULK Operations:" "$YELLOW"
     print_status "  A) Redeploy ALL views (drops all, then creates in dependency order)" "$YELLOW"
@@ -1158,6 +1347,8 @@ redeploy_all_views() {
     deploy_views_by_level 2 "${DEPENDENCY_LEVEL_2[@]}"
     deploy_views_by_level 3 "${DEPENDENCY_LEVEL_3[@]}"
     deploy_views_by_level 4 "${DEPENDENCY_LEVEL_4[@]}"
+    deploy_views_by_level 5 "${DEPENDENCY_LEVEL_5[@]}"
+    deploy_views_by_level 6 "${DEPENDENCY_LEVEL_6[@]}"
 
     print_status "\n========================================" "$BLUE"
     print_status "✓ All views redeployed in dependency order" "$GREEN"
@@ -1220,7 +1411,23 @@ redeploy_reporting_views() {
     print_status "     REDEPLOYING REPORTING VIEWS" "$BLUE"
     print_status "========================================" "$BLUE"
 
-    # Drop Level 4 and Level 3 reporting views in reverse order
+    # Drop reporting views in reverse order (Level 6, 5, 4, 3)
+    print_status "\nDropping Level 6 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_6[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        fi
+    done
+
+    print_status "\nDropping Level 5 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_5[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
+            execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
+        fi
+    done
+
     print_status "\nDropping Level 4 reporting views..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
         if [[ $view_name == rpt_* ]]; then
@@ -1246,8 +1453,22 @@ redeploy_reporting_views() {
         fi
     done
 
-    # Then create Level 4 (advanced reporting)
+    # Then create Level 4 (key reporting)
     for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
+        if [[ $view_name == rpt_* ]] && view_file_exists "$view_name"; then
+            create_view "$view_name"
+        fi
+    done
+
+    # Then create Level 5 (additional observation reporting)
+    for view_name in "${DEPENDENCY_LEVEL_5[@]}"; do
+        if [[ $view_name == rpt_* ]] && view_file_exists "$view_name"; then
+            create_view "$view_name"
+        fi
+    done
+
+    # Finally create Level 6 (condition reporting)
+    for view_name in "${DEPENDENCY_LEVEL_6[@]}"; do
         if [[ $view_name == rpt_* ]] && view_file_exists "$view_name"; then
             create_view "$view_name"
         fi
@@ -1289,7 +1510,7 @@ main() {
             [0-9]|[0-9][0-9])
                 view_name=$(get_view_by_number $choice)
                 if [ $? -eq 0 ]; then
-                    redeploy_view "$view_name"
+                    view_action_menu "$view_name"
                 else
                     print_status "Invalid selection: $choice" "$RED"
                 fi
@@ -1308,6 +1529,12 @@ main() {
                 ;;
             [Ll]4)
                 deploy_level_menu 4 "${DEPENDENCY_LEVEL_4[@]}"
+                ;;
+            [Ll]5)
+                deploy_level_menu 5 "${DEPENDENCY_LEVEL_5[@]}"
+                ;;
+            [Ll]6)
+                deploy_level_menu 6 "${DEPENDENCY_LEVEL_6[@]}"
                 ;;
             [Aa])
                 redeploy_all_views
