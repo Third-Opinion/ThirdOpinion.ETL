@@ -19,10 +19,11 @@ SELECT
     tp.value_quantity_system, 
     tp.value_string, 
     tp.codes,
-    tp.categories, 
-    tp.reference_ranges, 
-    tp.interpretations, 
-    tp.notes
+    tp.categories,
+    tp.reference_ranges,
+    tp.interpretations,
+    tp.notes,
+    tp.components
 FROM public.fact_fhir_observations_view_v1 tp
 INNER JOIN public.fact_fhir_patients_view_v1 fpv2 
     ON tp.patient_id = fpv2.patient_id

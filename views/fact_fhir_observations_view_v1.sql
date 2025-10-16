@@ -65,15 +65,48 @@ aggregated_components AS (
                 JSON_PARSE(
                     '[' || LISTAGG(
                         '{' ||
-                        '"code":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"system":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_system, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"display":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_display, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"text":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_text, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"valueString":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_string, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"valueQuantity":' || COALESCE(oc.component_value_quantity_value::VARCHAR, 'null') || ',' ||
-                        '"unit":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_quantity_unit, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"valueCode":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_codeable_concept_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"valueDisplay":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_codeable_concept_display, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                        -- Code object with nested coding array (FHIR structure)
+                        '"code":{' ||
+                            '"coding":[{' ||
+                                '"system":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_system, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                                '"code":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                                '"display":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_display, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                            '}],' ||
+                            '"text":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_text, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                        '}' ||
+                        -- Value fields (conditional based on what's populated) - only one value type per component
+                        CASE
+                            -- valueQuantity with nested structure
+                            WHEN oc.component_value_quantity_value IS NOT NULL THEN
+                                ',"valueQuantity":{' ||
+                                    '"value":' || oc.component_value_quantity_value || ',' ||
+                                    '"unit":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_quantity_unit, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                                '}'
+                            -- valueCodeableConcept with nested coding array
+                            WHEN oc.component_value_codeable_concept_code IS NOT NULL THEN
+                                ',"valueCodeableConcept":{' ||
+                                    '"coding":[{' ||
+                                        '"system":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_codeable_concept_system, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                                        '"code":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_codeable_concept_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                                        '"display":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_value_codeable_concept_display, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                                    '}]' ||
+                                '}'
+                            -- valueString (simple string value)
+                            WHEN oc.component_value_string IS NOT NULL AND oc.component_value_string != '' THEN
+                                ',"valueString":"' || REPLACE(REPLACE(REPLACE(oc.component_value_string, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' ') || '"'
+                            ELSE ''
+                        END ||
+                        -- Data absent reason (if present)
+                        CASE
+                            WHEN oc.component_data_absent_reason_code IS NOT NULL THEN
+                                ',"dataAbsentReason":{' ||
+                                    '"coding":[{' ||
+                                        '"code":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_data_absent_reason_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                                        '"display":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.component_data_absent_reason_display, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                                    '}]' ||
+                                '}'
+                            ELSE ''
+                        END ||
                         '}',
                         ','
                     ) || ']'
