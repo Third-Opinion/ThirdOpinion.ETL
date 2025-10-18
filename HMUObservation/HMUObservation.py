@@ -1427,9 +1427,14 @@ def transform_observation_components(df):
                F.col("component_item.code.text")  # Standard case - also uses code.text
         ).alias("component_text"),
 
-        # Special case: When system is ThirdOpinion.io, use valueDateTime instead of valueString
+        # Special cases for value mapping:
+        # - ThirdOpinion.io result-code: use valueDateTime
+        # - ThirdOpinion.ai CodeSystem (analysis-note): use valueString (standard)
+        # - All others: use valueString (standard)
         F.when(F.col("code_coding_item.system") == "https://thirdopinion.io/result-code",
                F.col("component_item.valueDateTime")
+        ).when(F.col("code_coding_item.system").startswith("http://thirdopinion.ai/fhir/CodeSystem"),
+               F.col("component_item.valueString")  # For analysis-note and future thirdopinion.ai components
         ).otherwise(
                F.col("component_item.valueString")  # Standard case
         ).alias("component_value_string"),
