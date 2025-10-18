@@ -1,6 +1,6 @@
 CREATE MATERIALIZED VIEW rpt_fhir_hmu_patients_v1
-DISTSTYLE EVEN
-SORTKEY (last_encounter_date)
+DISTKEY(patient_id)
+SORTKEY(patient_id, last_encounter_date)
 AS
 WITH target_patients AS (
     SELECT

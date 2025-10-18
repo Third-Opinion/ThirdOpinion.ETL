@@ -16,6 +16,7 @@ SELECT
     tp.effective_datetime,
     tp.observation_text,
     tp.codes[0].code,
+    COALESCE(tp.value_string, CAST(tp.value_quantity_value AS VARCHAR)) AS combined_value,
     tp.value_quantity_value,
     tp.value_quantity_unit,
     tp.value_codeable_concept_code,

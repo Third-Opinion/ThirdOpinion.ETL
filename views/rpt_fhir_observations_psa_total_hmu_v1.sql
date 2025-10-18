@@ -1,8 +1,11 @@
-CREATE MATERIALIZED VIEW rpt_fhir_observations_psa_total_hmu_v1 AS
+CREATE MATERIALIZED VIEW rpt_fhir_observations_psa_total_hmu_v1
+DISTKEY(patient_id)
+SORTKEY(patient_id, effective_datetime)
+AS
 WITH target_patients AS (
     SELECT * FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-06-01'
 )
-SELECT  
+SELECT
     fpv2.names,
     fpv2.birth_date,
     fpv2.gender,
@@ -10,13 +13,14 @@ SELECT
     tp.observation_id,
     tp.encounter_id,
     tp.effective_datetime,
-    tp.observation_text, 
+    tp.observation_text,
     tp.codes[0].code,
+    COALESCE(tp.value_string, CAST(tp.value_quantity_value AS VARCHAR)) AS combined_value,
     tp.value_quantity_value,
-    tp.value_quantity_unit, 
+    tp.value_quantity_unit,
     tp.value_codeable_concept_code,
-    tp.value_quantity_system, 
-    tp.value_string, 
+    tp.value_quantity_system,
+    tp.value_string,
     tp.codes,
     tp.categories,
     tp.reference_ranges,

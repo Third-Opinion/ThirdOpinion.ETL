@@ -36,16 +36,14 @@ FROM public.fact_fhir_conditions_view_v1 tc
 INNER JOIN target_patients tgt ON tc.patient_id = tgt.patient_id
 INNER JOIN public.fact_fhir_patients_view_v1 fpv2 ON tc.patient_id = fpv2.patient_id
 WHERE tc.clinical_status_code IN ('active', 'recurrence', 'remission', 'resolved')
+    -- Exclude SNOMED coded conditions
+    AND tc.code_system != 'http://snomed.info/sct'
+    -- Exclude C61 (prostate cancer) - looking for additional malignancies only
+    AND tc.code_code NOT LIKE 'C61%'
     AND (
         -- ICD-10 malignancy codes (C00-C97, D00-D09 for in situ)
         (tc.code_code LIKE 'C%' AND LOWER(tc.code_system) LIKE '%icd-10%')
         OR (tc.code_code LIKE 'D0%' AND LOWER(tc.code_system) LIKE '%icd-10%')
-        -- SNOMED cancer codes
-        OR (LOWER(tc.code_system) LIKE '%snomed%'
-            AND (tc.code_display LIKE '%cancer%'
-                 OR tc.code_display LIKE '%carcinoma%'
-                 OR tc.code_display LIKE '%malignancy%'
-                 OR tc.code_display LIKE '%neoplasm%'))
         -- String matching for cancer terms
         OR UPPER(tc.condition_text) LIKE '%CANCER%'
         OR UPPER(tc.condition_text) LIKE '%CARCINOMA%'
@@ -57,3 +55,5 @@ WHERE tc.clinical_status_code IN ('active', 'recurrence', 'remission', 'resolved
         OR UPPER(tc.condition_text) LIKE '%NEOPLASM%'
         OR UPPER(tc.condition_text) LIKE '%MALIGNANCY%'
     )
+    -- Additional exclusion for prostate cancer text matches
+    AND UPPER(tc.condition_text) NOT LIKE '%PROSTATE%'

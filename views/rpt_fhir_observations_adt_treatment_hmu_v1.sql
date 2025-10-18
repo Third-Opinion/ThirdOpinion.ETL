@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW rpt_fhir_observations_psa_progression_hmu_v1
+CREATE MATERIALIZED VIEW rpt_fhir_observations_adt_treatment_hmu_v1
 DISTKEY(patient_id)
 SORTKEY(patient_id, effective_datetime)
 AS
@@ -7,15 +7,16 @@ WITH target_patients AS (
     FROM rpt_fhir_hmu_patients_v1 
     WHERE last_encounter_date >= '2025-06-01'
 )
-SELECT  
-    o.patient_id, 
-    o.observation_id, 
-    o.observation_text, 
-    o.effective_datetime, 
-    oc.code_code, 
-    comp.component_code, 
-    comp.component_display, 
-    comp.component_text, 
+SELECT
+    o.patient_id,
+    o.observation_id,
+    o.observation_text,
+    o.effective_datetime,
+    oc.code_code,
+    COALESCE(o.value_string, CAST(o.value_quantity_value AS VARCHAR)) AS combined_value,
+    comp.component_code,
+    comp.component_display,
+    comp.component_text,
     CAST(LEFT(comp.component_value_string, 10) AS DATE) AS treatmentStartDate,
     obn.note_text                   
 FROM Observations o

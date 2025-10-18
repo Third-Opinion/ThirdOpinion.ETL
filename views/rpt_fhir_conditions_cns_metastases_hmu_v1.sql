@@ -36,6 +36,8 @@ FROM public.fact_fhir_conditions_view_v1 tc
 INNER JOIN target_patients tgt ON tc.patient_id = tgt.patient_id
 INNER JOIN public.fact_fhir_patients_view_v1 fpv2 ON tc.patient_id = fpv2.patient_id
 WHERE tc.clinical_status_code IN ('active', 'recurrence', 'remission')
+    -- Exclude SNOMED coded conditions
+    AND tc.code_system != 'http://snomed.info/sct'
     AND (
         -- ICD-10 codes for CNS metastases (C79.3x, C79.4x, C79.5x)
         (tc.code_code LIKE 'C79.3%' OR tc.code_code LIKE 'C79.4%' OR tc.code_code LIKE 'C79.5%')
