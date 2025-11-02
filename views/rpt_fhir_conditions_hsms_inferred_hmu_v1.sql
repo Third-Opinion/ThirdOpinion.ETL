@@ -36,6 +36,8 @@ SELECT
     'http://hl7.org/fhir/sid/icd-10-cm' as code_system,
     'Hormone refractory prostate cancer' as condition_text,
     'inferred' as verification_status_code,
+    'active' as  'clinical_status_code' 
+    'inferred' as 'condition_id',
     adt.adt_start_date,
     adt.adt_obs_id,
     psa.psa_progression_date,

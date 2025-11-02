@@ -652,22 +652,21 @@ def create_redshift_tables_sql():
     return """
     -- Main diagnostic reports table
     CREATE TABLE IF NOT EXISTS public.diagnostic_reports (
-        diagnostic_report_id VARCHAR(255) NOT NULL,
-        resource_type VARCHAR(50),
-        status VARCHAR(50),
+        diagnostic_report_id VARCHAR(MAX) NOT NULL,
+        resource_type VARCHAR(MAX),
+        status VARCHAR(MAX),
         effective_datetime TIMESTAMP,
         issued_datetime TIMESTAMP,
-        code_text VARCHAR(500),
-        code_primary_code VARCHAR(50),
-        code_primary_system VARCHAR(255),
-        code_primary_display VARCHAR(255),
-        patient_id VARCHAR(255),
-        encounter_id VARCHAR(255),
+        code_text VARCHAR(MAX),
+        code_primary_code VARCHAR(MAX),
+        code_primary_system VARCHAR(MAX),
+        code_primary_display VARCHAR(MAX),
+        patient_id VARCHAR(MAX),
+        encounter_id VARCHAR(MAX),
         meta_last_updated TIMESTAMP,
-        extensions TEXT,
+        extensions VARCHAR(MAX),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        -- Removed PRIMARY KEY constraint to allow DISTKEY/SORTKEY
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) DISTKEY (patient_id) SORTKEY (patient_id, effective_datetime)
     """
 
@@ -675,10 +674,10 @@ def create_diagnostic_report_categories_table_sql():
     """Generate SQL for creating diagnostic_report_categories table"""
     return """
     CREATE TABLE IF NOT EXISTS public.diagnostic_report_categories (
-        diagnostic_report_id VARCHAR(255),
-        category_code VARCHAR(50),
-        category_system VARCHAR(255),
-        category_display VARCHAR(255)
+        diagnostic_report_id VARCHAR(MAX),
+        category_code VARCHAR(MAX),
+        category_system VARCHAR(MAX),
+        category_display VARCHAR(MAX)
     ) SORTKEY (diagnostic_report_id, category_code)
     """
 
@@ -686,9 +685,9 @@ def create_diagnostic_report_performers_table_sql():
     """Generate SQL for creating diagnostic_report_performers table"""
     return """
     CREATE TABLE IF NOT EXISTS public.diagnostic_report_performers (
-        diagnostic_report_id VARCHAR(255),
-        performer_type VARCHAR(50),
-        performer_id VARCHAR(255)
+        diagnostic_report_id VARCHAR(MAX),
+        performer_type VARCHAR(MAX),
+        performer_id VARCHAR(MAX)
     ) SORTKEY (diagnostic_report_id, performer_type)
     """
 
@@ -696,8 +695,8 @@ def create_diagnostic_report_based_on_table_sql():
     """Generate SQL for creating diagnostic_report_based_on table"""
     return """
     CREATE TABLE IF NOT EXISTS public.diagnostic_report_based_on (
-        diagnostic_report_id VARCHAR(255),
-        service_request_id VARCHAR(255)
+        diagnostic_report_id VARCHAR(MAX),
+        service_request_id VARCHAR(MAX)
     ) SORTKEY (diagnostic_report_id)
     """
 
@@ -705,8 +704,8 @@ def create_diagnostic_report_results_table_sql():
     """Generate SQL for creating diagnostic_report_results table"""
     return """
     CREATE TABLE IF NOT EXISTS public.diagnostic_report_results (
-        diagnostic_report_id VARCHAR(255),
-        observation_id VARCHAR(255)
+        diagnostic_report_id VARCHAR(MAX),
+        observation_id VARCHAR(MAX)
     ) SORTKEY (diagnostic_report_id)
     """
 
@@ -714,8 +713,8 @@ def create_diagnostic_report_media_table_sql():
     """Generate SQL for creating diagnostic_report_media table"""
     return """
     CREATE TABLE IF NOT EXISTS public.diagnostic_report_media (
-        diagnostic_report_id VARCHAR(255),
-        media_id VARCHAR(255)
+        diagnostic_report_id VARCHAR(MAX),
+        media_id VARCHAR(MAX)
     ) SORTKEY (diagnostic_report_id)
     """
 
@@ -723,10 +722,10 @@ def create_diagnostic_report_presented_forms_table_sql():
     """Generate SQL for creating diagnostic_report_presented_forms table"""
     return """
     CREATE TABLE IF NOT EXISTS public.diagnostic_report_presented_forms (
-        diagnostic_report_id VARCHAR(255),
-        content_type VARCHAR(100),
-        data TEXT,
-        title VARCHAR(255)
+        diagnostic_report_id VARCHAR(MAX),
+        content_type VARCHAR(MAX),
+        data VARCHAR(MAX),
+        title VARCHAR(MAX)
     ) SORTKEY (diagnostic_report_id)
     """
 

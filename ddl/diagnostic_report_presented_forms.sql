@@ -5,6 +5,6 @@
 CREATE TABLE IF NOT EXISTS public.diagnostic_report_presented_forms (
         diagnostic_report_id VARCHAR(255),
         content_type VARCHAR(100),
-        data TEXT,
+        data VARCHAR(MAX),
         title VARCHAR(255)
     ) SORTKEY (diagnostic_report_id)

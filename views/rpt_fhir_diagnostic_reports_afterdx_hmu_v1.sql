@@ -1,18 +1,17 @@
 CREATE MATERIALIZED VIEW rpt_fhir_diagnostic_reports_afterdx_hmu_v1
-            DISTSTYLE KEY
-            DISTKEY (patient_id)
-            SORTKEY (patient_id, effective_datetime)
-AS
-    WITH target_patients AS (SELECT patient_id FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-06-01'),
-    c61_diagnoses AS (SELECT condition_id,
-    cv.patient_id,
-    verification_status_code,
-    onset_datetime
-    FROM public.fact_fhir_conditions_view_v1 cv
-    INNER JOIN target_patients tgt ON cv.patient_id = tgt.patient_id
-    WHERE cv.code_code = 'C61'
-    AND cv.code_system = 'http://hl7.org/fhir/sid/icd-10-cm'
-    AND clinical_status_code = 'active')
+DISTSTYLE KEY
+DISTKEY (patient_id)
+SORTKEY (patient_id, effective_datetime)
+AS WITH target_patients AS (SELECT patient_id FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-06-01'),
+     c61_diagnoses AS (SELECT condition_id,
+                              cv.patient_id,
+                              verification_status_code,
+                              onset_datetime
+                       FROM public.fact_fhir_conditions_view_v1 cv
+                                INNER JOIN target_patients tgt ON cv.patient_id = tgt.patient_id
+                       WHERE cv.code_code = 'C61'
+                         AND cv.code_system = 'http://hl7.org/fhir/sid/icd-10-cm'
+                         AND clinical_status_code = 'active')
 SELECT dv.diagnostic_report_id,
        c61.patient_id,
        dv.status,
