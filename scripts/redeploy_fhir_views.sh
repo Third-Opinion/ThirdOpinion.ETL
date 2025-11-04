@@ -75,7 +75,8 @@ DEPENDENCY_LEVEL_1=(
 
 # Level 2: Views that depend on Level 1 views
 DEPENDENCY_LEVEL_2=(
-    "fact_fhir_observations_view_v1"   # Depends on observation tables only (large view)
+    "fact_fhir_observations_view_v1"   # Depends on observation tables only (large view, excludes vital signs)
+    "fact_fhir_observations_view_vital_signs_v1"  # Depends on observation tables only (vital signs only)
     "fact_fhir_conditions_view_v1"     # May depend on encounters
     "fact_fhir_encounters_view_v1"     # May depend on conditions/patients
 )
