@@ -18,9 +18,6 @@ CREATE TABLE IF NOT EXISTS public.managed_views (
 DISTSTYLE ALL
 SORTKEY (dependency_level, view_name);
 
--- Create index for faster lookups by dependency level
-CREATE INDEX idx_managed_views_level ON public.managed_views(dependency_level);
-
 -- Add comments for documentation
 COMMENT ON TABLE public.managed_views IS 'Tracks all FHIR views managed by deployment scripts with metadata and deployment history';
 COMMENT ON COLUMN public.managed_views.view_name IS 'Name of the view in the database';
