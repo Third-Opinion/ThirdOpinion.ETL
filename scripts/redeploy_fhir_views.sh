@@ -90,6 +90,7 @@ DEPENDENCY_LEVEL_4=(
     "rpt_fhir_medication_requests_adt_meds_hmu_view_v1"  # Depends on medication views and hmu_patients
     "rpt_fhir_observations_psa_total_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_testosterone_total_hmu_v1"  # Depends on observations and hmu_patients
+    "rpt_fhir_observations_adt_treatment_hmu_v1"  # Depends on observations and hmu_patients
 )
 
 # Level 5: Additional observation reporting views
@@ -116,12 +117,15 @@ DEPENDENCY_LEVEL_6=(
     "rpt_fhir_conditions_additional_malignancy_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_active_liver_disease_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_cns_metastases_hmu_v1"  # Depends on conditions and hmu_patients
+    "rpt_fhir_conditions_hsms_hmu_v1"  # Depends on conditions and hmu_patients
 )
 
 # Level 7: Union views that depend on multiple Level 5/6 views
 DEPENDENCY_LEVEL_7=(
     "rpt_fhir_observations_labs_union_hmu_v1"  # Depends on all Level 5 observation views
     "rpt_fhir_conditions_union_hmu_v1"  # Depends on all Level 6 condition views
+    "rpt_fhir_conditions_hsms_inferred_hmu_v1"  # Depends on adt_treatment (L4) and psa_progression (L5)
+    "rpt_fhir_mcrpc_patients_hmu_v1"  # Depends on adt_treatment (L4) and psa_progression (L5)
 )
 
 # Level 8: Additional reporting views that depend on multiple levels
@@ -1424,6 +1428,7 @@ display_menu() {
     echo
     print_status "🔧 BULK Operations:" "$YELLOW"
     print_status "  A) Redeploy ALL views (drops all, then creates in dependency order)" "$YELLOW"
+    print_status "  D) Deploy ALL views (create if missing, refresh if present)" "$YELLOW"
     print_status "  F) Redeploy FACT views only" "$YELLOW"
     print_status "  R) Redeploy REPORTING views only" "$YELLOW"
     print_status "  Q) Quit" "$YELLOW"
@@ -1467,6 +1472,29 @@ redeploy_all_views() {
 
     print_status "\n========================================" "$BLUE"
     print_status "✓ All views redeployed in dependency order" "$GREEN"
+    print_status "========================================" "$BLUE"
+}
+
+# Function to deploy all views (create if missing, refresh if present)
+deploy_all_views() {
+    print_status "\n========================================" "$BLUE"
+    print_status "     DEPLOYING ALL VIEWS" "$BLUE"
+    print_status "   (Create if missing, Refresh if present)" "$BLUE"
+    print_status "========================================" "$BLUE"
+
+    # Deploy views in dependency order using mode 4
+    deploy_level_with_mode 0 4 "${DEPENDENCY_LEVEL_0[@]}"
+    deploy_level_with_mode 1 4 "${DEPENDENCY_LEVEL_1[@]}"
+    deploy_level_with_mode 2 4 "${DEPENDENCY_LEVEL_2[@]}"
+    deploy_level_with_mode 3 4 "${DEPENDENCY_LEVEL_3[@]}"
+    deploy_level_with_mode 4 4 "${DEPENDENCY_LEVEL_4[@]}"
+    deploy_level_with_mode 5 4 "${DEPENDENCY_LEVEL_5[@]}"
+    deploy_level_with_mode 6 4 "${DEPENDENCY_LEVEL_6[@]}"
+    deploy_level_with_mode 7 4 "${DEPENDENCY_LEVEL_7[@]}"
+    deploy_level_with_mode 8 4 "${DEPENDENCY_LEVEL_8[@]}"
+
+    print_status "\n========================================" "$BLUE"
+    print_status "✓ All views deployed in dependency order" "$GREEN"
     print_status "========================================" "$BLUE"
 }
 
@@ -1659,6 +1687,9 @@ main() {
                 ;;
             [Aa])
                 redeploy_all_views
+                ;;
+            [Dd])
+                deploy_all_views
                 ;;
             [Ff])
                 redeploy_fact_views
