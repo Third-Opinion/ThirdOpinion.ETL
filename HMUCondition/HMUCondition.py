@@ -1385,8 +1385,43 @@ def main():
         logger.info(f"Reading from table: {table_name_full}")
         df_raw = spark.table(table_name_full)
 
-        # Convert to DataFrame first to check available columns
-        condition_df_raw = df_raw
+        # Filter out deleted records and ALL revisions of deleted entities
+        if 'isDeleted' in df_raw.columns:
+            logger.info("\n" + "=" * 50)
+            logger.info("🗑️ FILTERING DELETED RECORDS & THEIR REVISIONS")
+            logger.info("=" * 50)
+
+            total_count = df_raw.count()
+
+            # Step 1: Find all IDs that have isDeleted=true (any version)
+            deleted_ids_df = df_raw.filter(F.col("isDeleted") == True).select("id").distinct()
+            deleted_ids = [row['id'] for row in deleted_ids_df.collect()]
+
+            if deleted_ids:
+                logger.info(f"🗑️ Found {len(deleted_ids)} unique condition IDs marked as deleted")
+                if len(deleted_ids) <= 10:
+                    logger.info(f"🗑️ Deleted IDs: {deleted_ids}")
+                else:
+                    logger.info(f"🗑️ Sample deleted IDs (first 10): {deleted_ids[:10]}")
+
+                # Step 2: Filter out ALL records (all versions) with those IDs
+                condition_df_raw = df_raw.filter(~F.col("id").isin(deleted_ids))
+
+                filtered_count = condition_df_raw.count()
+                removed_count = total_count - filtered_count
+
+                logger.info(f"📊 Total source records: {total_count:,}")
+                logger.info(f"✅ Records to process: {filtered_count:,}")
+                logger.info(f"🗑️ Records filtered out: {removed_count:,} (all revisions of {len(deleted_ids)} deleted conditions)")
+            else:
+                logger.info("✅ No deleted records found in source data")
+                condition_df_raw = df_raw
+
+            logger.info("=" * 50)
+        else:
+            logger.warning("\n⚠️ WARNING: isDeleted field not found in source data")
+            logger.warning("⚠️ Skipping deletion filtering - all records will be processed")
+            condition_df_raw = df_raw
 
         # TESTING MODE: Sample data for quick testing
 
