@@ -34,6 +34,6 @@ INNER JOIN public.fact_fhir_patients_view_v1 fpv2 ON tp.patient_id = fpv2.patien
 WHERE tp.observation_category = 'laboratory'
     AND tp.status IN ('final', 'amended', 'corrected')
     AND (
-        tp.observation_text ILIKE '%CD4%'
+       IN ('54218-3', '24467-3', '8123-2', '8122-4', '8124-0')
     )
     AND tp.has_value = true;

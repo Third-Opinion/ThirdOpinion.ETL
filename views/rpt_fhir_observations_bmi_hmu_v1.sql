@@ -28,13 +28,12 @@ SELECT
     tp.interpretations,
     tp.notes,
     tp.components
-FROM public.fact_fhir_observations_view_v1 tp
+FROM public.fact_fhir_observations_vital_signs_view_v1 tp
 INNER JOIN target_patients tgt ON tp.patient_id = tgt.patient_id
 INNER JOIN public.fact_fhir_patients_view_v1 fpv2 ON tp.patient_id = fpv2.patient_id
 WHERE tp.observation_category = 'vital-signs'
     AND tp.status IN ('final', 'amended', 'corrected')
     AND (
-        tp.observation_text ILIKE '%BMI%'
-        OR tp.observation_text ILIKE '%body%mass%index%'
+     primary_code= '39156-5' OR primary_code='59576-9'
     )
     AND tp.has_value = true;

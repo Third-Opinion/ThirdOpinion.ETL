@@ -1,4 +1,4 @@
-# Deployed: 2025-10-09 06:27:53 UTC
+# Deployed: 2025-11-05 15:21:05 UTC
 from datetime import datetime
 import sys
 from awsglue.transforms import *
@@ -1386,15 +1386,15 @@ def main():
         df_raw = spark.table(table_name_full)
 
         # Filter out deleted records and ALL revisions of deleted entities
-        if 'isDeleted' in df_raw.columns:
+        if 'isDelete' in df_raw.columns:
             logger.info("\n" + "=" * 50)
             logger.info("🗑️ FILTERING DELETED RECORDS & THEIR REVISIONS")
             logger.info("=" * 50)
 
             total_count = df_raw.count()
 
-            # Step 1: Find all IDs that have isDeleted=true (any version)
-            deleted_ids_df = df_raw.filter(F.col("isDeleted") == True).select("id").distinct()
+            # Step 1: Find all IDs that have isDelete=true (any version)
+            deleted_ids_df = df_raw.filter(F.col("isDelete") == True).select("id").distinct()
             deleted_ids = [row['id'] for row in deleted_ids_df.collect()]
 
             if deleted_ids:
@@ -1419,7 +1419,7 @@ def main():
 
             logger.info("=" * 50)
         else:
-            logger.warning("\n⚠️ WARNING: isDeleted field not found in source data")
+            logger.warning("\n⚠️ WARNING:  field not found in source data")
             logger.warning("⚠️ Skipping deletion filtering - all records will be processed")
             condition_df_raw = df_raw
 

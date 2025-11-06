@@ -76,7 +76,7 @@ DEPENDENCY_LEVEL_1=(
 # Level 2: Views that depend on Level 1 views
 DEPENDENCY_LEVEL_2=(
     "fact_fhir_observations_view_v1"   # Depends on observation tables only (large view, excludes vital signs)
-    "fact_fhir_observations_view_vital_signs_v1"  # Depends on observation tables only (vital signs only)
+    "fact_fhir_observations_vital_signs_view_v1"  # Depends on observation tables only (vital signs only)
     "fact_fhir_conditions_view_v1"     # May depend on encounters
     "fact_fhir_encounters_view_v1"     # May depend on conditions/patients
 )
@@ -117,6 +117,7 @@ DEPENDENCY_LEVEL_5=(
 DEPENDENCY_LEVEL_6=(
     "rpt_fhir_conditions_additional_malignancy_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_active_liver_disease_hmu_v1"  # Depends on conditions and hmu_patients
+    "rpt_fhir_conditions_cardiac_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_cns_metastases_hmu_v1"  # Depends on conditions and hmu_patients
     "rpt_fhir_conditions_hsms_hmu_v1"  # Depends on conditions and hmu_patients
 )
@@ -690,8 +691,8 @@ refresh_view() {
 
     print_status "\n→ Refreshing view: $view_name" "$YELLOW"
 
-    # Check if view exists and is materialized (Redshift uses svv_tables)
-    local check_sql="SELECT COUNT(*) FROM svv_tables WHERE table_name = '${view_name}' AND table_schema = 'public' AND table_type = 'MATERIALIZED VIEW';"
+    # Check if view exists and is materialized (Redshift uses stv_mv_info for materialized views)
+    local check_sql="SELECT COUNT(*) FROM stv_mv_info WHERE TRIM(name) = '${view_name}' AND TRIM(schema) = 'public';"
 
     local statement_id=$(aws redshift-data execute-statement \
         --cluster-identifier "$CLUSTER_ID" \

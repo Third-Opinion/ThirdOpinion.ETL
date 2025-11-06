@@ -232,7 +232,7 @@ main() {
     # Level 2: Complex fact views
     declare -a LEVEL_2=(
         "fact_fhir_observations_view_v1"
-        "fact_fhir_observations_view_vital_signs_v1"
+        "fact_fhir_observations_vital_signs_view_v1"
         "fact_fhir_conditions_view_v1"
         "fact_fhir_encounters_view_v1"
     )
@@ -273,6 +273,7 @@ main() {
     declare -a LEVEL_6=(
         "rpt_fhir_conditions_additional_malignancy_hmu_v1"
         "rpt_fhir_conditions_active_liver_disease_hmu_v1"
+        "rpt_fhir_conditions_cardiac_hmu_v1"
         "rpt_fhir_conditions_cns_metastases_hmu_v1"
         "rpt_fhir_conditions_hsms_hmu_v1"
     )

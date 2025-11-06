@@ -1,8 +1,11 @@
 CREATE MATERIALIZED VIEW rpt_fhir_observations_testosterone_total_hmu_v1
-DISTSTYLE KEY 
+DISTSTYLE KEY
 DISTKEY (patient_id)
 SORTKEY (patient_id, effective_datetime)
 AS
+WITH target_patients AS (
+    SELECT patient_id FROM rpt_fhir_hmu_patients_v1 WHERE last_encounter_date >= '2025-06-01'
+)
 SELECT
     fpv2.names,
     fpv2.birth_date,
@@ -26,6 +29,8 @@ COALESCE(tp.value_string, CAST(tp.value_quantity_value AS VARCHAR)) AS combined_
     tp.notes,
     tp.components
 FROM public.fact_fhir_observations_view_v1 tp
+INNER JOIN target_patients tgt
+    ON tp.patient_id = tgt.patient_id
 INNER JOIN public.fact_fhir_patients_view_v1 fpv2
     ON tp.patient_id = fpv2.patient_id
 WHERE tp.observation_category = 'laboratory'
@@ -33,7 +38,7 @@ WHERE tp.observation_category = 'laboratory'
     AND tp.observation_text NOT ILIKE '%ratio%'
     AND tp.observation_text NOT ILIKE '%free%'
     AND (
-        tp.observation_text ILIKE '%testosterone%' 
-        OR tp.observation_text ILIKE '%testost%' 
+        tp.observation_text ILIKE '%testosterone%'
+        OR tp.observation_text ILIKE '%testost%'
     )
     AND tp.has_value = true;
