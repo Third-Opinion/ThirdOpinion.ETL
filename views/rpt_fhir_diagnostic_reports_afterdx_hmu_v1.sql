@@ -38,6 +38,13 @@ WHERE dv.status = 'final'
                             '5327789',
                             '394716',
                             '36952.0',
-                            '38268-9')
+                            '38268-9',
+                            '394251',
+                            '81551-4',
+                            '8106798',
+                            '2732048',
+                            '3463527',
+                            '8272112',
+                            '8352724')
   AND dv.effective_datetime >= (c61.onset_datetime - INTERVAL '90 days')
   AND dv.effective_datetime < c61.onset_datetime;
