@@ -1,4 +1,4 @@
-# Deployed: 2025-11-05 15:21:06 UTC
+# Deployed: 2025-11-09 - Added deduplication logic to prevent duplicate records based on meta.lastUpdated
 from datetime import datetime
 import sys
 from awsglue.transforms import *
@@ -805,7 +805,7 @@ def main():
         logger.info(f"📊 Source: {DATABASE_NAME}.{TABLE_NAME}")
         logger.info(f"🎯 Target: Redshift (7 tables)")
         logger.info("📋 Reading all available columns from Glue Catalog")
-        logger.info("🔄 Process: 7 steps (Read → Transform → Convert → Resolve → Validate → Write)")
+        logger.info("🔄 Process: 8 steps (Read → Transform → Deduplicate → Transform Multi-valued → Convert → Resolve → Validate → Write)")
         
         # Step 1: Read data from S3 using Iceberg catalog
         logger.info("\n" + "=" * 50)
@@ -890,11 +890,29 @@ def main():
         logger.info("=" * 50)
         
         main_diagnostic_report_df = transform_main_diagnostic_report_data(diagnostic_report_df)
+        pre_dedup_count = main_diagnostic_report_df.count()
+        logger.info(f"✅ Transformed {pre_dedup_count:,} main diagnostic report records (before deduplication)")
+
+        # Step 2a: Deduplicate to keep only newest record per diagnostic report
+        logger.info("\n" + "=" * 50)
+        logger.info("🔄 STEP 2a: DEDUPLICATING DIAGNOSTIC REPORTS")
+        logger.info("=" * 50)
+        logger.info(f"Records before deduplication: {pre_dedup_count:,}")
+
+        # Get existing versions from Redshift
+        existing_versions = get_existing_versions_from_redshift(glueContext, "diagnostic_reports", "diagnostic_report_id")
+
+        # Filter to keep only latest per ID and exclude already-processed versions
+        main_diagnostic_report_df = filter_dataframe_by_version(main_diagnostic_report_df, existing_versions)
+
         main_count = main_diagnostic_report_df.count()
-        logger.info(f"✅ Transformed {main_count:,} main diagnostic report records")
-        
+        duplicates_removed = pre_dedup_count - main_count
+        logger.info(f"Records after deduplication: {main_count:,}")
+        logger.info(f"Duplicate records removed: {duplicates_removed:,}")
+        logger.info("=" * 50)
+
         if main_count == 0:
-            logger.error("❌ No main diagnostic report records after transformation! Check filtering criteria.")
+            logger.error("❌ No main diagnostic report records after deduplication! Check filtering criteria.")
             return
         
         # Step 3: Transform multi-valued data (all supporting tables)
