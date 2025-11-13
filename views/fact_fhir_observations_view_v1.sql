@@ -228,7 +228,7 @@ aggregated_performers AS (
     GROUP BY op.observation_id
 ),
 primary_observation_category AS (
-    SELECT
+    SELECT DISTINCT
         oc.observation_id,
         FIRST_VALUE(oc.category_code) OVER (
             PARTITION BY oc.observation_id
@@ -244,7 +244,7 @@ primary_observation_category AS (
     WHERE oc.category_code IS NOT NULL
 ),
 primary_observation_code AS (
-    SELECT
+    SELECT DISTINCT
         oc.observation_id,
         FIRST_VALUE(oc.code_system) OVER (
             PARTITION BY oc.observation_id
@@ -319,6 +319,7 @@ SELECT
     o.method_display,
     o.method_text,
     o.meta_last_updated,
+    o.ai_evidence,
 
     -- ETL Audit Fields
     o.created_at AS etl_created_at,

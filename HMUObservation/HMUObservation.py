@@ -1035,7 +1035,124 @@ def transform_main_observation_data(df):
             return str(field)
     
     convert_to_json_udf = F.udf(convert_to_json_string, StringType())
-    
+
+    # UDF to extract AI evidence from observations with AIAST security code
+    def extract_ai_evidence(meta_obj, derived_from_array):
+        """Extract AI evidence from derivedFrom when observation has AIAST security code
+
+        Returns JSON array of evidence objects with complete extension data including nested values
+        """
+        if meta_obj is None or derived_from_array is None:
+            return None
+
+        try:
+            # Check if meta.security contains AIAST code
+            has_aiast = False
+            if hasattr(meta_obj, 'security') and meta_obj.security:
+                for security_item in meta_obj.security:
+                    if hasattr(security_item, 'code') and security_item.code == 'AIAST':
+                        has_aiast = True
+                        break
+
+            if not has_aiast:
+                return None
+
+            # Helper function to convert complex objects to dict
+            def to_dict(obj):
+                if obj is None:
+                    return None
+                if isinstance(obj, (str, int, float, bool)):
+                    return obj
+                if isinstance(obj, dict):
+                    return {k: to_dict(v) for k, v in obj.items()}
+                if isinstance(obj, (list, tuple)):
+                    return [to_dict(item) for item in obj]
+                # Handle Spark Row objects
+                if hasattr(obj, 'asDict'):
+                    return obj.asDict(recursive=True)
+                # Handle objects with __dict__
+                if hasattr(obj, '__dict__'):
+                    return {k: to_dict(v) for k, v in obj.__dict__.items() if not k.startswith('_')}
+                return str(obj)
+
+            # Extract evidence from derivedFrom elements with ThirdOpinion.ai extensions
+            evidence_list = []
+            for derived_item in derived_from_array:
+                if not hasattr(derived_item, 'extension') or not derived_item.extension:
+                    continue
+
+                # Get reference and display from derived item
+                reference = None
+                display = None
+                if hasattr(derived_item, 'reference'):
+                    reference = derived_item.reference
+                if hasattr(derived_item, 'display'):
+                    display = derived_item.display
+
+                # Check extensions for ThirdOpinion.ai URLs
+                for ext in derived_item.extension:
+                    if hasattr(ext, 'url') and ext.url and 'thirdopinion.ai' in ext.url.lower():
+                        evidence_item = {
+                            'url': ext.url,
+                            'reference': reference,
+                            'display': display
+                        }
+
+                        # Add all value fields from the extension
+                        if hasattr(ext, 'valueString') and ext.valueString:
+                            evidence_item['valueString'] = ext.valueString
+                        if hasattr(ext, 'valueQuantity') and ext.valueQuantity:
+                            evidence_item['valueQuantity'] = to_dict(ext.valueQuantity)
+                        if hasattr(ext, 'valueInteger') and ext.valueInteger is not None:
+                            evidence_item['valueInteger'] = ext.valueInteger
+                        if hasattr(ext, 'valueBoolean') and ext.valueBoolean is not None:
+                            evidence_item['valueBoolean'] = ext.valueBoolean
+                        if hasattr(ext, 'valueDateTime') and ext.valueDateTime:
+                            evidence_item['valueDateTime'] = ext.valueDateTime
+                        if hasattr(ext, 'valueCodeableConcept') and ext.valueCodeableConcept:
+                            evidence_item['valueCodeableConcept'] = to_dict(ext.valueCodeableConcept)
+
+                        # Check for nested extensions (e.g., value.url, value.valueQuantity)
+                        if hasattr(ext, 'extension') and ext.extension:
+                            nested_extensions = []
+                            for nested_ext in ext.extension:
+                                nested_item = {}
+                                if hasattr(nested_ext, 'url') and nested_ext.url:
+                                    nested_item['url'] = nested_ext.url
+
+                                # Add all value types from nested extension
+                                if hasattr(nested_ext, 'valueString') and nested_ext.valueString:
+                                    nested_item['valueString'] = nested_ext.valueString
+                                if hasattr(nested_ext, 'valueQuantity') and nested_ext.valueQuantity:
+                                    nested_item['valueQuantity'] = to_dict(nested_ext.valueQuantity)
+                                if hasattr(nested_ext, 'valueInteger') and nested_ext.valueInteger is not None:
+                                    nested_item['valueInteger'] = nested_ext.valueInteger
+                                if hasattr(nested_ext, 'valueBoolean') and nested_ext.valueBoolean is not None:
+                                    nested_item['valueBoolean'] = nested_ext.valueBoolean
+                                if hasattr(nested_ext, 'valueDateTime') and nested_ext.valueDateTime:
+                                    nested_item['valueDateTime'] = nested_ext.valueDateTime
+                                if hasattr(nested_ext, 'valueCodeableConcept') and nested_ext.valueCodeableConcept:
+                                    nested_item['valueCodeableConcept'] = to_dict(nested_ext.valueCodeableConcept)
+
+                                if nested_item:
+                                    nested_extensions.append(nested_item)
+
+                            if nested_extensions:
+                                evidence_item['value'] = nested_extensions
+
+                        evidence_list.append(evidence_item)
+
+            if not evidence_list:
+                return None
+
+            return json.dumps(evidence_list)
+
+        except Exception as e:
+            # Log error but don't fail the entire job
+            return None
+
+    extract_ai_evidence_udf = F.udf(extract_ai_evidence, StringType())
+
     # Build the select statement dynamically based on available columns
     select_columns = [
         F.col("id").alias("observation_id"),
@@ -1133,6 +1250,11 @@ def transform_main_observation_data(df):
         convert_to_json_udf(F.col("meta").getField("security")).alias("meta_security"),
         F.lit(None).alias("meta_tag"),     # tag field not in schema
         convert_to_json_udf(F.col("extension")).alias("extensions"),
+        # Extract AI evidence from AIAST-tagged observations
+        extract_ai_evidence_udf(
+            F.col("meta"),
+            F.when(F.col("derivedfrom").isNotNull(), F.col("derivedfrom")).otherwise(F.lit(None))
+        ).alias("ai_evidence"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ])
@@ -2019,6 +2141,7 @@ def main():
             F.col("meta_security").cast(StringType()).alias("meta_security"),
             F.col("meta_tag").cast(StringType()).alias("meta_tag"),
             F.col("extensions").cast(StringType()).alias("extensions"),
+            F.col("ai_evidence").cast(StringType()).alias("ai_evidence"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
         )

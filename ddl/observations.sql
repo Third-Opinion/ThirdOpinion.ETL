@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.observations (
     meta_security VARCHAR(65535),
     meta_tag VARCHAR(65535),
     extensions VARCHAR(65535),
+    ai_evidence SUPER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) 

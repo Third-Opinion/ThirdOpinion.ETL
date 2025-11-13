@@ -27,14 +27,14 @@ AS
         tp.reference_ranges,
         tp.interpretations,
         tp.notes,
-        tp.components
+        tp.components,
+    tp.ai_evidence
     FROM public.fact_fhir_observations_view_v1 tp
     INNER JOIN target_patients tgt ON tp.patient_id = tgt.patient_id
     INNER JOIN public.fact_fhir_patients_view_v1 fpv2 ON tp.patient_id = fpv2.patient_id
     WHERE tp.observation_category = 'laboratory'
         AND tp.status IN ('final', 'amended', 'corrected')
         AND (
-            tp.observation_text ILIKE '%neutrophil%count%'
-            OR tp.observation_text ILIKE '%ANC%'
+       tp.observation_text ILIKE '%neutrophil%' AND value_quantity_unit != '%'
         )
         AND tp.has_value = true;

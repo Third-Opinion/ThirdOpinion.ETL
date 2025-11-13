@@ -1431,8 +1431,13 @@ display_menu() {
     print_status "🔧 BULK Operations:" "$YELLOW"
     print_status "  A) Redeploy ALL views (drops all, then creates in dependency order)" "$YELLOW"
     print_status "  D) Deploy ALL views (create if missing, refresh if present)" "$YELLOW"
-    print_status "  F) Redeploy FACT views only" "$YELLOW"
-    print_status "  R) Redeploy REPORTING views only" "$YELLOW"
+    print_status "  F) Redeploy FACT views only (drop + create)" "$YELLOW"
+    print_status "  R) Redeploy REPORTING views only (drop + create)" "$YELLOW"
+    echo
+    print_status "🔄 REFRESH Operations (Materialized Views Only):" "$YELLOW"
+    print_status "  RF) Refresh FACT views only (no drop/create)" "$YELLOW"
+    print_status "  RR) Refresh REPORTING views only (no drop/create)" "$YELLOW"
+    echo
     print_status "  Q) Quit" "$YELLOW"
     echo
 }
@@ -1620,6 +1625,216 @@ redeploy_reporting_views() {
     done
 }
 
+# Function to refresh fact views only (no drop/create)
+refresh_fact_views() {
+    print_status "\n========================================" "$BLUE"
+    print_status "     REFRESHING FACT VIEWS" "$BLUE"
+    print_status "     (Materialized views only)" "$BLUE"
+    print_status "========================================" "$BLUE"
+
+    local success_count=0
+    local fail_count=0
+    local skipped_count=0
+
+    # Refresh fact views in dependency order (Level 0, 1, 2)
+    print_status "\nRefreshing Level 0 fact views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_0[@]}"; do
+        if [[ $view_name == fact_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 1 fact views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_1[@]}"; do
+        if [[ $view_name == fact_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 2 fact views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_2[@]}"; do
+        if [[ $view_name == fact_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\n✓ Fact views refresh complete: $success_count refreshed, $skipped_count skipped, $fail_count failed" "$GREEN"
+}
+
+# Function to refresh reporting views only (no drop/create)
+refresh_reporting_views() {
+    print_status "\n========================================" "$BLUE"
+    print_status "     REFRESHING REPORTING VIEWS" "$BLUE"
+    print_status "     (Materialized views only)" "$BLUE"
+    print_status "========================================" "$BLUE"
+
+    local success_count=0
+    local fail_count=0
+    local skipped_count=0
+
+    # Refresh reporting views in dependency order (Level 3, 4, 5, 6, 7, 8)
+    print_status "\nRefreshing Level 3 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 4 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_4[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 5 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_5[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 6 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_6[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 7 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_7[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\nRefreshing Level 8 reporting views..." "$YELLOW"
+    for view_name in "${DEPENDENCY_LEVEL_8[@]}"; do
+        if [[ $view_name == rpt_* ]]; then
+            if check_view_exists "$view_name"; then
+                refresh_view "$view_name"
+                local result=$?
+                if [ $result -eq 0 ]; then
+                    success_count=$((success_count + 1))
+                elif [ $result -eq 2 ]; then
+                    skipped_count=$((skipped_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+            else
+                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
+                skipped_count=$((skipped_count + 1))
+            fi
+        fi
+    done
+
+    print_status "\n✓ Reporting views refresh complete: $success_count refreshed, $skipped_count skipped, $fail_count failed" "$GREEN"
+}
+
 # Main script
 main() {
     # Check AWS CLI is installed
@@ -1698,6 +1913,12 @@ main() {
                 ;;
             [Rr])
                 redeploy_reporting_views
+                ;;
+            [Rr][Ff])
+                refresh_fact_views
+                ;;
+            [Rr][Rr])
+                refresh_reporting_views
                 ;;
             [Qq])
                 print_status "Goodbye!" "$GREEN"
