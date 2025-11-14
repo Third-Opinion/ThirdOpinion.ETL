@@ -1,4 +1,4 @@
-# Deployed: 2025-11-09 - Added deduplication logic to prevent duplicate records based on meta.lastUpdated
+# Deployed: 2025-11-14 03:03:05 UTC
 from datetime import datetime
 import sys
 from awsglue.transforms import *

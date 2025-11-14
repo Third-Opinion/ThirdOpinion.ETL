@@ -198,7 +198,7 @@ parse_ddl_columns() {
         sed -n '/CREATE TABLE/,/^)/p' | \
         grep -v "CREATE TABLE" | \
         grep -v "DISTKEY\|SORTKEY\|DISTSTYLE\|^)$\|^);$" | \
-        sed 's/^[ \t]*//' | \
+        sed 's/^[[:space:]]*//' | \
         sed 's/,$//' | \
         grep -E "^[a-zA-Z_]" | \
         while IFS= read -r line; do
