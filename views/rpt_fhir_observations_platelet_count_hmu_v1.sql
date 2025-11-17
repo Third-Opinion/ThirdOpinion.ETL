@@ -28,7 +28,7 @@ SELECT
     tp.interpretations,
     tp.notes,
     tp.components,
-    tp.ai_evidence
+    tp.derived_from
 FROM public.fact_fhir_observations_view_v1 tp
 INNER JOIN target_patients tgt ON tp.patient_id = tgt.patient_id
 INNER JOIN public.fact_fhir_patients_view_v1 fpv2 ON tp.patient_id = fpv2.patient_id

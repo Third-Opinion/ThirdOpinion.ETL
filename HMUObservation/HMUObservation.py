@@ -1,5 +1,5 @@
 # Deployed: 2025-11-14 03:03:16 UTC
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
@@ -23,6 +23,9 @@ def get_bookmark_from_redshift():
 
     This bookmark represents the latest data already loaded into Redshift.
     We'll only process Iceberg records newer than this timestamp.
+
+    If BACKDATE_DAYS is specified and a bookmark exists, the bookmark will be
+    decremented by that many days to reprocess historical data.
     """
     logger.info("Fetching bookmark (max meta_last_updated) from Redshift observations table...")
 
@@ -53,19 +56,39 @@ def get_bookmark_from_redshift():
 
             if max_timestamp:
                 logger.info(f"✅ Bookmark found: {max_timestamp}")
+                # Apply backdate if specified (only when bookmark exists)
+                if BACKDATE_DAYS > 0:
+                    # Convert timestamp to datetime if it's not already
+                    if isinstance(max_timestamp, str):
+                        max_timestamp = datetime.fromisoformat(max_timestamp.replace('Z', '+00:00'))
+
+                    original_bookmark = max_timestamp
+                    max_timestamp = max_timestamp - timedelta(days=BACKDATE_DAYS)
+
+                    logger.info(f"📅 BACKDATE MODE: Rewinding bookmark by {BACKDATE_DAYS} days")
+                    logger.info(f"   Original bookmark: {original_bookmark}")
+                    logger.info(f"   Adjusted bookmark: {max_timestamp}")
+                    logger.info(f"   Will reprocess data from {max_timestamp} onwards")
+
                 logger.info(f"Will only process Iceberg records with meta.lastUpdated > {max_timestamp}")
                 return max_timestamp
             else:
                 logger.info("No bookmark found (observations table is empty)")
                 logger.info("This is an initial full load - will process all Iceberg records")
+                if BACKDATE_DAYS > 0:
+                    logger.info(f"⚠️  BACKDATE_DAYS={BACKDATE_DAYS} specified but no bookmark exists - ignoring backdate")
                 return None
         else:
             logger.info("No bookmark available - proceeding with full load")
+            if BACKDATE_DAYS > 0:
+                logger.info(f"⚠️  BACKDATE_DAYS={BACKDATE_DAYS} specified but no bookmark exists - ignoring backdate")
             return None
 
     except Exception as e:
         logger.info(f"Could not fetch bookmark (table may not exist): {str(e)}")
         logger.info("Proceeding with full initial load of all Iceberg records")
+        if BACKDATE_DAYS > 0:
+            logger.info(f"⚠️  BACKDATE_DAYS={BACKDATE_DAYS} specified but no bookmark exists - ignoring backdate")
         return None
 
 def get_existing_versions_from_redshift(table_name, id_column):
@@ -920,6 +943,15 @@ try:
 except:
     TEST_MODE = False
 
+# Check for BACKDATE_DAYS parameter (optional)
+# When specified, reprocesses X days before the bookmark (only applies when bookmark exists)
+BACKDATE_DAYS = 0
+try:
+    backdate_args = getResolvedOptions(sys.argv, ["BACKDATE_DAYS"])
+    BACKDATE_DAYS = int(backdate_args.get("BACKDATE_DAYS", "0"))
+except:
+    BACKDATE_DAYS = 0
+
 catalog_nm = "glue_catalog"
 
 s3_bucket = "s3://7df690fd40c734f8937daf02f39b2ec3-457560472834-group/datalake/hmu_fhir_data_store_836e877666cebf177ce6370ec1478a92_healthlake_view/"
@@ -1042,17 +1074,84 @@ def transform_main_observation_data(df):
 
         Returns JSON array of evidence objects with complete extension data including nested values
         """
-        if meta_obj is None or derived_from_array is None:
+        # Debug: Track UDF calls
+        global ai_evidence_debug_counter
+        if 'ai_evidence_debug_counter' not in globals():
+            ai_evidence_debug_counter = 0
+        ai_evidence_debug_counter += 1
+
+        # Ultra-verbose logging for debugging
+        if ai_evidence_debug_counter <= 3:
+            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL START ==========")
+            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj type: {type(meta_obj)}")
+            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derived_from_array type: {type(derived_from_array)}")
+
+        # TEMPORARY DEBUG: Return diagnostic info for first few rows
+        if ai_evidence_debug_counter <= 5:
+            import json
+            debug_info = {
+                "debug": True,
+                "counter": ai_evidence_debug_counter,
+                "meta_is_none": meta_obj is None,
+                "derived_from_is_none": derived_from_array is None,
+                "meta_type": str(type(meta_obj)),
+                "derived_from_type": str(type(derived_from_array))
+            }
+            return json.dumps(debug_info)
+
+        if meta_obj is None:
+            if ai_evidence_debug_counter <= 5:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ meta_obj is None - returning None")
             return None
+
+        if derived_from_array is None:
+            if ai_evidence_debug_counter <= 5:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ derived_from_array is None - returning None")
+            return None
+
+        # Log array details
+        if ai_evidence_debug_counter <= 3:
+            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom is list/array: {isinstance(derived_from_array, (list, tuple))}")
+            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom length: {len(derived_from_array) if hasattr(derived_from_array, '__len__') else 'N/A'}")
 
         try:
             # Check if meta.security contains AIAST code
             has_aiast = False
+            security_codes = []
+
+            # Verbose meta.security logging
+            if ai_evidence_debug_counter <= 3:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Checking meta.security...")
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] hasattr(meta_obj, 'security'): {hasattr(meta_obj, 'security')}")
+                if hasattr(meta_obj, 'security'):
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj.security is not None: {meta_obj.security is not None}")
+                    if meta_obj.security:
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj.security type: {type(meta_obj.security)}")
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj.security length: {len(meta_obj.security) if hasattr(meta_obj.security, '__len__') else 'N/A'}")
+
             if hasattr(meta_obj, 'security') and meta_obj.security:
-                for security_item in meta_obj.security:
-                    if hasattr(security_item, 'code') and security_item.code == 'AIAST':
-                        has_aiast = True
-                        break
+                for idx, security_item in enumerate(meta_obj.security):
+                    if ai_evidence_debug_counter <= 3:
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}] type: {type(security_item)}")
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}] hasattr 'code': {hasattr(security_item, 'code')}")
+
+                    if hasattr(security_item, 'code'):
+                        code_value = security_item.code
+                        security_codes.append(code_value)
+
+                        if ai_evidence_debug_counter <= 3:
+                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}].code = '{code_value}'")
+
+                        if code_value == 'AIAST':
+                            has_aiast = True
+                            if ai_evidence_debug_counter <= 10:
+                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ✅ FOUND AIAST CODE!")
+                            break
+
+            # Debug logging for first few calls
+            if ai_evidence_debug_counter <= 10:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Security codes found: {security_codes}, has_aiast: {has_aiast}")
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom array length: {len(derived_from_array) if derived_from_array else 0}")
 
             if not has_aiast:
                 return None
@@ -1077,9 +1176,28 @@ def transform_main_observation_data(df):
 
             # Extract evidence from derivedFrom elements with ThirdOpinion.ai extensions
             evidence_list = []
-            for derived_item in derived_from_array:
+            derived_items_with_extensions = 0
+            thirdopinion_extensions_found = 0
+
+            if ai_evidence_debug_counter <= 3:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Starting to process derivedFrom array...")
+
+            for derived_idx, derived_item in enumerate(derived_from_array):
+                if ai_evidence_debug_counter <= 3:
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Processing derivedFrom[{derived_idx}]...")
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] type: {type(derived_item)}")
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] hasattr 'extension': {hasattr(derived_item, 'extension')}")
+
                 if not hasattr(derived_item, 'extension') or not derived_item.extension:
+                    if ai_evidence_debug_counter <= 3:
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] has no extension - skipping")
                     continue
+
+                derived_items_with_extensions += 1
+
+                if ai_evidence_debug_counter <= 3:
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}].extension type: {type(derived_item.extension)}")
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}].extension length: {len(derived_item.extension) if hasattr(derived_item.extension, '__len__') else 'N/A'}")
 
                 # Get reference and display from derived item
                 reference = None
@@ -1090,68 +1208,125 @@ def transform_main_observation_data(df):
                     display = derived_item.display
 
                 # Check extensions for ThirdOpinion.ai URLs
-                for ext in derived_item.extension:
-                    if hasattr(ext, 'url') and ext.url and 'thirdopinion.ai' in ext.url.lower():
-                        evidence_item = {
-                            'url': ext.url,
-                            'reference': reference,
-                            'display': display
-                        }
+                for ext_idx, ext in enumerate(derived_item.extension):
+                    if ai_evidence_debug_counter <= 3:
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Processing extension[{ext_idx}] in derivedFrom[{derived_idx}]...")
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}] type: {type(ext)}")
+                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}] hasattr 'url': {hasattr(ext, 'url')}")
 
-                        # Add all value fields from the extension
-                        if hasattr(ext, 'valueString') and ext.valueString:
-                            evidence_item['valueString'] = ext.valueString
-                        if hasattr(ext, 'valueQuantity') and ext.valueQuantity:
-                            evidence_item['valueQuantity'] = to_dict(ext.valueQuantity)
-                        if hasattr(ext, 'valueInteger') and ext.valueInteger is not None:
-                            evidence_item['valueInteger'] = ext.valueInteger
-                        if hasattr(ext, 'valueBoolean') and ext.valueBoolean is not None:
-                            evidence_item['valueBoolean'] = ext.valueBoolean
-                        if hasattr(ext, 'valueDateTime') and ext.valueDateTime:
-                            evidence_item['valueDateTime'] = ext.valueDateTime
-                        if hasattr(ext, 'valueCodeableConcept') and ext.valueCodeableConcept:
-                            evidence_item['valueCodeableConcept'] = to_dict(ext.valueCodeableConcept)
+                    if hasattr(ext, 'url') and ext.url:
+                        url_value = ext.url
 
-                        # Check for nested extensions (e.g., value.url, value.valueQuantity)
-                        if hasattr(ext, 'extension') and ext.extension:
-                            nested_extensions = []
-                            for nested_ext in ext.extension:
-                                nested_item = {}
-                                if hasattr(nested_ext, 'url') and nested_ext.url:
-                                    nested_item['url'] = nested_ext.url
+                        # Debug: Log extension URLs for first AIAST observation
+                        if ai_evidence_debug_counter <= 10 and thirdopinion_extensions_found == 0:
+                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Extension URL found: {url_value}")
 
-                                # Add all value types from nested extension
-                                if hasattr(nested_ext, 'valueString') and nested_ext.valueString:
-                                    nested_item['valueString'] = nested_ext.valueString
-                                if hasattr(nested_ext, 'valueQuantity') and nested_ext.valueQuantity:
-                                    nested_item['valueQuantity'] = to_dict(nested_ext.valueQuantity)
-                                if hasattr(nested_ext, 'valueInteger') and nested_ext.valueInteger is not None:
-                                    nested_item['valueInteger'] = nested_ext.valueInteger
-                                if hasattr(nested_ext, 'valueBoolean') and nested_ext.valueBoolean is not None:
-                                    nested_item['valueBoolean'] = nested_ext.valueBoolean
-                                if hasattr(nested_ext, 'valueDateTime') and nested_ext.valueDateTime:
-                                    nested_item['valueDateTime'] = nested_ext.valueDateTime
-                                if hasattr(nested_ext, 'valueCodeableConcept') and nested_ext.valueCodeableConcept:
-                                    nested_item['valueCodeableConcept'] = to_dict(nested_ext.valueCodeableConcept)
+                        if ai_evidence_debug_counter <= 3:
+                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}].url = '{url_value}'")
+                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Contains 'thirdopinion.ai': {'thirdopinion.ai' in url_value.lower()}")
 
-                                if nested_item:
-                                    nested_extensions.append(nested_item)
+                        if 'thirdopinion.ai' in url_value.lower():
+                            thirdopinion_extensions_found += 1
 
-                            if nested_extensions:
-                                evidence_item['value'] = nested_extensions
+                            if ai_evidence_debug_counter <= 3:
+                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ✅ ThirdOpinion.ai extension found! Creating evidence item...")
 
-                        evidence_list.append(evidence_item)
+                            evidence_item = {
+                                'url': ext.url,
+                                'reference': reference,
+                                'display': display
+                            }
+
+                            if ai_evidence_debug_counter <= 3:
+                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Evidence item base: {evidence_item}")
+
+                            # Add all value fields from the extension
+                            if hasattr(ext, 'valueString') and ext.valueString:
+                                evidence_item['valueString'] = ext.valueString
+                            if hasattr(ext, 'valueQuantity') and ext.valueQuantity:
+                                evidence_item['valueQuantity'] = to_dict(ext.valueQuantity)
+                            if hasattr(ext, 'valueInteger') and ext.valueInteger is not None:
+                                evidence_item['valueInteger'] = ext.valueInteger
+                            if hasattr(ext, 'valueBoolean') and ext.valueBoolean is not None:
+                                evidence_item['valueBoolean'] = ext.valueBoolean
+                            if hasattr(ext, 'valueDateTime') and ext.valueDateTime:
+                                evidence_item['valueDateTime'] = ext.valueDateTime
+                            if hasattr(ext, 'valueCodeableConcept') and ext.valueCodeableConcept:
+                                evidence_item['valueCodeableConcept'] = to_dict(ext.valueCodeableConcept)
+
+                            # Check for nested extensions (e.g., value.url, value.valueQuantity)
+                            if hasattr(ext, 'extension') and ext.extension:
+                                nested_extensions = []
+                                for nested_ext in ext.extension:
+                                    nested_item = {}
+                                    if hasattr(nested_ext, 'url') and nested_ext.url:
+                                        nested_item['url'] = nested_ext.url
+
+                                    # Add all value types from nested extension
+                                    if hasattr(nested_ext, 'valueString') and nested_ext.valueString:
+                                        nested_item['valueString'] = nested_ext.valueString
+                                    if hasattr(nested_ext, 'valueQuantity') and nested_ext.valueQuantity:
+                                        nested_item['valueQuantity'] = to_dict(nested_ext.valueQuantity)
+                                    if hasattr(nested_ext, 'valueInteger') and nested_ext.valueInteger is not None:
+                                        nested_item['valueInteger'] = nested_ext.valueInteger
+                                    if hasattr(nested_ext, 'valueBoolean') and nested_ext.valueBoolean is not None:
+                                        nested_item['valueBoolean'] = nested_ext.valueBoolean
+                                    if hasattr(nested_ext, 'valueDateTime') and nested_ext.valueDateTime:
+                                        nested_item['valueDateTime'] = nested_ext.valueDateTime
+                                    if hasattr(nested_ext, 'valueCodeableConcept') and nested_ext.valueCodeableConcept:
+                                        nested_item['valueCodeableConcept'] = to_dict(nested_ext.valueCodeableConcept)
+
+                                    if nested_item:
+                                        nested_extensions.append(nested_item)
+
+                                if nested_extensions:
+                                    evidence_item['value'] = nested_extensions
+
+                            if ai_evidence_debug_counter <= 3:
+                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Adding evidence_item to list: {json.dumps(evidence_item, default=str)[:200]}...")
+
+                            evidence_list.append(evidence_item)
+
+                            if ai_evidence_debug_counter <= 3:
+                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Current evidence_list length: {len(evidence_list)}")
+
+            # Debug: Log summary for first few AIAST observations
+            if ai_evidence_debug_counter <= 10:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Summary - derivedFrom items with extensions: {derived_items_with_extensions}, ThirdOpinion.ai extensions found: {thirdopinion_extensions_found}, Evidence items collected: {len(evidence_list)}")
 
             if not evidence_list:
+                if ai_evidence_debug_counter <= 10:
+                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ No evidence collected, returning None")
                 return None
 
-            return json.dumps(evidence_list)
+            if ai_evidence_debug_counter <= 3:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Converting evidence_list to JSON...")
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Evidence list content: {evidence_list}")
+
+            result_json = json.dumps(evidence_list)
+
+            if ai_evidence_debug_counter <= 5:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ✅ Returning evidence JSON (length: {len(result_json)}): {result_json[:200]}...")
+
+            if ai_evidence_debug_counter <= 3:
+                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL END (SUCCESS) ==========")
+
+            return result_json
 
         except Exception as e:
             # Log error but don't fail the entire job
+            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL END (ERROR) ==========")
+            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ Exception in extract_ai_evidence: {str(e)}")
+            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Full traceback:")
+            logger.error(traceback.format_exc())
             return None
 
+    # Register UDF
+    logger.info("[AI_EVIDENCE_DEBUG] Registering extract_ai_evidence UDF...")
     extract_ai_evidence_udf = F.udf(extract_ai_evidence, StringType())
+    logger.info("[AI_EVIDENCE_DEBUG] UDF registered successfully")
 
     # Build the select statement dynamically based on available columns
     select_columns = [
@@ -1250,21 +1425,75 @@ def transform_main_observation_data(df):
         convert_to_json_udf(F.col("meta").getField("security")).alias("meta_security"),
         F.lit(None).alias("meta_tag"),     # tag field not in schema
         convert_to_json_udf(F.col("extension")).alias("extensions"),
-        # Extract AI evidence from AIAST-tagged observations
-        extract_ai_evidence_udf(
-            F.col("meta"),
-            F.when(F.col("derivedfrom").isNotNull(), F.col("derivedfrom")).otherwise(F.lit(None))
-        ).alias("ai_evidence"),
+        # Store entire derivedFrom array as SUPER column - use F.to_json() for proper array serialization
+        F.to_json(F.col("derivedFrom")).alias("derived_from"),
         F.current_timestamp().alias("created_at"),
         F.current_timestamp().alias("updated_at")
     ])
     
     # Transform main observation data using only available columns and flatten complex structures
+    logger.info("[DERIVED_FROM_DEBUG] Creating main_df with derived_from column...")
     main_df = df.select(*select_columns).filter(
-        F.col("observation_id").isNotNull() & 
+        F.col("observation_id").isNotNull() &
         F.col("patient_id").isNotNull()
     )
-    
+    logger.info("[DERIVED_FROM_DEBUG] main_df created")
+
+    # Debug: Show schema
+    logger.info("[DERIVED_FROM_DEBUG] main_df schema:")
+    logger.info(f"[DERIVED_FROM_DEBUG] Columns: {main_df.columns}")
+    logger.info(f"[DERIVED_FROM_DEBUG] Schema types: {[(f.name, str(f.dataType)) for f in main_df.schema.fields]}")
+
+    # Debug: Check if derivedFrom column exists in source data
+    logger.info("[DERIVED_FROM_DEBUG] Checking source DataFrame columns...")
+    logger.info(f"[DERIVED_FROM_DEBUG] Source columns: {df.columns}")
+    logger.info(f"[DERIVED_FROM_DEBUG] Has 'derivedFrom': {'derivedFrom' in df.columns}")
+    logger.info(f"[DERIVED_FROM_DEBUG] Has 'meta': {'meta' in df.columns}")
+
+    # Force evaluation
+    logger.info("[DERIVED_FROM_DEBUG] Forcing evaluation with count()...")
+    total_count = main_df.count()
+    logger.info(f"[DERIVED_FROM_DEBUG] Count completed. Total observations: {total_count}")
+
+    logger.info("[DERIVED_FROM_DEBUG] Counting observations with derived_from...")
+    derived_from_count = main_df.filter(F.col("derived_from").isNotNull()).count()
+    logger.info(f"[DERIVED_FROM_DEBUG] Observations with derived_from: {derived_from_count}")
+
+    # Debug: Show sample of derived_from values
+    if derived_from_count > 0:
+        logger.info("[DERIVED_FROM_DEBUG] Collecting sample derived_from data...")
+        sample_derived_from = main_df.filter(F.col("derived_from").isNotNull()).select("observation_id", "derived_from").limit(3).collect()
+        for row in sample_derived_from:
+            logger.info(f"[DERIVED_FROM_DEBUG] Sample - observation_id: {row['observation_id']}, derived_from length: {len(row['derived_from']) if row['derived_from'] else 0}")
+            logger.info(f"[DERIVED_FROM_DEBUG] Sample - derived_from content: {row['derived_from'][:500] if row['derived_from'] else 'None'}...")
+    else:
+        logger.info("[DERIVED_FROM_DEBUG] ⚠️ No observations with derived_from found!")
+        logger.info("[DERIVED_FROM_DEBUG] Checking source data for derivedFrom...")
+
+        # Check if any observations have AIAST in meta.security
+        aiast_check = df.filter(
+            F.col("meta.security").isNotNull()
+        ).select(
+            F.col("id"),
+            F.col("meta.security")
+        ).limit(5).collect()
+
+        logger.info(f"[AI_EVIDENCE_DEBUG] Sample meta.security values (first 5 with security):")
+        for row in aiast_check:
+            logger.info(f"[AI_EVIDENCE_DEBUG]   id: {row['id']}, security: {row['security']}")
+
+        # Check if any observations have derivedFrom
+        derivedfrom_check = df.filter(
+            F.col("derivedFrom").isNotNull()
+        ).select(
+            F.col("id"),
+            F.col("derivedFrom")
+        ).limit(5).collect()
+
+        logger.info(f"[AI_EVIDENCE_DEBUG] Sample derivedFrom values (first 5 with derivedFrom):")
+        for row in derivedfrom_check:
+            logger.info(f"[AI_EVIDENCE_DEBUG]   id: {row['id']}, derivedFrom length: {len(row['derivedFrom']) if row['derivedFrom'] else 0}")
+
     return main_df
 
 def transform_observation_categories(df):
@@ -1762,22 +1991,22 @@ def transform_observation_derived_from(df):
     """Transform observation derived from references"""
     logger.info("Transforming observation derived from...")
     
-    # Check if derivedfrom column exists (using actual CSV field name)
-    if "derivedfrom" not in df.columns:
-        logger.warning("derivedfrom column not found in data, returning empty DataFrame")
+    # Check if derivedFrom column exists (using actual CSV field name)
+    if "derivedFrom" not in df.columns:
+        logger.warning("derivedFrom column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
             F.lit("").alias("patient_id"),
             F.lit("").alias("derived_from_reference")
         ).filter(F.lit(False))
-    
-    # Explode the derivedfrom array
+
+    # Explode the derivedFrom array
     derived_df = df.select(
         F.col("id").alias("observation_id"),
-        F.when(F.col("subject").isNotNull(), 
+        F.when(F.col("subject").isNotNull(),
                F.regexp_extract(F.col("subject").getField("reference"), r"Patient/(.+)", 1)
               ).otherwise(None).alias("patient_id"),
-        F.explode(F.col("derivedfrom")).alias("derived_item")
+        F.explode(F.col("derivedFrom")).alias("derived_item")
     ).filter(
         F.col("derived_item").isNotNull()
     )
@@ -2141,7 +2370,7 @@ def main():
             F.col("meta_security").cast(StringType()).alias("meta_security"),
             F.col("meta_tag").cast(StringType()).alias("meta_tag"),
             F.col("extensions").cast(StringType()).alias("extensions"),
-            F.col("ai_evidence").cast(StringType()).alias("ai_evidence"),
+            F.col("derivedFrom").cast(StringType()).alias("derivedFrom"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
         )

@@ -105,6 +105,7 @@ def get_existing_versions_from_redshift(table_name, id_column):
                 "redshiftTmpDir": S3_TEMP_DIR,
                 "useConnectionProperties": "true",
                 "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION
             },
             transformation_ctx=f"read_existing_versions_{table_name}"
         )

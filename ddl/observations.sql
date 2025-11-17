@@ -1,6 +1,6 @@
 -- Table: observations
 -- Main FHIR Observation table with co-located distribution
--- Updated: 2025-10-09 - Removed primary_* columns, increased text field sizes
+-- Updated: 2025-11-16 - Renamed ai_evidence to derived_from to store entire FHIR derivedFrom array
 
 CREATE TABLE IF NOT EXISTS public.observations (
     observation_id VARCHAR(255),
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.observations (
     meta_security VARCHAR(65535),
     meta_tag VARCHAR(65535),
     extensions VARCHAR(65535),
-    ai_evidence SUPER,
+    derived_from SUPER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) 

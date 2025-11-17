@@ -28,7 +28,7 @@ COALESCE(tp.value_string, CAST(tp.value_quantity_value AS VARCHAR)) AS combined_
     tp.interpretations,
     tp.notes,
     tp.components,
-    tp.ai_evidence
+    tp.derived_from
 FROM public.fact_fhir_observations_view_v1 tp
 INNER JOIN target_patients tgt
     ON tp.patient_id = tgt.patient_id

@@ -25,7 +25,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'alt' AS observation_type
 FROM rpt_fhir_observations_alt_hmu_v1
 
@@ -53,7 +53,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'ast' AS observation_type
 FROM rpt_fhir_observations_ast_hmu_v1
 
@@ -81,7 +81,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'bmi' AS observation_type
 FROM rpt_fhir_observations_bmi_hmu_v1
 
@@ -109,7 +109,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'cd4_count' AS observation_type
 FROM rpt_fhir_observations_cd4_count_hmu_v1
 
@@ -137,7 +137,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'creatinine' AS observation_type
 FROM rpt_fhir_observations_creatinine_hmu_v1
 
@@ -165,7 +165,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'egfr' AS observation_type
 FROM rpt_fhir_observations_egfr_hmu_v1
 
@@ -193,7 +193,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'hba1c' AS observation_type
 FROM rpt_fhir_observations_hba1c_hmu_v1
 
@@ -221,7 +221,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'hemoglobin' AS observation_type
 FROM rpt_fhir_observations_hemoglobin_hmu_v1
 
@@ -249,7 +249,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'hiv_viral_load' AS observation_type
 FROM rpt_fhir_observations_hiv_viral_load_hmu_v1
 
@@ -277,7 +277,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'platelet_count' AS observation_type
 FROM rpt_fhir_observations_platelet_count_hmu_v1
 
@@ -305,7 +305,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'serum_albumin' AS observation_type
 FROM rpt_fhir_observations_serum_albumin_hmu_v1
 
@@ -333,7 +333,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'serum_potassium' AS observation_type
 FROM rpt_fhir_observations_serum_potassium_hmu_v1
 
@@ -361,7 +361,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'total_bilirubin' AS observation_type
 FROM rpt_fhir_observations_total_bilirubin_hmu_v1
 
@@ -389,7 +389,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'absolute_neutrophil_count' AS observation_type
 FROM rpt_fhir_observations_absolute_neutrophil_count_hmu_v1
 
@@ -417,7 +417,7 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'testosterone_total' AS observation_type
 FROM rpt_fhir_observations_testosterone_total_hmu_v1
 
@@ -445,6 +445,6 @@ SELECT
     interpretations,
     notes,
     components,
-    ai_evidence,
+    derived_from,
     'psa_total' AS observation_type
 FROM rpt_fhir_observations_psa_total_hmu_v1;

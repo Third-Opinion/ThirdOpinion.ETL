@@ -319,7 +319,7 @@ SELECT
     o.method_display,
     o.method_text,
     o.meta_last_updated,
-    o.ai_evidence,
+    o.derived_from,
 
     -- ETL Audit Fields
     o.created_at AS etl_created_at,
