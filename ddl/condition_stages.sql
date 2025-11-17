@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS public.condition_stages (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         stage_summary_code VARCHAR(50),
         stage_summary_system VARCHAR(255),
         stage_summary_display VARCHAR(255),

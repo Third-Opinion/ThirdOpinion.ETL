@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS public.condition_extensions (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         extension_url VARCHAR(500),
         extension_type VARCHAR(50),
         value_type VARCHAR(50),

@@ -1,4 +1,4 @@
-# Deployed: 2025-11-14 03:03:16 UTC
+# Deployed: 2025-11-17 15:01:34 UTC
 from datetime import datetime, timedelta
 import sys
 from awsglue.transforms import *
@@ -1082,9 +1082,9 @@ def transform_main_observation_data(df):
 
         # Ultra-verbose logging for debugging
         if ai_evidence_debug_counter <= 3:
-            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL START ==========")
-            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj type: {type(meta_obj)}")
-            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derived_from_array type: {type(derived_from_array)}")
+            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL START ==========")
+            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] meta_obj type: {type(meta_obj)}")
+            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derived_from_array type: {type(derived_from_array)}")
 
         # TEMPORARY DEBUG: Return diagnostic info for first few rows
         if ai_evidence_debug_counter <= 5:
@@ -1101,18 +1101,18 @@ def transform_main_observation_data(df):
 
         if meta_obj is None:
             if ai_evidence_debug_counter <= 5:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ meta_obj is None - returning None")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ❌ meta_obj is None - returning None")
             return None
 
         if derived_from_array is None:
             if ai_evidence_debug_counter <= 5:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ derived_from_array is None - returning None")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ❌ derived_from_array is None - returning None")
             return None
 
         # Log array details
         if ai_evidence_debug_counter <= 3:
-            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom is list/array: {isinstance(derived_from_array, (list, tuple))}")
-            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom length: {len(derived_from_array) if hasattr(derived_from_array, '__len__') else 'N/A'}")
+            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom is list/array: {isinstance(derived_from_array, (list, tuple))}")
+            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom length: {len(derived_from_array) if hasattr(derived_from_array, '__len__') else 'N/A'}")
 
         try:
             # Check if meta.security contains AIAST code
@@ -1121,37 +1121,37 @@ def transform_main_observation_data(df):
 
             # Verbose meta.security logging
             if ai_evidence_debug_counter <= 3:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Checking meta.security...")
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] hasattr(meta_obj, 'security'): {hasattr(meta_obj, 'security')}")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Checking meta.security...")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] hasattr(meta_obj, 'security'): {hasattr(meta_obj, 'security')}")
                 if hasattr(meta_obj, 'security'):
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj.security is not None: {meta_obj.security is not None}")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] meta_obj.security is not None: {meta_obj.security is not None}")
                     if meta_obj.security:
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj.security type: {type(meta_obj.security)}")
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] meta_obj.security length: {len(meta_obj.security) if hasattr(meta_obj.security, '__len__') else 'N/A'}")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] meta_obj.security type: {type(meta_obj.security)}")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] meta_obj.security length: {len(meta_obj.security) if hasattr(meta_obj.security, '__len__') else 'N/A'}")
 
             if hasattr(meta_obj, 'security') and meta_obj.security:
                 for idx, security_item in enumerate(meta_obj.security):
                     if ai_evidence_debug_counter <= 3:
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}] type: {type(security_item)}")
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}] hasattr 'code': {hasattr(security_item, 'code')}")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}] type: {type(security_item)}")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}] hasattr 'code': {hasattr(security_item, 'code')}")
 
                     if hasattr(security_item, 'code'):
                         code_value = security_item.code
                         security_codes.append(code_value)
 
                         if ai_evidence_debug_counter <= 3:
-                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}].code = '{code_value}'")
+                            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] security_item[{idx}].code = '{code_value}'")
 
                         if code_value == 'AIAST':
                             has_aiast = True
                             if ai_evidence_debug_counter <= 10:
-                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ✅ FOUND AIAST CODE!")
+                                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ✅ FOUND AIAST CODE!")
                             break
 
             # Debug logging for first few calls
             if ai_evidence_debug_counter <= 10:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Security codes found: {security_codes}, has_aiast: {has_aiast}")
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom array length: {len(derived_from_array) if derived_from_array else 0}")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Security codes found: {security_codes}, has_aiast: {has_aiast}")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom array length: {len(derived_from_array) if derived_from_array else 0}")
 
             if not has_aiast:
                 return None
@@ -1180,24 +1180,24 @@ def transform_main_observation_data(df):
             thirdopinion_extensions_found = 0
 
             if ai_evidence_debug_counter <= 3:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Starting to process derivedFrom array...")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Starting to process derivedFrom array...")
 
             for derived_idx, derived_item in enumerate(derived_from_array):
                 if ai_evidence_debug_counter <= 3:
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Processing derivedFrom[{derived_idx}]...")
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] type: {type(derived_item)}")
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] hasattr 'extension': {hasattr(derived_item, 'extension')}")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Processing derivedFrom[{derived_idx}]...")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] type: {type(derived_item)}")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] hasattr 'extension': {hasattr(derived_item, 'extension')}")
 
                 if not hasattr(derived_item, 'extension') or not derived_item.extension:
                     if ai_evidence_debug_counter <= 3:
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] has no extension - skipping")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}] has no extension - skipping")
                     continue
 
                 derived_items_with_extensions += 1
 
                 if ai_evidence_debug_counter <= 3:
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}].extension type: {type(derived_item.extension)}")
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}].extension length: {len(derived_item.extension) if hasattr(derived_item.extension, '__len__') else 'N/A'}")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}].extension type: {type(derived_item.extension)}")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] derivedFrom[{derived_idx}].extension length: {len(derived_item.extension) if hasattr(derived_item.extension, '__len__') else 'N/A'}")
 
                 # Get reference and display from derived item
                 reference = None
@@ -1210,26 +1210,26 @@ def transform_main_observation_data(df):
                 # Check extensions for ThirdOpinion.ai URLs
                 for ext_idx, ext in enumerate(derived_item.extension):
                     if ai_evidence_debug_counter <= 3:
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Processing extension[{ext_idx}] in derivedFrom[{derived_idx}]...")
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}] type: {type(ext)}")
-                        logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}] hasattr 'url': {hasattr(ext, 'url')}")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Processing extension[{ext_idx}] in derivedFrom[{derived_idx}]...")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}] type: {type(ext)}")
+                        logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}] hasattr 'url': {hasattr(ext, 'url')}")
 
                     if hasattr(ext, 'url') and ext.url:
                         url_value = ext.url
 
                         # Debug: Log extension URLs for first AIAST observation
                         if ai_evidence_debug_counter <= 10 and thirdopinion_extensions_found == 0:
-                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Extension URL found: {url_value}")
+                            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Extension URL found: {url_value}")
 
                         if ai_evidence_debug_counter <= 3:
-                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}].url = '{url_value}'")
-                            logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Contains 'thirdopinion.ai': {'thirdopinion.ai' in url_value.lower()}")
+                            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] extension[{ext_idx}].url = '{url_value}'")
+                            logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Contains 'thirdopinion.ai': {'thirdopinion.ai' in url_value.lower()}")
 
                         if 'thirdopinion.ai' in url_value.lower():
                             thirdopinion_extensions_found += 1
 
                             if ai_evidence_debug_counter <= 3:
-                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ✅ ThirdOpinion.ai extension found! Creating evidence item...")
+                                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ✅ ThirdOpinion.ai extension found! Creating evidence item...")
 
                             evidence_item = {
                                 'url': ext.url,
@@ -1238,7 +1238,7 @@ def transform_main_observation_data(df):
                             }
 
                             if ai_evidence_debug_counter <= 3:
-                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Evidence item base: {evidence_item}")
+                                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Evidence item base: {evidence_item}")
 
                             # Add all value fields from the extension
                             if hasattr(ext, 'valueString') and ext.valueString:
@@ -1283,50 +1283,50 @@ def transform_main_observation_data(df):
                                     evidence_item['value'] = nested_extensions
 
                             if ai_evidence_debug_counter <= 3:
-                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Adding evidence_item to list: {json.dumps(evidence_item, default=str)[:200]}...")
+                                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Adding evidence_item to list: {json.dumps(evidence_item, default=str)[:200]}...")
 
                             evidence_list.append(evidence_item)
 
                             if ai_evidence_debug_counter <= 3:
-                                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Current evidence_list length: {len(evidence_list)}")
+                                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Current evidence_list length: {len(evidence_list)}")
 
             # Debug: Log summary for first few AIAST observations
             if ai_evidence_debug_counter <= 10:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Summary - derivedFrom items with extensions: {derived_items_with_extensions}, ThirdOpinion.ai extensions found: {thirdopinion_extensions_found}, Evidence items collected: {len(evidence_list)}")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Summary - derivedFrom items with extensions: {derived_items_with_extensions}, ThirdOpinion.ai extensions found: {thirdopinion_extensions_found}, Evidence items collected: {len(evidence_list)}")
 
             if not evidence_list:
                 if ai_evidence_debug_counter <= 10:
-                    logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ No evidence collected, returning None")
+                    logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ❌ No evidence collected, returning None")
                 return None
 
             if ai_evidence_debug_counter <= 3:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Converting evidence_list to JSON...")
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Evidence list content: {evidence_list}")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Converting evidence_list to JSON...")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Evidence list content: {evidence_list}")
 
             result_json = json.dumps(evidence_list)
 
             if ai_evidence_debug_counter <= 5:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ✅ Returning evidence JSON (length: {len(result_json)}): {result_json[:200]}...")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ✅ Returning evidence JSON (length: {len(result_json)}): {result_json[:200]}...")
 
             if ai_evidence_debug_counter <= 3:
-                logger.info(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL END (SUCCESS) ==========")
+                logger.info(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL END (SUCCESS) ==========")
 
             return result_json
 
         except Exception as e:
             # Log error but don't fail the entire job
-            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL END (ERROR) ==========")
-            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] ❌ Exception in extract_ai_evidence: {str(e)}")
-            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Exception type: {type(e).__name__}")
+            logger.error(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ========== UDF CALL END (ERROR) ==========")
+            logger.error(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] ❌ Exception in extract_ai_evidence: {str(e)}")
+            logger.error(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Exception type: {type(e).__name__}")
             import traceback
-            logger.error(f"[AI_EVIDENCE_DEBUG #{ai_evidence_debug_counter}] Full traceback:")
+            logger.error(f"[DERIVED_FROM_DEBUG #{ai_evidence_debug_counter}] Full traceback:")
             logger.error(traceback.format_exc())
             return None
 
     # Register UDF
-    logger.info("[AI_EVIDENCE_DEBUG] Registering extract_ai_evidence UDF...")
+    logger.info("[DERIVED_FROM_DEBUG] Registering extract_ai_evidence UDF...")
     extract_ai_evidence_udf = F.udf(extract_ai_evidence, StringType())
-    logger.info("[AI_EVIDENCE_DEBUG] UDF registered successfully")
+    logger.info("[DERIVED_FROM_DEBUG] UDF registered successfully")
 
     # Build the select statement dynamically based on available columns
     select_columns = [
@@ -1478,9 +1478,9 @@ def transform_main_observation_data(df):
             F.col("meta.security")
         ).limit(5).collect()
 
-        logger.info(f"[AI_EVIDENCE_DEBUG] Sample meta.security values (first 5 with security):")
+        logger.info(f"[DERIVED_FROM_DEBUG] Sample meta.security values (first 5 with security):")
         for row in aiast_check:
-            logger.info(f"[AI_EVIDENCE_DEBUG]   id: {row['id']}, security: {row['security']}")
+            logger.info(f"[DERIVED_FROM_DEBUG]   id: {row['id']}, security: {row['security']}")
 
         # Check if any observations have derivedFrom
         derivedfrom_check = df.filter(
@@ -1490,9 +1490,9 @@ def transform_main_observation_data(df):
             F.col("derivedFrom")
         ).limit(5).collect()
 
-        logger.info(f"[AI_EVIDENCE_DEBUG] Sample derivedFrom values (first 5 with derivedFrom):")
+        logger.info(f"[DERIVED_FROM_DEBUG] Sample derivedFrom values (first 5 with derivedFrom):")
         for row in derivedfrom_check:
-            logger.info(f"[AI_EVIDENCE_DEBUG]   id: {row['id']}, derivedFrom length: {len(row['derivedFrom']) if row['derivedFrom'] else 0}")
+            logger.info(f"[DERIVED_FROM_DEBUG]   id: {row['id']}, derivedFrom length: {len(row['derivedFrom']) if row['derivedFrom'] else 0}")
 
     return main_df
 
@@ -1988,16 +1988,34 @@ def transform_observation_members(df):
     return members_final
 
 def transform_observation_derived_from(df):
-    """Transform observation derived from references"""
-    logger.info("Transforming observation derived from...")
-    
-    # Check if derivedFrom column exists (using actual CSV field name)
+    """Transform observation derived from references into normalized structure
+
+    Extracts derivedFrom array elements into individual rows with parsed reference details.
+    Each derivedFrom reference typically has:
+    - reference: Full FHIR reference (e.g., "DocumentReference/doc-123")
+    - display: Human-readable description
+    - type: Optional resource type
+
+    Returns DataFrame with columns:
+    - observation_id: Source observation ID
+    - patient_id: Patient ID from subject reference
+    - reference: Full FHIR reference string
+    - reference_type: Parsed resource type (e.g., "DocumentReference", "Observation")
+    - reference_id: Parsed resource ID
+    - display: Display text
+    """
+    logger.info("Transforming observation derivedFrom references...")
+
+    # Check if derivedFrom column exists
     if "derivedFrom" not in df.columns:
         logger.warning("derivedFrom column not found in data, returning empty DataFrame")
         return df.select(
             F.col("id").alias("observation_id"),
             F.lit("").alias("patient_id"),
-            F.lit("").alias("derived_from_reference")
+            F.lit("").alias("reference"),
+            F.lit("").alias("reference_type"),
+            F.lit("").alias("reference_id"),
+            F.lit("").alias("display")
         ).filter(F.lit(False))
 
     # Explode the derivedFrom array
@@ -2010,16 +2028,31 @@ def transform_observation_derived_from(df):
     ).filter(
         F.col("derived_item").isNotNull()
     )
-    
-    # Extract derived from details
+
+    # Extract derived from details with parsed reference components
     derived_final = derived_df.select(
         F.col("observation_id"),
         F.col("patient_id"),
-        F.col("derived_item").getField("reference").alias("derived_from_reference")
+        # Full reference string
+        F.col("derived_item").getField("reference").alias("reference"),
+        # Extract reference type (part before /)
+        F.when(
+            F.col("derived_item").getField("reference").isNotNull(),
+            F.regexp_extract(F.col("derived_item").getField("reference"), r"^([^/]+)/", 1)
+        ).otherwise(
+            F.col("derived_item").getField("type")
+        ).alias("reference_type"),
+        # Extract reference ID (part after /)
+        F.when(
+            F.col("derived_item").getField("reference").isNotNull(),
+            F.regexp_extract(F.col("derived_item").getField("reference"), r"/(.+)$", 1)
+        ).otherwise(None).alias("reference_id"),
+        # Display text
+        F.col("derived_item").getField("display").alias("display")
     ).filter(
-        F.col("derived_from_reference").isNotNull() & F.col("patient_id").isNotNull()
+        F.col("reference").isNotNull() & F.col("patient_id").isNotNull()
     )
-    
+
     return derived_final
 
 # Note: Table creation functions removed - tables must be pre-created in Redshift
@@ -2370,7 +2403,7 @@ def main():
             F.col("meta_security").cast(StringType()).alias("meta_security"),
             F.col("meta_tag").cast(StringType()).alias("meta_tag"),
             F.col("extensions").cast(StringType()).alias("extensions"),
-            F.col("derivedFrom").cast(StringType()).alias("derivedFrom"),
+            F.col("derived_from").cast(StringType()).alias("derived_from"),
             F.col("created_at").cast(TimestampType()).alias("created_at"),
             F.col("updated_at").cast(TimestampType()).alias("updated_at")
         )
@@ -2467,7 +2500,10 @@ def main():
         derived_from_flat_df = observation_derived_from_df.select(
             F.col("observation_id").cast(StringType()).alias("observation_id"),
             F.col("patient_id").cast(StringType()).alias("patient_id"),
-            F.col("derived_from_reference").cast(StringType()).alias("derived_from_reference")
+            F.col("reference").cast(StringType()).alias("reference"),
+            F.col("reference_type").cast(StringType()).alias("reference_type"),
+            F.col("reference_id").cast(StringType()).alias("reference_id"),
+            F.col("display").cast(StringType()).alias("display")
         )
         derived_from_dynamic_frame = DynamicFrame.fromDF(derived_from_flat_df, glueContext, "derived_from_dynamic_frame")
         

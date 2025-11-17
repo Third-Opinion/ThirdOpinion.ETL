@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS public.condition_evidence (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         evidence_code VARCHAR(50),
         evidence_system VARCHAR(255),
         evidence_display VARCHAR(255),

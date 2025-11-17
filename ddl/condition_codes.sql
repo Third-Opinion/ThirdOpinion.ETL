@@ -4,6 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS public.condition_codes (
         condition_id VARCHAR(255),
+        meta_last_updated TIMESTAMP,
         code_code VARCHAR(50),
         code_system VARCHAR(255),
         code_display VARCHAR(255),
