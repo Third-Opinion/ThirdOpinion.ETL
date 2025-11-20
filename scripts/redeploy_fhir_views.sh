@@ -107,7 +107,6 @@ DEPENDENCY_LEVEL_5=(
     "rpt_fhir_observations_serum_albumin_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_serum_potassium_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_hba1c_hmu_v1"  # Depends on observations and hmu_patients
-    "rpt_fhir_observations_bmi_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_cd4_count_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_hiv_viral_load_hmu_v1"  # Depends on observations and hmu_patients
     "rpt_fhir_observations_psa_progression_hmu_v1"  # Depends on observations and hmu_patients
@@ -122,16 +121,8 @@ DEPENDENCY_LEVEL_6=(
     "rpt_fhir_conditions_hsms_hmu_v1"  # Depends on conditions and hmu_patients
 )
 
-# Level 7: Union views that depend on multiple Level 5/6 views
+# Level 7: Additional reporting views that depend on multiple levels
 DEPENDENCY_LEVEL_7=(
-    "rpt_fhir_observations_labs_union_hmu_v1"  # Depends on all Level 5 observation views
-    "rpt_fhir_conditions_union_hmu_v1"  # Depends on all Level 6 condition views
-    "rpt_fhir_conditions_hsms_inferred_hmu_v1"  # Depends on adt_treatment (L4) and psa_progression (L5)
-    "rpt_fhir_mcrpc_patients_hmu_v1"  # Depends on adt_treatment (L4) and psa_progression (L5)
-)
-
-# Level 8: Additional reporting views that depend on multiple levels
-DEPENDENCY_LEVEL_8=(
     "rpt_fhir_diagnostic_reports_afterdx_hmu_v1"  # Depends on Level 1 diagnostic reports and Level 3 hmu_patients
 )
 
@@ -145,7 +136,6 @@ for view in "${DEPENDENCY_LEVEL_4[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_5[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_6[@]}"; do VIEW_NAMES+=("$view"); done
 for view in "${DEPENDENCY_LEVEL_7[@]}"; do VIEW_NAMES+=("$view"); done
-for view in "${DEPENDENCY_LEVEL_8[@]}"; do VIEW_NAMES+=("$view"); done
 
 # Function to print colored output
 print_status() {
@@ -229,13 +219,6 @@ get_dependency_level() {
     for view in "${DEPENDENCY_LEVEL_7[@]}"; do
         if [ "$view" = "$view_name" ]; then
             echo "7"
-            return
-        fi
-    done
-
-    for view in "${DEPENDENCY_LEVEL_8[@]}"; do
-        if [ "$view" = "$view_name" ]; then
-            echo "8"
             return
         fi
     done
@@ -566,13 +549,7 @@ drop_all_views() {
     print_status "========================================" "$BLUE"
 
     # Drop in reverse order (highest dependency level first)
-    print_status "\nDropping Level 8 views (Additional reporting views)..." "$YELLOW"
-    for view_name in "${DEPENDENCY_LEVEL_8[@]}"; do
-        execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
-        execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
-    done
-
-    print_status "\nDropping Level 7 views (Union views)..." "$YELLOW"
+    print_status "\nDropping Level 7 views (Additional reporting views)..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_7[@]}"; do
         execute_sql_silent "DROP MATERIALIZED VIEW IF EXISTS public.$view_name CASCADE;" "Dropping materialized view $view_name"
         execute_sql_silent "DROP VIEW IF EXISTS public.$view_name CASCADE;" "Dropping regular view $view_name"
@@ -786,8 +763,7 @@ deploy_level_with_mode() {
         4) level_name="Key Reporting Views" ;;
         5) level_name="Additional Observation Reports" ;;
         6) level_name="Condition Reports" ;;
-        7) level_name="Union Views" ;;
-        8) level_name="Additional Reporting Views" ;;
+        7) level_name="Additional Reporting Views" ;;
     esac
 
     print_status "\n========================================" "$BLUE"
@@ -956,8 +932,7 @@ deploy_level_menu() {
         4) level_name="Key Reporting Views" ;;
         5) level_name="Additional Observation Reports" ;;
         6) level_name="Condition Reports" ;;
-        7) level_name="Union Views" ;;
-        8) level_name="Additional Reporting Views" ;;
+        7) level_name="Additional Reporting Views" ;;
     esac
 
     echo
@@ -1350,42 +1325,8 @@ display_menu() {
 
     echo
     # Display Level 7
-    print_status "  Level 7 - Union Views:" "$CYAN"
+    print_status "  Level 7 - Additional Reporting Views:" "$CYAN"
     for view_name in "${DEPENDENCY_LEVEL_7[@]}"; do
-        local status="[Not Found]"
-        local color="$RED"
-
-        if view_file_exists "$view_name"; then
-            if [ "$SKIP_STATUS_CHECK" = false ]; then
-                local stats=$(check_view_stats "$view_name")
-                local exists=$(echo "$stats" | cut -d'|' -f1)
-                local row_count=$(echo "$stats" | cut -d'|' -f2)
-                local max_updated=$(echo "$stats" | cut -d'|' -f3)
-
-                if [ "$exists" = "EXISTS" ]; then
-                    status="[Deployed: ${row_count} rows, max: ${max_updated}]"
-                    color="$GREEN"
-                elif [ "$exists" = "NOT_EXISTS" ]; then
-                    status="[SQL Ready, Not Deployed]"
-                    color="$YELLOW"
-                else
-                    status="[SQL Ready, Status Unknown]"
-                    color="$YELLOW"
-                fi
-            else
-                status="[SQL Ready]"
-                color="$GREEN"
-            fi
-        fi
-
-        printf "  %2d) %-40s %s\n" "$index" "$view_name" "$(echo -e "${color}${status}${NC}")"
-        index=$((index + 1))
-    done
-
-    echo
-    # Display Level 8
-    print_status "  Level 8 - Additional Reporting Views:" "$CYAN"
-    for view_name in "${DEPENDENCY_LEVEL_8[@]}"; do
         local status="[Not Found]"
         local color="$RED"
 
@@ -1426,7 +1367,6 @@ display_menu() {
     print_status "  L5) Deploy Level 5 views (with mode options)" "$YELLOW"
     print_status "  L6) Deploy Level 6 views (with mode options)" "$YELLOW"
     print_status "  L7) Deploy Level 7 views (with mode options)" "$YELLOW"
-    print_status "  L8) Deploy Level 8 views (with mode options)" "$YELLOW"
     echo
     print_status "🔧 BULK Operations:" "$YELLOW"
     print_status "  A) Redeploy ALL views (drops all, then creates in dependency order)" "$YELLOW"
@@ -1475,7 +1415,6 @@ redeploy_all_views() {
     deploy_views_by_level 5 "${DEPENDENCY_LEVEL_5[@]}"
     deploy_views_by_level 6 "${DEPENDENCY_LEVEL_6[@]}"
     deploy_views_by_level 7 "${DEPENDENCY_LEVEL_7[@]}"
-    deploy_views_by_level 8 "${DEPENDENCY_LEVEL_8[@]}"
 
     print_status "\n========================================" "$BLUE"
     print_status "✓ All views redeployed in dependency order" "$GREEN"
@@ -1498,7 +1437,6 @@ deploy_all_views() {
     deploy_level_with_mode 5 4 "${DEPENDENCY_LEVEL_5[@]}"
     deploy_level_with_mode 6 4 "${DEPENDENCY_LEVEL_6[@]}"
     deploy_level_with_mode 7 4 "${DEPENDENCY_LEVEL_7[@]}"
-    deploy_level_with_mode 8 4 "${DEPENDENCY_LEVEL_8[@]}"
 
     print_status "\n========================================" "$BLUE"
     print_status "✓ All views deployed in dependency order" "$GREEN"
@@ -1711,7 +1649,7 @@ refresh_reporting_views() {
     local fail_count=0
     local skipped_count=0
 
-    # Refresh reporting views in dependency order (Level 3, 4, 5, 6, 7, 8)
+    # Refresh reporting views in dependency order (Level 3, 4, 5, 6, 7)
     print_status "\nRefreshing Level 3 reporting views..." "$YELLOW"
     for view_name in "${DEPENDENCY_LEVEL_3[@]}"; do
         if [[ $view_name == rpt_* ]]; then
@@ -1812,26 +1750,6 @@ refresh_reporting_views() {
         fi
     done
 
-    print_status "\nRefreshing Level 8 reporting views..." "$YELLOW"
-    for view_name in "${DEPENDENCY_LEVEL_8[@]}"; do
-        if [[ $view_name == rpt_* ]]; then
-            if check_view_exists "$view_name"; then
-                refresh_view "$view_name"
-                local result=$?
-                if [ $result -eq 0 ]; then
-                    success_count=$((success_count + 1))
-                elif [ $result -eq 2 ]; then
-                    skipped_count=$((skipped_count + 1))
-                else
-                    fail_count=$((fail_count + 1))
-                fi
-            else
-                print_status "  ⊙ Skipping $view_name (does not exist)" "$YELLOW"
-                skipped_count=$((skipped_count + 1))
-            fi
-        fi
-    done
-
     print_status "\n✓ Reporting views refresh complete: $success_count refreshed, $skipped_count skipped, $fail_count failed" "$GREEN"
 }
 
@@ -1898,9 +1816,6 @@ main() {
                 ;;
             [Ll]7)
                 deploy_level_menu 7 "${DEPENDENCY_LEVEL_7[@]}"
-                ;;
-            [Ll]8)
-                deploy_level_menu 8 "${DEPENDENCY_LEVEL_8[@]}"
                 ;;
             [Aa])
                 redeploy_all_views
