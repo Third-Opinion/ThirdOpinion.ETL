@@ -1,13 +1,14 @@
 -- ===================================================================
 -- FACT FHIR OBSERVATIONS VIEW V1 (NO VITAL SIGNS)
--- 
+--
 -- OVERVIEW:
 -- Modified version of the observations view that:
 -- 1. Excludes vital signs observations
--- 2. Includes JOIN with observation_notes table
--- 3. Includes JOIN with observation_codes table (NEW)
--- 4. Fixed observation_reference_ranges field names (UPDATED)
--- 
+-- 2. ONE ROW PER OBSERVATION with primary code and all codes in JSON array
+-- 3. Includes JOIN with observation_notes table
+-- 4. Includes JOIN with observation_codes table with rank-based filtering
+-- 5. Fixed observation_reference_ranges field names
+--
 -- PRIMARY KEY: observation_id
 -- 
 -- SOURCE TABLES:
@@ -30,7 +31,14 @@
 -- - EXCLUDES vital signs (category = 'vital-signs')
 -- - Excludes observations with status 'entered-in-error'
 -- - Uses LEFT JOINs to preserve observations without related data
--- 
+-- - Returns one row per observation (not per code)
+--
+-- OUTPUT COLUMNS:
+-- - All core observation fields
+-- - primary_system, primary_code, primary_display: Primary code (rank 1)
+-- - codes: JSON array of all codes with system, code, display, text, and rank
+-- - All other aggregated JSON fields (components, categories, etc.)
+--
 -- ===================================================================
 
 CREATE MATERIALIZED VIEW fact_fhir_observations_view_v1
@@ -43,18 +51,38 @@ WITH aggregated_codes AS (
                 JSON_PARSE(
                     '[' || LISTAGG(
                         '{' ||
-                        '"code":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.code_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
                         '"system":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.code_system, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                        '"code":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.code_code, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
                         '"display":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.code_display, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
-                        '"text":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.code_text, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '"' ||
+                        '"text":"' || COALESCE(REPLACE(REPLACE(REPLACE(oc.code_text, '\\', ''), '"', ''), CHR(10)||CHR(13)||CHR(9), ' '), '') || '",' ||
+                        '"rank":' || code_rank ||
                         '}',
                         ','
-                    ) || ']'
+                    ) WITHIN GROUP (ORDER BY code_rank) || ']'
                 )
             ELSE NULL
         END AS codes,
         COUNT(*) AS code_count
-    FROM public.observation_codes oc
+    FROM (
+        SELECT
+            observation_id,
+            code_system,
+            code_code,
+            code_display,
+            code_text,
+            ROW_NUMBER() OVER (
+                PARTITION BY observation_id
+                ORDER BY
+                    CASE
+                        WHEN code_system = 'http://loinc.org' THEN 1
+                        WHEN code_system LIKE '%snomed%' THEN 2
+                        ELSE 3
+                    END,
+                    code_code
+            ) AS code_rank
+        FROM public.observation_codes
+        WHERE code_code IS NOT NULL
+    ) oc
     GROUP BY oc.observation_id
 ),
 aggregated_components AS (

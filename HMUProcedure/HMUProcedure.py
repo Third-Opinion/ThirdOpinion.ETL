@@ -315,7 +315,9 @@ def transform_main_procedure_data(df):
             F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
             F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd'T'HH:mm:ss"),
-            F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd")
+            F.to_timestamp(F.col("performedDateTime"), "yyyy-MM-dd"),
+            F.to_timestamp(F.col("performedDateTime"), "M/d/yy"),
+            F.to_timestamp(F.col("performedDateTime"), "M/d/yyyy")
         ).alias("performed_date_time"),
         F.when(F.col("meta").isNotNull(),
                # Handle meta.lastUpdated with multiple possible formats

@@ -4,7 +4,7 @@
   "Description": "",
   "Role": "arn:aws:iam::442042533707:role/service-role/AWSGlueServiceRole",
   "ExecutionProperty": {
-    "MaxConcurrentRuns": 1
+    "MaxConcurrentRuns": 3
   },
   "Command": {
     "Name": "glueetl",
@@ -13,10 +13,9 @@
   },
   "DefaultArguments": {
     "--enable-metrics": "true",
-    "--enable-spark-ui": "true",
-    "--spark-event-logs-path": "s3://aws-glue-assets-442042533707-us-east-2/sparkHistoryLogs/",
+    "--enable-spark-ui": "false",
     "--enable-job-insights": "true",
-    "--enable-debug-logging": "true",
+    "--enable-debug-logging": "false",
     "--enable-observability-metrics": "true",
     "--enable-glue-datacatalog": "true",
     "--enable-continuous-cloudwatch-log": "true",
@@ -35,7 +34,7 @@
   "GlueVersion": "4.0",
   "NumberOfWorkers": 10,
   "WorkerType": "G.1X",
-  "ExecutionClass": "STANDARD",
+  "ExecutionClass": "FLEX",
   "SourceControlDetails": {
     "Provider": "GITHUB",
     "Repository": "ThirdOpinion.ETL",

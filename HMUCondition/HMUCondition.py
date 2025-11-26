@@ -583,7 +583,9 @@ def transform_main_condition_data(df):
             F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("onsetDateTime"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("onsetDateTime"), "M/d/yy"),
+            F.to_timestamp(F.col("onsetDateTime"), "M/d/yyyy")
         ).alias("onset_datetime"),
         F.lit(None).alias("onset_age_value"),
         F.lit(None).alias("onset_age_unit"),
@@ -600,7 +602,9 @@ def transform_main_condition_data(df):
             F.to_timestamp(F.col("abatementDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("abatementDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("abatementDateTime"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("abatementDateTime"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("abatementDateTime"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("abatementDateTime"), "M/d/yy"),
+            F.to_timestamp(F.col("abatementDateTime"), "M/d/yyyy")
         ).alias("abatement_datetime"),
         F.lit(None).alias("abatement_age_value"),
         F.lit(None).alias("abatement_age_unit"),
@@ -618,7 +622,9 @@ def transform_main_condition_data(df):
             F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("recordedDate"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("recordedDate"), "M/d/yy"),
+            F.to_timestamp(F.col("recordedDate"), "M/d/yyyy")
         ).alias("recorded_date"),
         F.lit(None).alias("recorder_type"),
         F.lit(None).alias("recorder_id"),

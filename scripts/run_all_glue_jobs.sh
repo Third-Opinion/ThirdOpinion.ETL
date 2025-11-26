@@ -12,6 +12,8 @@
 #   ./run_all_glue_jobs.sh                      # Upload scripts & run only failed/stopped jobs
 #   ./run_all_glue_jobs.sh --force              # Upload scripts & run all jobs regardless of status
 #   ./run_all_glue_jobs.sh --deploy             # Upload scripts, deploy jobs first, then run
+#   ./run_all_glue_jobs.sh --truncate           # Truncate tables before running jobs (prompts for confirmation)
+#   ./run_all_glue_jobs.sh --truncate --no-prompt  # Truncate tables without prompting
 #   ./run_all_glue_jobs.sh --skip HMUObservation  # Skip specific job(s)
 #   ./run_all_glue_jobs.sh --skip "HMUObservation,HMUPatient"  # Skip multiple jobs
 #   ./run_all_glue_jobs.sh --help               # Show this help message
@@ -26,6 +28,8 @@ AWS_REGION="${AWS_REGION:-us-east-2}"
 DEPLOY_FIRST=false
 SHOW_HELP=false
 FORCE_RUN=false
+TRUNCATE_TABLES=false
+NO_PROMPT=false
 SKIP_JOBS=""
 
 while [[ $# -gt 0 ]]; do
@@ -36,6 +40,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --force)
             FORCE_RUN=true
+            shift
+            ;;
+        --truncate)
+            TRUNCATE_TABLES=true
+            shift
+            ;;
+        --no-prompt)
+            NO_PROMPT=true
             shift
             ;;
         --skip)
@@ -70,6 +82,8 @@ if [ "$SHOW_HELP" = true ]; then
     echo "Options:"
     echo "  --deploy           Deploy Glue jobs from JSON templates before running"
     echo "  --force            Run all jobs regardless of their current state"
+    echo "  --truncate         Truncate tables before running jobs (prompts for confirmation)"
+    echo "  --no-prompt        Skip confirmation prompts (use with --truncate)"
     echo "  --skip JOB_NAME    Skip specific job(s), comma-separated for multiple"
     echo "  --help, -h         Show this help message and exit"
     echo ""
@@ -81,6 +95,8 @@ if [ "$SHOW_HELP" = true ]; then
     echo "  ./run_all_glue_jobs.sh                              # Run only failed/stopped jobs"
     echo "  ./run_all_glue_jobs.sh --force                      # Run all jobs regardless of state"
     echo "  ./run_all_glue_jobs.sh --deploy                     # Deploy and run jobs"
+    echo "  ./run_all_glue_jobs.sh --truncate                   # Truncate tables and run (with prompt)"
+    echo "  ./run_all_glue_jobs.sh --truncate --no-prompt       # Truncate tables without prompt"
     echo "  ./run_all_glue_jobs.sh --skip HMUObservation        # Skip Observation job"
     echo "  ./run_all_glue_jobs.sh --skip \"HMUObservation,HMUPatient\"  # Skip multiple jobs"
     echo "  AWS_PROFILE=my-profile ./run_all_glue_jobs.sh       # Use different profile"
@@ -112,6 +128,196 @@ should_skip_job() {
     done
 
     return 1
+}
+
+# Function to convert job name to table prefix
+# HMUDiagnosticReport -> diagnostic_report
+# HMUObservation -> observation
+# HMUCarePlan -> care_plan
+job_name_to_table_prefix() {
+    local job_name=$1
+
+    # Remove HMU prefix
+    local name_without_prefix="${job_name#HMU}"
+
+    # Convert CamelCase to snake_case
+    # Insert underscore before uppercase letters and convert to lowercase
+    local snake_case=$(echo "$name_without_prefix" | sed 's/\([A-Z]\)/_\1/g' | sed 's/^_//' | tr '[:upper:]' '[:lower:]')
+
+    echo "$snake_case"
+}
+
+# Function to find DDL files for a job
+find_ddl_files() {
+    local job_name=$1
+    local table_prefix=$(job_name_to_table_prefix "$job_name")
+
+    # Find all DDL files in ddl/ folder that start with the table prefix
+    local ddl_files=()
+    if [ -d "ddl" ]; then
+        while IFS= read -r file; do
+            ddl_files+=("$file")
+        done < <(find ddl -name "${table_prefix}*.sql" -type f 2>/dev/null | sort)
+    fi
+
+    # Return as array (one per line)
+    printf '%s\n' "${ddl_files[@]}"
+}
+
+# Function to extract table name from DDL file
+extract_table_name() {
+    local ddl_file=$1
+
+    # Extract table name from CREATE TABLE statement
+    # Handles both "CREATE TABLE table_name" and "CREATE TABLE IF NOT EXISTS table_name"
+    local table_name=$(grep -i "CREATE TABLE" "$ddl_file" | head -1 | sed -E 's/.*CREATE TABLE (IF NOT EXISTS )?([a-zA-Z0-9_]+).*/\2/')
+
+    echo "$table_name"
+}
+
+# Function to truncate tables for jobs that will run
+truncate_tables_for_jobs() {
+    local jobs_array=("$@")
+
+    echo -e "${BLUE}====================================================================="
+    echo "TRUNCATE TABLES FOR GLUE JOBS"
+    echo "====================================================================="
+    echo "Finding tables to truncate for ${#jobs_array[@]} jobs..."
+    echo "=====================================================================${NC}"
+    echo ""
+
+    # Collect all tables to truncate
+    declare -A tables_by_job
+    local total_tables=0
+
+    for job_name in "${jobs_array[@]}"; do
+        local table_prefix=$(job_name_to_table_prefix "$job_name")
+        echo -e "${BLUE}→ $job_name (table prefix: ${table_prefix})${NC}"
+
+        # Find DDL files
+        local ddl_files=($(find_ddl_files "$job_name"))
+
+        if [ ${#ddl_files[@]} -eq 0 ]; then
+            echo -e "${YELLOW}  ! No DDL files found in ddl/${table_prefix}*.sql${NC}"
+            continue
+        fi
+
+        local job_tables=()
+        for ddl_file in "${ddl_files[@]}"; do
+            local table_name=$(extract_table_name "$ddl_file")
+            if [ ! -z "$table_name" ]; then
+                job_tables+=("$table_name")
+                echo "  - $table_name (from $(basename $ddl_file))"
+                ((total_tables++))
+            fi
+        done
+
+        tables_by_job["$job_name"]="${job_tables[@]}"
+        echo ""
+    done
+
+    if [ $total_tables -eq 0 ]; then
+        echo -e "${YELLOW}No tables found to truncate. Skipping truncation.${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}====================================================================="
+    echo "TABLES TO TRUNCATE: $total_tables tables"
+    echo "=====================================================================${NC}"
+    echo ""
+
+    # Prompt for confirmation unless --no-prompt is set
+    if [ "$NO_PROMPT" = false ]; then
+        echo -e "${RED}⚠  WARNING: This will delete all data from the above tables!${NC}"
+        echo -e "${YELLOW}Do you want to continue? (yes/no): ${NC}"
+        read -r response
+
+        if [[ ! "$response" =~ ^[Yy][Ee][Ss]$ ]]; then
+            echo "Truncation cancelled."
+            exit 1
+        fi
+    fi
+
+    echo ""
+    echo -e "${BLUE}Truncating tables...${NC}"
+    echo ""
+
+    local truncated_count=0
+    local failed_count=0
+
+    # Truncate tables for each job
+    for job_name in "${jobs_array[@]}"; do
+        local tables_str="${tables_by_job[$job_name]}"
+        if [ -z "$tables_str" ]; then
+            continue
+        fi
+
+        # Convert string back to array
+        IFS=' ' read -ra job_tables <<< "$tables_str"
+
+        echo -e "${BLUE}→ Truncating tables for $job_name${NC}"
+
+        for table_name in "${job_tables[@]}"; do
+            echo -n "  Truncating $table_name... "
+
+            # Execute TRUNCATE TABLE via Redshift Data API
+            local statement_id=$(aws redshift-data execute-statement \
+                --cluster-identifier prod-redshift-main-ue2 \
+                --database dev \
+                --db-user awsuser \
+                --sql "TRUNCATE TABLE public.$table_name;" \
+                --profile "$AWS_PROFILE" \
+                --region "$AWS_REGION" \
+                --query "Id" \
+                --output text 2>/dev/null)
+
+            if [ $? -eq 0 ] && [ ! -z "$statement_id" ]; then
+                # Wait for statement to complete
+                sleep 1
+                local status=$(aws redshift-data describe-statement \
+                    --id "$statement_id" \
+                    --profile "$AWS_PROFILE" \
+                    --region "$AWS_REGION" \
+                    --query "Status" \
+                    --output text 2>/dev/null)
+
+                if [ "$status" = "FINISHED" ]; then
+                    echo -e "${GREEN}✓ Success${NC}"
+                    ((truncated_count++))
+                else
+                    local error=$(aws redshift-data describe-statement \
+                        --id "$statement_id" \
+                        --profile "$AWS_PROFILE" \
+                        --region "$AWS_REGION" \
+                        --query "Error" \
+                        --output text 2>/dev/null)
+                    echo -e "${RED}✗ Failed: $error${NC}"
+                    ((failed_count++))
+                fi
+            else
+                echo -e "${RED}✗ Failed to submit${NC}"
+                ((failed_count++))
+            fi
+        done
+        echo ""
+    done
+
+    echo -e "${BLUE}====================================================================="
+    echo "TRUNCATION SUMMARY"
+    echo "====================================================================="
+    echo -e "${GREEN}Successfully truncated: $truncated_count tables${NC}"
+    echo -e "${RED}Failed: $failed_count tables${NC}"
+    echo "=====================================================================${NC}"
+    echo ""
+
+    if [ $failed_count -gt 0 ]; then
+        echo -e "${YELLOW}⚠ Some tables failed to truncate. Continue anyway? (y/n): ${NC}"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "Aborting."
+            exit 1
+        fi
+    fi
 }
 
 # Function to upload Python scripts to S3
@@ -548,6 +754,11 @@ echo -e "${BLUE}================================================================
 echo "Jobs to run: ${#GLUE_JOBS[@]}"
 echo "=====================================================================${NC}"
 echo ""
+
+# Truncate tables if requested
+if [ "$TRUNCATE_TABLES" = true ]; then
+    truncate_tables_for_jobs "${GLUE_JOBS[@]}"
+fi
 
 # Start time
 START_TIME=$(date +%s)

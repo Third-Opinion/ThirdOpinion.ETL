@@ -1378,15 +1378,19 @@ def transform_main_observation_data(df):
         F.coalesce(
             F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),  # With nanoseconds
             F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),        # With milliseconds
-            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),             # No milliseconds (your format)
-            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss")                 # No timezone
+            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ssXXX"),             # No milliseconds
+            F.to_timestamp(F.col("effectiveDateTime"), "yyyy-MM-dd'T'HH:mm:ss"),                # No timezone
+            F.to_timestamp(F.col("effectiveDateTime"), "M/d/yy"),                               # Short date format (e.g., 3/18/15)
+            F.to_timestamp(F.col("effectiveDateTime"), "M/d/yyyy")                              # Short date format with 4-digit year
         ).alias("effective_datetime"),
         # Handle effectivePeriod.start with multiple formats
         F.coalesce(
             F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
             F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
-            F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "M/d/yy"),
+            F.to_timestamp(F.col("effectivePeriod").getField("start"), "M/d/yyyy")
         ).alias("effective_period_start"),
         F.lit(None).alias("effective_period_end"),  # end field not in schema
         # Handle issued with multiple formats
@@ -1394,7 +1398,9 @@ def transform_main_observation_data(df):
             F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX"),
             F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
-            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("issued"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("issued"), "M/d/yy"),
+            F.to_timestamp(F.col("issued"), "M/d/yyyy")
         ).alias("issued"),
     ])
     

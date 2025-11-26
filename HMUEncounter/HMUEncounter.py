@@ -380,7 +380,9 @@ def transform_main_encounter_data(df):
             F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("period").getField("start"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("period").getField("start"), "M/d/yy"),
+            F.to_timestamp(F.col("period").getField("start"), "M/d/yyyy")
         ).alias("start_time"),
         # Handle period.end with multiple possible formats
         F.coalesce(
@@ -388,7 +390,9 @@ def transform_main_encounter_data(df):
             F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("period").getField("end"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("period").getField("end"), "M/d/yy"),
+            F.to_timestamp(F.col("period").getField("end"), "M/d/yyyy")
         ).alias("end_time"),
     ]
     
@@ -507,7 +511,9 @@ def transform_encounter_participants(df):
             F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("period_data.start"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("period_data.start"), "M/d/yy"),
+            F.to_timestamp(F.col("period_data.start"), "M/d/yyyy")
         ).alias("period_start"),
         # Handle period_data.end with multiple possible formats
         F.coalesce(
@@ -515,7 +521,9 @@ def transform_encounter_participants(df):
             F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"),
             F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ssXXX"),
             F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
-            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss")
+            F.to_timestamp(F.col("period_data.end"), "yyyy-MM-dd'T'HH:mm:ss"),
+            F.to_timestamp(F.col("period_data.end"), "M/d/yy"),
+            F.to_timestamp(F.col("period_data.end"), "M/d/yyyy")
         ).alias("period_end")
     ).filter(
         F.col("participant_type").isNotNull() & F.col("participant_id").isNotNull()
