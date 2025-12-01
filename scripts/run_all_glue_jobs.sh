@@ -14,6 +14,7 @@
 #   ./run_all_glue_jobs.sh --deploy             # Upload scripts, deploy jobs first, then run
 #   ./run_all_glue_jobs.sh --truncate           # Truncate tables before running jobs (prompts for confirmation)
 #   ./run_all_glue_jobs.sh --truncate --no-prompt  # Truncate tables without prompting
+#   ./run_all_glue_jobs.sh --include "HMUPatient,HMUObservation"  # Run only specific job(s)
 #   ./run_all_glue_jobs.sh --skip HMUObservation  # Skip specific job(s)
 #   ./run_all_glue_jobs.sh --skip "HMUObservation,HMUPatient"  # Skip multiple jobs
 #   ./run_all_glue_jobs.sh --help               # Show this help message
@@ -31,6 +32,7 @@ FORCE_RUN=false
 TRUNCATE_TABLES=false
 NO_PROMPT=false
 SKIP_JOBS=""
+INCLUDE_JOBS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -49,6 +51,10 @@ while [[ $# -gt 0 ]]; do
         --no-prompt)
             NO_PROMPT=true
             shift
+            ;;
+        --include)
+            INCLUDE_JOBS="$2"
+            shift 2
             ;;
         --skip)
             SKIP_JOBS="$2"
@@ -84,6 +90,7 @@ if [ "$SHOW_HELP" = true ]; then
     echo "  --force            Run all jobs regardless of their current state"
     echo "  --truncate         Truncate tables before running jobs (prompts for confirmation)"
     echo "  --no-prompt        Skip confirmation prompts (use with --truncate)"
+    echo "  --include JOB_NAME Run only specific job(s), comma-separated for multiple"
     echo "  --skip JOB_NAME    Skip specific job(s), comma-separated for multiple"
     echo "  --help, -h         Show this help message and exit"
     echo ""
@@ -97,6 +104,7 @@ if [ "$SHOW_HELP" = true ]; then
     echo "  ./run_all_glue_jobs.sh --deploy                     # Deploy and run jobs"
     echo "  ./run_all_glue_jobs.sh --truncate                   # Truncate tables and run (with prompt)"
     echo "  ./run_all_glue_jobs.sh --truncate --no-prompt       # Truncate tables without prompt"
+    echo "  ./run_all_glue_jobs.sh --include \"HMUPatient,HMUObservation\"  # Run only these jobs"
     echo "  ./run_all_glue_jobs.sh --skip HMUObservation        # Skip Observation job"
     echo "  ./run_all_glue_jobs.sh --skip \"HMUObservation,HMUPatient\"  # Skip multiple jobs"
     echo "  AWS_PROFILE=my-profile ./run_all_glue_jobs.sh       # Use different profile"
@@ -105,6 +113,30 @@ fi
 
 # Array to store discovered Glue jobs
 declare -a GLUE_JOBS=()
+
+# Function to check if a job should be included (when --include is used)
+should_include_job() {
+    local job_name=$1
+
+    # If no include list, include all
+    if [ -z "$INCLUDE_JOBS" ]; then
+        return 0
+    fi
+
+    # Convert comma-separated list to array
+    IFS=',' read -ra INCLUDE_ARRAY <<< "$INCLUDE_JOBS"
+
+    # Check if job is in include list
+    for include_job in "${INCLUDE_ARRAY[@]}"; do
+        # Trim whitespace
+        include_job=$(echo "$include_job" | xargs)
+        if [ "$job_name" = "$include_job" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
 
 # Function to check if a job should be skipped
 should_skip_job() {
@@ -170,7 +202,8 @@ extract_table_name() {
 
     # Extract table name from CREATE TABLE statement
     # Handles both "CREATE TABLE table_name" and "CREATE TABLE IF NOT EXISTS table_name"
-    local table_name=$(grep -i "CREATE TABLE" "$ddl_file" | head -1 | sed -E 's/.*CREATE TABLE (IF NOT EXISTS )?([a-zA-Z0-9_]+).*/\2/')
+    # Also handles "CREATE TABLE public.table_name" or "CREATE TABLE IF NOT EXISTS public.table_name"
+    local table_name=$(grep -i "CREATE TABLE" "$ddl_file" | head -1 | sed -E 's/.*CREATE TABLE( IF NOT EXISTS)?[ ]+([a-zA-Z0-9_]*\.)?([a-zA-Z0-9_]+).*/\3/')
 
     echo "$table_name"
 }
@@ -186,8 +219,8 @@ truncate_tables_for_jobs() {
     echo "=====================================================================${NC}"
     echo ""
 
-    # Collect all tables to truncate
-    declare -A tables_by_job
+    # Collect all tables to truncate (using indexed arrays instead of associative)
+    local all_tables=()
     local total_tables=0
 
     for job_name in "${jobs_array[@]}"; do
@@ -202,17 +235,14 @@ truncate_tables_for_jobs() {
             continue
         fi
 
-        local job_tables=()
         for ddl_file in "${ddl_files[@]}"; do
             local table_name=$(extract_table_name "$ddl_file")
             if [ ! -z "$table_name" ]; then
-                job_tables+=("$table_name")
+                all_tables+=("$table_name")
                 echo "  - $table_name (from $(basename $ddl_file))"
                 ((total_tables++))
             fi
         done
-
-        tables_by_job["$job_name"]="${job_tables[@]}"
         echo ""
     done
 
@@ -245,63 +275,51 @@ truncate_tables_for_jobs() {
     local truncated_count=0
     local failed_count=0
 
-    # Truncate tables for each job
-    for job_name in "${jobs_array[@]}"; do
-        local tables_str="${tables_by_job[$job_name]}"
-        if [ -z "$tables_str" ]; then
-            continue
-        fi
+    # Truncate all collected tables
+    for table_name in "${all_tables[@]}"; do
+        echo -n "  Truncating $table_name... "
 
-        # Convert string back to array
-        IFS=' ' read -ra job_tables <<< "$tables_str"
+        # Execute TRUNCATE TABLE via Redshift Data API
+        local statement_id=$(aws redshift-data execute-statement \
+            --cluster-identifier prod-redshift-main-ue2 \
+            --database dev \
+            --db-user awsuser \
+            --sql "TRUNCATE TABLE public.$table_name;" \
+            --profile "$AWS_PROFILE" \
+            --region "$AWS_REGION" \
+            --query "Id" \
+            --output text 2>/dev/null)
 
-        echo -e "${BLUE}→ Truncating tables for $job_name${NC}"
-
-        for table_name in "${job_tables[@]}"; do
-            echo -n "  Truncating $table_name... "
-
-            # Execute TRUNCATE TABLE via Redshift Data API
-            local statement_id=$(aws redshift-data execute-statement \
-                --cluster-identifier prod-redshift-main-ue2 \
-                --database dev \
-                --db-user awsuser \
-                --sql "TRUNCATE TABLE public.$table_name;" \
+        if [ $? -eq 0 ] && [ ! -z "$statement_id" ]; then
+            # Wait for statement to complete
+            sleep 1
+            local status=$(aws redshift-data describe-statement \
+                --id "$statement_id" \
                 --profile "$AWS_PROFILE" \
                 --region "$AWS_REGION" \
-                --query "Id" \
+                --query "Status" \
                 --output text 2>/dev/null)
 
-            if [ $? -eq 0 ] && [ ! -z "$statement_id" ]; then
-                # Wait for statement to complete
-                sleep 1
-                local status=$(aws redshift-data describe-statement \
+            if [ "$status" = "FINISHED" ]; then
+                echo -e "${GREEN}✓ Success${NC}"
+                ((truncated_count++))
+            else
+                local error=$(aws redshift-data describe-statement \
                     --id "$statement_id" \
                     --profile "$AWS_PROFILE" \
                     --region "$AWS_REGION" \
-                    --query "Status" \
+                    --query "Error" \
                     --output text 2>/dev/null)
-
-                if [ "$status" = "FINISHED" ]; then
-                    echo -e "${GREEN}✓ Success${NC}"
-                    ((truncated_count++))
-                else
-                    local error=$(aws redshift-data describe-statement \
-                        --id "$statement_id" \
-                        --profile "$AWS_PROFILE" \
-                        --region "$AWS_REGION" \
-                        --query "Error" \
-                        --output text 2>/dev/null)
-                    echo -e "${RED}✗ Failed: $error${NC}"
-                    ((failed_count++))
-                fi
-            else
-                echo -e "${RED}✗ Failed to submit${NC}"
+                echo -e "${RED}✗ Failed: $error${NC}"
                 ((failed_count++))
             fi
-        done
-        echo ""
+        else
+            echo -e "${RED}✗ Failed to submit${NC}"
+            ((failed_count++))
+        fi
     done
 
+    echo ""
     echo -e "${BLUE}====================================================================="
     echo "TRUNCATION SUMMARY"
     echo "====================================================================="
@@ -493,11 +511,18 @@ discover_glue_jobs() {
             echo -e "${GREEN}✓ Discovered ${#ALL_JOBS[@]} HMU* Glue jobs${NC}"
             echo ""
 
-            # Filter jobs based on their status (unless --force is used) and skip list
+            # Filter jobs based on their status (unless --force is used), include list, and skip list
             if [ "$FORCE_RUN" = true ]; then
                 echo -e "${YELLOW}Force mode: Running all jobs regardless of status${NC}"
-                # Still apply skip filter even in force mode
+                # Still apply include and skip filters even in force mode
                 for job in "${ALL_JOBS[@]}"; do
+                    # Check include list first (if specified)
+                    if ! should_include_job "$job"; then
+                        JOBS_SKIPPED+=("$job")
+                        echo -e "${BLUE}  ⊘ $job - not in include list${NC}"
+                        continue
+                    fi
+
                     if should_skip_job "$job"; then
                         JOBS_SKIPPED+=("$job")
                         echo -e "${BLUE}  ⊘ $job - skipped (--skip flag)${NC}"
@@ -508,7 +533,14 @@ discover_glue_jobs() {
             else
                 echo -e "${BLUE}Checking job statuses to determine which jobs need to run...${NC}"
                 for job in "${ALL_JOBS[@]}"; do
-                    # Check if job is in skip list first
+                    # Check include list first (if specified)
+                    if ! should_include_job "$job"; then
+                        JOBS_SKIPPED+=("$job")
+                        echo -e "${BLUE}  ⊘ $job - not in include list${NC}"
+                        continue
+                    fi
+
+                    # Check if job is in skip list
                     if should_skip_job "$job"; then
                         JOBS_SKIPPED+=("$job")
                         echo -e "${BLUE}  ⊘ $job - skipped (--skip flag)${NC}"
@@ -721,6 +753,9 @@ echo "RUNNING ALL HMU GLUE JOBS"
 echo "====================================================================="
 echo "AWS Profile: $AWS_PROFILE"
 echo "AWS Region: $AWS_REGION"
+if [ ! -z "$INCLUDE_JOBS" ]; then
+    echo -e "${YELLOW}Only including jobs: $INCLUDE_JOBS${NC}"
+fi
 if [ ! -z "$SKIP_JOBS" ]; then
     echo -e "${YELLOW}Skipping jobs: $SKIP_JOBS${NC}"
 fi

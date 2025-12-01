@@ -605,148 +605,70 @@ def transform_patient_links(df):
     
     return links_final
 
-def create_redshift_tables_sql():
-    """Generate SQL for creating main patients table in Redshift with proper syntax"""
-    return """
-    -- Main patients table
-    CREATE TABLE IF NOT EXISTS public.patients (
-        patient_id VARCHAR(255) NOT NULL,
-        active BOOLEAN,
-        gender VARCHAR(10),
-        birth_date DATE,
-        deceased BOOLEAN,
-        deceased_date TIMESTAMP,
-        resourcetype VARCHAR(50),
-        marital_status_code VARCHAR(50),
-        marital_status_display VARCHAR(255),
-        marital_status_system VARCHAR(255),
-        multiple_birth BOOLEAN,
-        birth_order INTEGER,
-        managing_organization_id VARCHAR(255),
-        photos TEXT,
-        meta_last_updated TIMESTAMP,
-        meta_source VARCHAR(255),
-        meta_security TEXT,
-        meta_tag TEXT,
-        extensions TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) DISTKEY (patient_id) SORTKEY (patient_id, birth_date)
-    """
+def verify_table_exists(table_name):
+    """Verify that a Redshift table exists, raise error if it doesn't"""
+    logger.info(f"Verifying table exists: public.{table_name}")
 
-def create_patient_names_table_sql():
-    """Generate SQL for creating patient_names table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_names (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        name_use VARCHAR(50),
-        name_text VARCHAR(255),
-        family_name VARCHAR(255),
-        given_names TEXT,
-        prefix VARCHAR(50),
-        suffix VARCHAR(50),
-        period_start DATE,
-        period_end DATE
-    ) SORTKEY (patient_id, name_use)
-    """
+    try:
+        # Try to read from the table to verify it exists
+        test_frame = glueContext.create_dynamic_frame.from_options(
+            connection_type="redshift",
+            connection_options={
+                "redshiftTmpDir": S3_TEMP_DIR,
+                "useConnectionProperties": "true",
+                "dbtable": f"public.{table_name}",
+                "connectionName": REDSHIFT_CONNECTION
+            },
+            transformation_ctx=f"verify_{table_name}"
+        )
 
-def create_patient_telecoms_table_sql():
-    """Generate SQL for creating patient_telecoms table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_telecoms (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        telecom_system VARCHAR(50),
-        telecom_value VARCHAR(255),
-        telecom_use VARCHAR(50),
-        telecom_rank INTEGER,
-        period_start DATE,
-        period_end DATE
-    ) SORTKEY (patient_id, telecom_system)
-    """
+        # If we can convert to DF, table exists
+        df = test_frame.toDF()
+        logger.info(f"✅ Table 'public.{table_name}' exists and is accessible")
+        return True
 
-def create_patient_addresses_table_sql():
-    """Generate SQL for creating patient_addresses table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_addresses (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        address_use VARCHAR(50),
-        address_type VARCHAR(50),
-        address_text VARCHAR(500),
-        address_line TEXT,
-        city VARCHAR(100),
-        district VARCHAR(100),
-        state VARCHAR(100),
-        postal_code VARCHAR(20),
-        country VARCHAR(100),
-        period_start DATE,
-        period_end DATE
-    ) SORTKEY (patient_id, address_use)
-    """
+    except Exception as e:
+        logger.error(f"❌ Table 'public.{table_name}' does NOT exist or is not accessible")
+        logger.error(f"   Error: {str(e)}")
+        logger.error(f"   Tables must be created using DDL scripts before running Glue jobs")
+        raise RuntimeError(f"Required table 'public.{table_name}' does not exist. Please run DDL scripts first.")
 
-def create_patient_contacts_table_sql():
-    """Generate SQL for creating patient_contacts table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_contacts (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        contact_relationship_code VARCHAR(50),
-        contact_relationship_system VARCHAR(255),
-        contact_relationship_display VARCHAR(255),
-        contact_name_text VARCHAR(255),
-        contact_name_family VARCHAR(255),
-        contact_name_given TEXT,
-        contact_telecom_system VARCHAR(50),
-        contact_telecom_value VARCHAR(255),
-        contact_telecom_use VARCHAR(50),
-        contact_gender VARCHAR(10),
-        contact_organization_id VARCHAR(255),
-        period_start DATE,
-        period_end DATE
-    ) SORTKEY (patient_id, contact_relationship_code)
-    """
+def verify_all_required_tables():
+    """Verify all required tables exist before processing"""
+    required_tables = [
+        "patients",
+        "patient_names",
+        "patient_telecoms",
+        "patient_addresses",
+        "patient_contacts",
+        "patient_communications",
+        "patient_practitioners",
+        "patient_links"
+    ]
 
-def create_patient_communications_table_sql():
-    """Generate SQL for creating patient_communications table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_communications (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        language_code VARCHAR(10),
-        language_system VARCHAR(255),
-        language_display VARCHAR(255),
-        preferred BOOLEAN,
-        extensions TEXT
-    ) SORTKEY (patient_id, language_code)
-    """
+    logger.info(f"\n{'='*80}")
+    logger.info(f"🔍 VERIFYING REQUIRED TABLES EXIST")
+    logger.info("=" * 80)
 
-def create_patient_practitioners_table_sql():
-    """Generate SQL for creating patient_practitioners table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_practitioners (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        practitioner_id VARCHAR(255),
-        practitioner_role_id VARCHAR(255),
-        organization_id VARCHAR(255),
-        reference_type VARCHAR(50)
-    ) SORTKEY (patient_id, reference_type)
-    """
+    all_exist = True
+    for table in required_tables:
+        try:
+            verify_table_exists(table)
+        except RuntimeError:
+            all_exist = False
 
-def create_patient_links_table_sql():
-    """Generate SQL for creating patient_links table"""
-    return """
-    CREATE TABLE IF NOT EXISTS public.patient_links (
-        patient_id VARCHAR(255),
-        meta_last_updated TIMESTAMP,
-        other_patient_id VARCHAR(255),
-        link_type_code VARCHAR(50),
-        link_type_system VARCHAR(255),
-        link_type_display VARCHAR(255)
-    ) SORTKEY (patient_id, other_patient_id)
-    """
+    if not all_exist:
+        logger.error(f"\n{'='*80}")
+        logger.error("❌ MISSING REQUIRED TABLES")
+        logger.error("=" * 80)
+        logger.error("Please run the DDL scripts to create all required tables before running this Glue job")
+        logger.error("DDL scripts should be located in the ddl/ folder")
+        raise RuntimeError("Missing required tables. Cannot proceed with ETL job.")
+
+    logger.info(f"\n{'='*80}")
+    logger.info(f"✅ ALL REQUIRED TABLES VERIFIED")
+    logger.info("=" * 80)
+    return True
 
 
 def get_existing_versions_from_redshift(table_name, id_column):
@@ -887,7 +809,7 @@ def get_entities_to_delete(df, existing_versions, id_column):
     logger.info(f"Found {len(entities_to_delete)} entities that need old version cleanup")
     return entities_to_delete
 
-def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions=""):
+def write_to_redshift_versioned(dynamic_frame, table_name, id_column):
     """Version-aware write to Redshift - only processes new/updated entities"""
     logger.info(f"Writing {table_name} to Redshift with version checking...")
 
@@ -897,32 +819,7 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         total_records = df.count()
 
         if total_records == 0:
-            logger.info(f"No records to process for {table_name}, but ensuring table exists")
-            # Execute preactions to create table even if no data
-            if preactions:
-                logger.info(f"Executing preactions to create empty {table_name} table")
-                # Need to write at least one record to execute preactions, then delete it
-                # Create a dummy record with all nulls
-                from pyspark.sql import Row
-                schema = df.schema
-                null_row = Row(**{field.name: None for field in schema.fields})
-                dummy_df = spark.createDataFrame([null_row], schema)
-                dummy_dynamic_frame = DynamicFrame.fromDF(dummy_df, glueContext, f"dummy_{table_name}")
-
-                glueContext.write_dynamic_frame.from_options(
-                    frame=dummy_dynamic_frame,
-                    connection_type="redshift",
-                    connection_options={
-                        "redshiftTmpDir": S3_TEMP_DIR,
-                        "useConnectionProperties": "true",
-                        "dbtable": f"public.{table_name}",
-                        "connectionName": REDSHIFT_CONNECTION,
-                        "preactions": preactions,
-                        "postactions": f"DELETE FROM public.{table_name};"  # Remove dummy record
-                    },
-                    transformation_ctx=f"create_empty_{table_name}"
-                )
-                logger.info(f"✅ Created empty {table_name} table")
+            logger.info(f"No records to process for {table_name} - skipping")
             return
 
         # Step 1: Get existing versions from Redshift
@@ -941,7 +838,6 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         entities_to_delete = get_entities_to_delete(filtered_df, existing_versions, id_column)
 
         # Step 4: Build preactions for selective deletion
-        selective_preactions = preactions
         if entities_to_delete:
             # For large deletions, use a different strategy to avoid "Statement is too large" error
             # Redshift has a 16MB limit on SQL statements
@@ -960,12 +856,9 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
                 entity_ids_str = "', '".join(entities_to_delete)
                 delete_clause = f"DELETE FROM public.{table_name} WHERE {id_column} IN ('{entity_ids_str}');"
 
-            if selective_preactions:
-                selective_preactions = delete_clause + " " + selective_preactions
-            else:
-                selective_preactions = delete_clause
-
             logger.info(f"Will delete {num_entities} existing entities before inserting updated versions")
+        else:
+            delete_clause = ""
 
         # Step 5: Convert filtered DataFrame back to DynamicFrame
         filtered_dynamic_frame = DynamicFrame.fromDF(filtered_df, glueContext, f"filtered_{table_name}")
@@ -973,16 +866,21 @@ def write_to_redshift_versioned(dynamic_frame, table_name, id_column, preactions
         # Step 6: Write only the new/updated records
         logger.info(f"Writing {to_process_count} new/updated records to {table_name}")
 
+        connection_options = {
+            "redshiftTmpDir": S3_TEMP_DIR,
+            "useConnectionProperties": "true",
+            "dbtable": f"public.{table_name}",
+            "connectionName": REDSHIFT_CONNECTION
+        }
+
+        # Only add preactions if we have deletions to perform
+        if delete_clause:
+            connection_options["preactions"] = delete_clause
+
         glueContext.write_dynamic_frame.from_options(
             frame=filtered_dynamic_frame,
             connection_type="redshift",
-            connection_options={
-                "redshiftTmpDir": S3_TEMP_DIR,
-                "useConnectionProperties": "true",
-                "dbtable": f"public.{table_name}",
-                "connectionName": REDSHIFT_CONNECTION,
-                "preactions": selective_preactions or ""
-            },
+            connection_options=connection_options,
             transformation_ctx=f"write_{table_name}_versioned_to_redshift"
         )
 
@@ -1467,47 +1365,42 @@ def main():
         logger.info(f"🔗 Using connection: {REDSHIFT_CONNECTION}")
         logger.info(f"📁 S3 temp directory: {S3_TEMP_DIR}")
         
-        # Create all tables individually with version-aware processing
+        # Verify all required tables exist before processing
+        verify_all_required_tables()
+
+        # Write to all tables individually with version-aware processing
         # Note: Each write_to_redshift_versioned call only processes new/updated entities
-        logger.info("📝 Creating main patients table with version checking...")
-        patients_table_sql = create_redshift_tables_sql()
-        write_to_redshift_versioned(main_resolved_frame, "patients", "patient_id", patients_table_sql)
-        logger.info("✅ Main patients table created and written successfully")
+        logger.info("📝 Writing main patients table with version checking...")
+        write_to_redshift_versioned(main_resolved_frame, "patients", "patient_id")
+        logger.info("✅ Main patients table written successfully")
 
-        logger.info("📝 Creating patient names table with version checking...")
-        names_table_sql = create_patient_names_table_sql()
-        write_to_redshift_versioned(names_resolved_frame, "patient_names", "patient_id", names_table_sql)
-        logger.info("✅ Patient names table created and written successfully")
+        logger.info("📝 Writing patient names table with version checking...")
+        write_to_redshift_versioned(names_resolved_frame, "patient_names", "patient_id")
+        logger.info("✅ Patient names table written successfully")
 
-        logger.info("📝 Creating patient telecoms table with version checking...")
-        telecoms_table_sql = create_patient_telecoms_table_sql()
-        write_to_redshift_versioned(telecoms_resolved_frame, "patient_telecoms", "patient_id", telecoms_table_sql)
-        logger.info("✅ Patient telecoms table created and written successfully")
+        logger.info("📝 Writing patient telecoms table with version checking...")
+        write_to_redshift_versioned(telecoms_resolved_frame, "patient_telecoms", "patient_id")
+        logger.info("✅ Patient telecoms table written successfully")
 
-        logger.info("📝 Creating patient addresses table with version checking...")
-        addresses_table_sql = create_patient_addresses_table_sql()
-        write_to_redshift_versioned(addresses_resolved_frame, "patient_addresses", "patient_id", addresses_table_sql)
-        logger.info("✅ Patient addresses table created and written successfully")
+        logger.info("📝 Writing patient addresses table with version checking...")
+        write_to_redshift_versioned(addresses_resolved_frame, "patient_addresses", "patient_id")
+        logger.info("✅ Patient addresses table written successfully")
 
-        logger.info("📝 Creating patient contacts table with version checking...")
-        contacts_table_sql = create_patient_contacts_table_sql()
-        write_to_redshift_versioned(contacts_resolved_frame, "patient_contacts", "patient_id", contacts_table_sql)
-        logger.info("✅ Patient contacts table created and written successfully")
+        logger.info("📝 Writing patient contacts table with version checking...")
+        write_to_redshift_versioned(contacts_resolved_frame, "patient_contacts", "patient_id")
+        logger.info("✅ Patient contacts table written successfully")
 
-        logger.info("📝 Creating patient communications table with version checking...")
-        communications_table_sql = create_patient_communications_table_sql()
-        write_to_redshift_versioned(communications_resolved_frame, "patient_communications", "patient_id", communications_table_sql)
-        logger.info("✅ Patient communications table created and written successfully")
+        logger.info("📝 Writing patient communications table with version checking...")
+        write_to_redshift_versioned(communications_resolved_frame, "patient_communications", "patient_id")
+        logger.info("✅ Patient communications table written successfully")
 
-        logger.info("📝 Creating patient practitioners table with version checking...")
-        practitioners_table_sql = create_patient_practitioners_table_sql()
-        write_to_redshift_versioned(practitioners_resolved_frame, "patient_practitioners", "patient_id", practitioners_table_sql)
-        logger.info("✅ Patient practitioners table created and written successfully")
+        logger.info("📝 Writing patient practitioners table with version checking...")
+        write_to_redshift_versioned(practitioners_resolved_frame, "patient_practitioners", "patient_id")
+        logger.info("✅ Patient practitioners table written successfully")
 
-        logger.info("📝 Creating patient links table with version checking...")
-        links_table_sql = create_patient_links_table_sql()
-        write_to_redshift_versioned(links_resolved_frame, "patient_links", "patient_id", links_table_sql)
-        logger.info("✅ Patient links table created and written successfully")
+        logger.info("📝 Writing patient links table with version checking...")
+        write_to_redshift_versioned(links_resolved_frame, "patient_links", "patient_id")
+        logger.info("✅ Patient links table written successfully")
         
         # Calculate processing time
         end_time = datetime.now()

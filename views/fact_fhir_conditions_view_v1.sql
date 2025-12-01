@@ -560,6 +560,7 @@ SELECT
     rc.code_code,
     rc.code_display,
     rc.code_text,
+    rc.code_rank,
     -- ALL CODES AS JSON ARRAY
     ac.codes,
     -- AGGREGATED JSON FIELDS
