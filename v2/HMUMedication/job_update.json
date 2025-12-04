@@ -1,0 +1,45 @@
+{
+  "Role": "arn:aws:iam::442042533707:role/service-role/AWSGlueServiceRole",
+  "GlueVersion": "4.0",
+  "WorkerType": "G.2X",
+  "NumberOfWorkers": 6,
+  "ExecutionClass": "FLEX",
+  "Timeout": 720,
+  "Command": {
+    "Name": "glueetl",
+    "ScriptLocation": "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUMedication_v2.py",
+    "PythonVersion": "3"
+  },
+  "Connections": {
+    "Connections": [
+      "Network connection",
+      "Redshift connection"
+    ]
+  },
+  "DefaultArguments": {
+    "--enable-metrics": "true",
+    "--enable-spark-ui": "false",
+    "--enable-job-insights": "true",
+    "--enable-debug-logging": "false",
+    "--enable-observability-metrics": "true",
+    "--enable-glue-datacatalog": "true",
+    "--enable-continuous-cloudwatch-log": "true",
+    "--job-bookmark-option": "job-bookmark-disable",
+    "--datalake-formats": "iceberg",
+    "--job-language": "python",
+    "--TempDir": "s3://aws-glue-assets-442042533707-us-east-2/temporary/",
+    "--extra-py-files": "s3://aws-glue-assets-442042533707-us-east-2/python-libs/HMUMedication_v2.zip",
+    "--TABLE_NAME_POSTFIX": "_v2",
+    "--conf": "spark.sql.adaptive.enabled=true",
+    "--conf": "spark.sql.adaptive.coalescePartitions.enabled=true",
+    "--conf": "spark.sql.shuffle.partitions=400",
+    "--conf": "spark.sql.adaptive.skewJoin.enabled=true",
+    "--conf": "spark.shuffle.compress=true",
+    "--conf": "spark.serializer=org.apache.spark.serializer.KryoSerializer",
+    "--conf": "spark.sql.adaptive.advisoryPartitionSizeInBytes=128MB",
+    "--conf": "spark.dynamicAllocation.enabled=true",
+    "--conf": "spark.dynamicAllocation.minExecutors=5",
+    "--conf": "spark.dynamicAllocation.maxExecutors=30"
+  }
+}
+

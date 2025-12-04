@@ -24,3 +24,7 @@ node_modules/
 # OS specific
 .DS_Store
 __pycache__
+
+# Archive files
+*.zip
+*.ZIP

@@ -1,0 +1,5 @@
+{
+    "Name": "glueetl",
+    "ScriptLocation": "s3://aws-glue-assets-442042533707-us-east-2/scripts/HMUObservation_v2.py",
+    "PythonVersion": "3"
+}
